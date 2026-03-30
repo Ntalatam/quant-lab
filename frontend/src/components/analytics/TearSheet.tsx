@@ -134,12 +134,13 @@ export function TearSheet({ result }: TearSheetProps) {
         <div className="space-y-5">
           <ChartPanel
             title="Equity Curve"
-            subtitle="Strategy vs benchmark — absolute portfolio value. Dashed blue = same strategy without any execution costs."
+            subtitle="Strategy vs benchmark. ▲ green = entries, ▽ red = exits — click any marker for trade detail. Dashed blue = frictionless curve."
           >
             <EquityCurve
               equity={result.equity_curve}
               benchmark={result.benchmark_curve}
               cleanEquity={result.clean_equity_curve}
+              trades={result.trades}
             />
           </ChartPanel>
 
