@@ -86,12 +86,20 @@ export default function ComparePage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-6">Compare Backtests</h1>
+      <div className="mb-7">
+        <h1 className="text-xl font-bold text-text-primary tracking-tight">
+          Compare Backtests
+        </h1>
+        <p className="text-xs text-text-muted mt-0.5">
+          Overlay equity curves and compare risk metrics head-to-head
+        </p>
+      </div>
 
       {/* Selector */}
-      <div className="bg-bg-card border border-border rounded p-4 mb-6">
-        <h2 className="text-sm font-medium text-text-secondary mb-3">
-          Select backtests to compare (min 2)
+      <div className="rounded-md p-4 mb-6" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", boxShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>
+        <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">
+          Select backtests to compare
+          <span className="ml-2 font-normal text-text-muted normal-case tracking-normal">(minimum 2)</span>
         </h2>
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {backtests?.map((bt) => (
@@ -127,10 +135,12 @@ export default function ComparePage() {
       {comparison && (
         <div className="space-y-6">
           {/* Overlay Chart */}
-          <div className="bg-bg-card border border-border rounded p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">
-              Normalized Equity Curves (base = 100)
-            </h3>
+          <div className="rounded-md overflow-hidden" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", boxShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>
+            <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+              <h3 className="text-sm font-semibold text-text-primary">Normalized Equity Curves</h3>
+              <p className="text-[10px] text-text-muted mt-0.5">Base = 100 — proportional growth comparison across strategies</p>
+            </div>
+            <div className="p-4">
             <ResponsiveContainer width="100%" height={350}>
               <LineChart data={overlayData}>
                 <CartesianGrid
@@ -170,13 +180,16 @@ export default function ComparePage() {
                 ))}
               </LineChart>
             </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Metrics Table */}
-          <div className="bg-bg-card border border-border rounded p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">
-              Metrics Comparison
-            </h3>
+          <div className="rounded-md overflow-hidden" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", boxShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>
+            <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+              <h3 className="text-sm font-semibold text-text-primary">Metrics Comparison</h3>
+              <p className="text-[10px] text-text-muted mt-0.5">Best value per metric highlighted in green</p>
+            </div>
+            <div className="p-4">
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono tabular-nums">
                 <thead>
@@ -233,6 +246,7 @@ export default function ComparePage() {
                   })}
                 </tbody>
               </table>
+            </div>
             </div>
           </div>
         </div>

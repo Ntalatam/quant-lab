@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-bg-primary: #0a0a0f;
-  --color-bg-secondary: #12121a;
-  --color-bg-card: #16161f;
-  --color-bg-hover: #1e1e2a;
-  --color-border: #2a2a3a;
+  --color-bg-primary: #0b0b12;
+  --color-bg-secondary: #0f0f18;
+  --color-bg-card: #14141f;
+  --color-bg-card-alt: #171724;
+  --color-bg-hover: #1c1c2a;
+  --color-border: #252535;
+  --color-border-strong: #32324a;
   --color-text-primary: #e8e8f0;
   --color-text-secondary: #8888a0;
-  --color-text-muted: #555566;
+  --color-text-muted: #50506a;
   --color-accent-green: #00d4aa;
   --color-accent-red: #ff4466;
   --color-accent-blue: #4488ff;
@@ -26,29 +28,127 @@ body {
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
   font-family: var(--font-sans), system-ui, sans-serif;
+  /* Subtle ambient glow in top corners — makes the dark bg feel intentional */
+  background-image:
+    radial-gradient(ellipse at 15% 0%, rgba(68, 136, 255, 0.04) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 5%, rgba(0, 212, 170, 0.025) 0%, transparent 50%);
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Card depth system ────────────────────────────────────────────── */
+
+/* Standard card: 1px border + subtle inner highlight + drop shadow */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+/* Elevated card: stronger shadow for panels that should "float" */
+.card-elevated {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Card with gradient surface — slightly lighter at top, more premium feel */
+.card-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 60%), var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ── Strategy category badges ─────────────────────────────────────── */
+
+.badge-trend {
+  background: rgba(68, 136, 255, 0.1);
+  color: var(--color-accent-blue);
+  border: 1px solid rgba(68, 136, 255, 0.22);
+}
+.badge-reversion {
+  background: rgba(136, 85, 255, 0.1);
+  color: var(--color-accent-purple);
+  border: 1px solid rgba(136, 85, 255, 0.22);
+}
+.badge-momentum {
+  background: rgba(0, 212, 170, 0.1);
+  color: var(--color-accent-green);
+  border: 1px solid rgba(0, 212, 170, 0.22);
+}
+.badge-arb {
+  background: rgba(255, 187, 51, 0.1);
+  color: var(--color-accent-yellow);
+  border: 1px solid rgba(255, 187, 51, 0.22);
+}
+
+/* ── Performance badge (positive / negative / neutral) ──────────── */
+
+.perf-positive {
+  background: rgba(0, 212, 170, 0.08);
+  color: var(--color-accent-green);
+  border: 1px solid rgba(0, 212, 170, 0.18);
+}
+.perf-negative {
+  background: rgba(255, 68, 102, 0.08);
+  color: var(--color-accent-red);
+  border: 1px solid rgba(255, 68, 102, 0.18);
+}
+.perf-neutral {
+  background: rgba(68, 136, 255, 0.08);
+  color: var(--color-accent-blue);
+  border: 1px solid rgba(68, 136, 255, 0.18);
+}
+
+/* ── Section header label ─────────────────────────────────────────── */
+
+.section-label {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+/* ── Inputs ───────────────────────────────────────────────────────── */
+
+input:not([type="range"]):not([type="checkbox"]),
+select,
+textarea {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:not([type="range"]):not([type="checkbox"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-accent-blue) !important;
+  box-shadow: 0 0 0 1px rgba(68, 136, 255, 0.3);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────── */
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
-
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }
+
+/* ── Recharts ─────────────────────────────────────────────────────── */
 
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
@@ -56,7 +156,18 @@ body {
 }
 
 .recharts-text {
-  fill: var(--color-text-secondary);
+  fill: var(--color-text-muted);
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 11px;
 }
+
+.recharts-tooltip-wrapper {
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.7));
+}
+
+/* ── Stat accent bars (used in MetricsCard top border) ───────────── */
+
+.accent-bar-green  { background: var(--color-accent-green);  }
+.accent-bar-red    { background: var(--color-accent-red);    }
+.accent-bar-blue   { background: var(--color-accent-blue);   }
+.accent-bar-yellow { background: var(--color-accent-yellow); }
