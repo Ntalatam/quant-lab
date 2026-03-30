@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { BacktestResult } from "@/lib/types";
 import { MetricsCard } from "./MetricsCard";
 import { TradeLog } from "./TradeLog";
+import { FactorExposure } from "./FactorExposure";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
 import { MonthlyReturnsHeatmap } from "@/components/charts/MonthlyReturnsHeatmap";
@@ -308,6 +309,8 @@ export function TearSheet({ result }: TearSheetProps) {
             <MetricsCard label="DD Duration"  value={`${m.max_drawdown_duration_days}d`}                           description="Longest drawdown period" />
             <MetricsCard label="Current DD"   value={formatPercent(m.current_drawdown_pct)} positive={m.current_drawdown_pct === 0} />
           </div>
+
+          <FactorExposure backtestId={result.id} />
 
           <div
             className="rounded-md overflow-hidden"

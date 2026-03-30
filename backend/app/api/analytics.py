@@ -153,6 +153,123 @@ async def export_results(
     raise HTTPException(501, "Only CSV export is currently supported")
 
 
+@router.post("/factor-exposure/{backtest_id}")
+async def factor_exposure(
+    backtest_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Compute factor exposure via multi-factor regression.
+
+    Factors:
+      - Market: SPY (or benchmark) return
+      - Size: IWM - SPY (small-cap premium proxy)
+      - Value: VTV - VUG (value vs growth proxy)
+      - Momentum: MTUM - SPY
+
+    Returns alpha, factor betas, t-stats, p-values, R-squared.
+    """
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+    from datetime import date as date_cls
+
+    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = r.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    start = date_cls.fromisoformat(run.start_date)
+    end = date_cls.fromisoformat(run.end_date)
+
+    # Strategy returns
+    strategy_series = pd.Series(
+        [p["value"] for p in run.equity_curve],
+        index=pd.to_datetime([p["date"] for p in run.equity_curve]),
+    )
+    strategy_returns = strategy_series.pct_change().dropna()
+
+    # Fetch factor proxies (best-effort; skip if yfinance fails)
+    factor_tickers = {"Market": "SPY", "Size": "IWM", "Value": "VTV", "Momentum": "MTUM"}
+    factor_prices: dict[str, pd.Series] = {}
+    spy_prices: pd.Series | None = None
+
+    for label, ticker in factor_tickers.items():
+        try:
+            loaded = await ensure_data_loaded(db, ticker, start, end)
+            if loaded:
+                df = await get_price_dataframe(db, ticker, start, end)
+                s = pd.Series(
+                    df["adj_close"].values,
+                    index=df.index,
+                    name=label,
+                )
+                if label == "Market":
+                    spy_prices = s
+                factor_prices[label] = s
+        except Exception:
+            pass
+
+    if "Market" not in factor_prices or spy_prices is None:
+        raise HTTPException(422, "Could not load market factor data (SPY). Load SPY data first.")
+
+    # Build factor returns
+    factor_returns: dict[str, pd.Series] = {}
+    factor_returns["Market"] = factor_prices["Market"].pct_change().dropna()
+
+    for label in ["Size", "Value", "Momentum"]:
+        if label in factor_prices and spy_prices is not None:
+            factor_returns[label] = (
+                factor_prices[label].pct_change() - spy_prices.pct_change()
+            ).dropna()
+
+    # Align all series
+    factor_df = pd.DataFrame(factor_returns)
+    aligned = pd.concat([strategy_returns.rename("Strategy"), factor_df], axis=1).dropna()
+
+    if len(aligned) < 30:
+        raise HTTPException(422, "Insufficient overlapping data for factor regression (need ≥30 days)")
+
+    from scipy.stats import t as t_dist
+
+    y = aligned["Strategy"].values
+    factor_cols = [c for c in aligned.columns if c != "Strategy"]
+    # Design matrix: intercept + factors
+    X = np.column_stack([np.ones(len(y)), aligned[factor_cols].values])
+
+    try:
+        betas, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+        y_hat = X @ betas
+        resid = y - y_hat
+        n, k = X.shape
+        sigma2 = np.sum(resid ** 2) / max(n - k, 1)
+        xtx_inv = np.linalg.inv(X.T @ X)
+        se = np.sqrt(np.diag(xtx_inv) * sigma2)
+        t_stats = betas / np.where(se > 0, se, np.nan)
+        p_values = 2 * (1 - t_dist.cdf(np.abs(t_stats), df=max(n - k, 1)))
+        ss_res = np.sum(resid ** 2)
+        ss_tot = np.sum((y - np.mean(y)) ** 2)
+        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    except Exception as e:
+        raise HTTPException(500, f"Regression failed: {e}")
+
+    result = {
+        "alpha_annualized": round(float(betas[0]) * 252 * 100, 4),
+        "r_squared": round(float(r2), 4),
+        "n_obs": int(n),
+        "factors": [],
+    }
+
+    for i, factor in enumerate(factor_cols):
+        result["factors"].append({
+            "name": factor,
+            "beta": round(float(betas[i + 1]), 4),
+            "t_stat": round(float(t_stats[i + 1]), 3),
+            "p_value": round(float(p_values[i + 1]), 4),
+            "significant": bool(p_values[i + 1] < 0.05),
+        })
+
+    return result
+
+
 @router.post("/portfolio-blend")
 async def portfolio_blend(
     payload: dict,

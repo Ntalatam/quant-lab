@@ -153,6 +153,20 @@ export interface MonteCarloResult {
   prob_loss: number;
 }
 
+// ---- Factor Exposure ----
+export interface FactorExposureResult {
+  alpha_annualized: number;
+  r_squared: number;
+  n_obs: number;
+  factors: {
+    name: string;
+    beta: number;
+    t_stat: number;
+    p_value: number;
+    significant: boolean;
+  }[];
+}
+
 // ---- Portfolio Blend ----
 export interface PortfolioBlendResult {
   weights: number[];

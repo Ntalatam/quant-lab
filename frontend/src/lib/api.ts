@@ -3,6 +3,7 @@ import type {
   BacktestResult,
   BacktestSummary,
   ComparisonResult,
+  FactorExposureResult,
   MonteCarloResult,
   PortfolioBlendResult,
   StrategyInfo,
@@ -163,6 +164,10 @@ class ApiClient {
         metric,
       }),
     });
+  }
+
+  async getFactorExposure(backtestId: string): Promise<FactorExposureResult> {
+    return this.request(`/analytics/factor-exposure/${backtestId}`, { method: "POST" });
   }
 
   async portfolioBlend(
