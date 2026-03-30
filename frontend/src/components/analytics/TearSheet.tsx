@@ -134,13 +134,61 @@ export function TearSheet({ result }: TearSheetProps) {
         <div className="space-y-5">
           <ChartPanel
             title="Equity Curve"
-            subtitle="Strategy vs benchmark — absolute portfolio value"
+            subtitle="Strategy vs benchmark — absolute portfolio value. Dashed blue = same strategy without any execution costs."
           >
             <EquityCurve
               equity={result.equity_curve}
               benchmark={result.benchmark_curve}
+              cleanEquity={result.clean_equity_curve}
             />
           </ChartPanel>
+
+          {/* Transaction cost breakdown */}
+          {m.total_cost != null && (
+            <div
+              className="rounded-md p-4"
+              style={{
+                background: "var(--color-bg-card)",
+                border: "1px solid var(--color-border)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-text-primary">
+                    Transaction Cost Breakdown
+                  </h3>
+                  <p className="text-[10px] text-text-muted mt-0.5">
+                    Total drag vs frictionless execution
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono tabular-nums text-accent-red font-bold text-lg">
+                    −{formatPercent(m.cost_drag_pct ?? 0, 3).replace("+", "")}
+                  </p>
+                  <p className="text-[10px] text-text-muted">{m.cost_drag_bps ?? 0} bps total drag</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Commission", value: m.total_commission ?? 0, color: "var(--color-accent-yellow)" },
+                  { label: "Slippage",   value: m.total_slippage ?? 0,   color: "var(--color-accent-red)"    },
+                  { label: "Total Cost", value: m.total_cost ?? 0,       color: "var(--color-accent-red)"    },
+                ].map(({ label, value, color }) => (
+                  <div
+                    key={label}
+                    className="rounded p-3 text-center"
+                    style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)" }}
+                  >
+                    <p className="section-label mb-1">{label}</p>
+                    <p className="font-mono tabular-nums font-semibold text-base" style={{ color }}>
+                      ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <ChartPanel
             title="Drawdown"

@@ -28,6 +28,7 @@ class BacktestRun(Base):
 
     # Stored results
     equity_curve: Mapped[list] = mapped_column(JSON)
+    clean_equity_curve: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
     benchmark_curve: Mapped[list] = mapped_column(JSON)
     drawdown_series: Mapped[list] = mapped_column(JSON)
     rolling_sharpe: Mapped[list] = mapped_column(JSON)

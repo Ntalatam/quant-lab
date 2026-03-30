@@ -45,6 +45,7 @@ export interface BacktestResult {
   config: BacktestConfig;
   created_at: string;
   equity_curve: TimeSeriesPoint[];
+  clean_equity_curve: TimeSeriesPoint[];
   benchmark_curve: TimeSeriesPoint[];
   drawdown_series: TimeSeriesPoint[];
   rolling_sharpe: TimeSeriesPoint[];
@@ -90,6 +91,12 @@ export interface PerformanceMetrics {
   beta: number;
   correlation: number;
   tracking_error_pct: number;
+  // Transaction cost metrics
+  total_commission: number;
+  total_slippage: number;
+  total_cost: number;
+  cost_drag_bps: number;
+  cost_drag_pct: number;
 }
 
 export interface Trade {

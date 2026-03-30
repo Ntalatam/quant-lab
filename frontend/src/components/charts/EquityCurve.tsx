@@ -18,40 +18,57 @@ import { CHART_COLORS } from "@/lib/constants";
 interface EquityCurveProps {
   equity: TimeSeriesPoint[];
   benchmark: TimeSeriesPoint[];
+  cleanEquity?: TimeSeriesPoint[];
   height?: number;
 }
 
 export function EquityCurve({
   equity,
   benchmark,
+  cleanEquity,
   height = 350,
 }: EquityCurveProps) {
-  // Merge equity and benchmark by date
-  const dateMap = new Map<string, { date: string; equity: number; benchmark: number }>();
+  const showClean = cleanEquity && cleanEquity.length > 0;
+
+  // Merge all series by date
+  const dateMap = new Map<
+    string,
+    { date: string; equity: number; benchmark: number; clean?: number }
+  >();
 
   equity.forEach((p) => {
     dateMap.set(p.date, { date: p.date, equity: p.value, benchmark: 0 });
   });
 
   benchmark.forEach((p) => {
-    const existing = dateMap.get(p.date);
-    if (existing) {
-      existing.benchmark = p.value;
-    } else {
-      dateMap.set(p.date, { date: p.date, equity: 0, benchmark: p.value });
-    }
+    const ex = dateMap.get(p.date);
+    if (ex) ex.benchmark = p.value;
+    else dateMap.set(p.date, { date: p.date, equity: 0, benchmark: p.value });
   });
+
+  if (showClean) {
+    cleanEquity!.forEach((p) => {
+      const ex = dateMap.get(p.date);
+      if (ex) ex.clean = p.value;
+    });
+  }
 
   const data = Array.from(dateMap.values()).sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
+
+  const formatLabel = (name: string) => {
+    if (name === "equity") return "Strategy";
+    if (name === "clean") return "No-Cost Equity";
+    return "Benchmark";
+  };
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
         <defs>
           <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={CHART_COLORS.strategy} stopOpacity={0.3} />
+            <stop offset="5%" stopColor={CHART_COLORS.strategy} stopOpacity={0.25} />
             <stop offset="95%" stopColor={CHART_COLORS.strategy} stopOpacity={0} />
           </linearGradient>
         </defs>
@@ -76,17 +93,10 @@ export function EquityCurve({
             borderRadius: 4,
             fontSize: 12,
           }}
-          formatter={(value, name) => [
-            formatCurrency(Number(value)),
-            name === "equity" ? "Strategy" : "Benchmark",
-          ]}
+          formatter={(value, name) => [formatCurrency(Number(value)), formatLabel(String(name))]}
           labelFormatter={(label) => formatCompactDate(String(label))}
         />
-        <Legend
-          formatter={(value) =>
-            value === "equity" ? "Strategy" : "Benchmark"
-          }
-        />
+        <Legend formatter={formatLabel} />
         <Area
           type="monotone"
           dataKey="equity"
@@ -95,6 +105,16 @@ export function EquityCurve({
           strokeWidth={2}
           dot={false}
         />
+        {showClean && (
+          <Line
+            type="monotone"
+            dataKey="clean"
+            stroke={CHART_COLORS.blue}
+            strokeWidth={1.5}
+            dot={false}
+            strokeDasharray="5 3"
+          />
+        )}
         <Line
           type="monotone"
           dataKey="benchmark"

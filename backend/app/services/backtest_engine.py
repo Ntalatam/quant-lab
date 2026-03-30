@@ -63,6 +63,9 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
     rebalance_dates = _get_rebalance_dates(all_dates, config.rebalance_frequency)
 
     # 5. Main simulation loop
+    cumulative_cost = 0.0        # running total of commissions + slippage paid
+    cost_by_date: dict = {}      # isoformat date → cumulative cost at that point
+
     for current_date in all_dates:
         current_dt = (
             current_date.date() if hasattr(current_date, "date") else current_date
@@ -137,6 +140,8 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
                         fill.slippage_cost,
                         current_dt,
                     )
+                    cumulative_cost += fill.commission + fill.slippage_cost
+                    cost_by_date[current_dt.isoformat()] = cumulative_cost
 
             elif signal < 0:  # SELL
                 if ticker not in portfolio.positions:
@@ -168,12 +173,24 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
                         fill.slippage_cost,
                         current_dt,
                     )
+                    cumulative_cost += fill.commission + fill.slippage_cost
+                    cost_by_date[current_dt.isoformat()] = cumulative_cost
 
-    # 8. Build equity curve
+    # 8. Build equity curve + clean equity (no transaction costs)
     equity_curve = [
         {"date": pt["date"], "value": pt["equity"]}
         for pt in portfolio.equity_history
     ]
+
+    # Build clean equity by forward-filling cumulative costs and adding them back
+    clean_equity_curve = []
+    running_cost = 0.0
+    for pt in equity_curve:
+        d = pt["date"]
+        date_key = d.isoformat() if hasattr(d, "isoformat") else str(d)
+        if date_key in cost_by_date:
+            running_cost = cost_by_date[date_key]
+        clean_equity_curve.append({"date": pt["date"], "value": round(pt["value"] + running_cost, 2)})
 
     # 9. Benchmark curve (normalized to same starting capital)
     if not benchmark_df.empty:
@@ -221,6 +238,16 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
         metrics["avg_exposure_pct"] = round(np.mean(exposures), 2)
         metrics["max_exposure_pct"] = round(max(exposures), 2)
 
+    # Transaction cost stats
+    total_commission = sum(t.commission for t in portfolio.trade_log if t.commission)
+    total_slippage   = sum(t.slippage   for t in portfolio.trade_log if t.slippage)
+    total_cost = total_commission + total_slippage
+    metrics["total_commission"] = round(total_commission, 2)
+    metrics["total_slippage"]   = round(total_slippage,   2)
+    metrics["total_cost"]       = round(total_cost,       2)
+    metrics["cost_drag_bps"]    = round(total_cost / config.initial_capital * 10_000, 1) if config.initial_capital else 0
+    metrics["cost_drag_pct"]    = round(total_cost / config.initial_capital * 100,     3) if config.initial_capital else 0
+
     # 11. Rolling metrics
     returns = equity_series.pct_change().dropna()
     rolling_sharpe = _rolling_sharpe(returns, window=63)
@@ -234,6 +261,7 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
         "config": config.model_dump(),
         "created_at": datetime.utcnow().isoformat(),
         "equity_curve": equity_curve,
+        "clean_equity_curve": clean_equity_curve,
         "benchmark_curve": benchmark_curve,
         "drawdown_series": drawdown_series,
         "rolling_sharpe": rolling_sharpe,

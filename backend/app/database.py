@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
@@ -11,9 +12,21 @@ class Base(DeclarativeBase):
     pass
 
 
+# Columns added after initial deployment — applied once on startup so existing
+# databases pick them up without requiring a full Alembic migration.
+_MIGRATIONS = [
+    "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS clean_equity_curve JSON",
+]
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for stmt in _MIGRATIONS:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                pass  # column already exists or table not yet created
 
 
 async def get_db():
