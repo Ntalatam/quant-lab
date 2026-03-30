@@ -12,7 +12,7 @@ import { RollingMetrics } from "@/components/charts/RollingMetrics";
 import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
-import { Download, Grid3X3 } from "lucide-react";
+import { Download, Grid3X3, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 interface TearSheetProps {
@@ -121,6 +121,14 @@ export function TearSheet({ result }: TearSheetProps) {
           ))}
         </div>
         <div className="flex items-center gap-2 mb-1">
+          <Link
+            href={`/backtest/${result.id}/walkforward`}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-green transition-colors px-3 py-1.5 rounded"
+            style={{ border: "1px solid var(--color-border)" }}
+          >
+            <RefreshCw size={11} />
+            Walk-Forward
+          </Link>
           <Link
             href={`/backtest/${result.id}/heatmap`}
             className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-blue transition-colors px-3 py-1.5 rounded"

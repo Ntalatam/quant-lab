@@ -17,6 +17,7 @@ from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
 from app.schemas.backtest import BacktestConfig, BacktestSweepConfig, BacktestSweep2DConfig
 from app.services.backtest_engine import run_backtest
+from app.services.walk_forward import run_walk_forward
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
@@ -255,3 +256,26 @@ async def parameter_sweep_2d(
         "values_y": config.values_y,
         "cells": cells,
     }
+
+
+@router.post("/walk-forward")
+async def walk_forward(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Run walk-forward analysis on an existing backtest config."""
+    from app.schemas.backtest import BacktestConfig
+    config = BacktestConfig(**payload["config"])
+    n_folds   = int(payload.get("n_folds",   5))
+    train_pct = float(payload.get("train_pct", 0.7))
+    if not (2 <= n_folds <= 10):
+        raise HTTPException(400, "n_folds must be 2–10")
+    if not (0.5 <= train_pct <= 0.9):
+        raise HTTPException(400, "train_pct must be 0.5–0.9")
+    try:
+        result = await run_walk_forward(db, config, n_folds=n_folds, train_pct=train_pct)
+        return result
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Walk-forward failed: {e}")

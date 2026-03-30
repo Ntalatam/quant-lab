@@ -166,6 +166,30 @@ export interface SweepResult {
   }[];
 }
 
+// ---- Walk-Forward Analysis ----
+export interface WalkForwardFold {
+  fold: number;
+  is_start: string;
+  is_end: string;
+  oos_start: string;
+  oos_end: string;
+  is_sharpe: number | null;
+  is_return: number | null;
+  oos_sharpe: number | null;
+  oos_return: number | null;
+  oos_max_dd: number | null;
+  ok: boolean;
+}
+
+export interface WalkForwardResult {
+  n_folds: number;
+  train_pct: number;
+  folds: WalkForwardFold[];
+  oos_equity_curve: TimeSeriesPoint[];
+  oos_metrics: Partial<PerformanceMetrics>;
+  sharpe_efficiency: number | null;
+}
+
 // ---- 2D Sweep Heatmap ----
 export interface Sweep2DCell {
   x: number;

@@ -7,6 +7,7 @@ import type {
   StrategyInfo,
   SweepResult,
   Sweep2DResult,
+  WalkForwardResult,
 } from "./types";
 
 const API_BASE =
@@ -128,6 +129,17 @@ class ApiClient {
         sweep_param: sweepParam,
         sweep_values: sweepValues,
       }),
+    });
+  }
+
+  async runWalkForward(
+    config: BacktestConfig,
+    nFolds: number,
+    trainPct: number
+  ): Promise<WalkForwardResult> {
+    return this.request("/backtest/walk-forward", {
+      method: "POST",
+      body: JSON.stringify({ config, n_folds: nFolds, train_pct: trainPct }),
     });
   }
 
