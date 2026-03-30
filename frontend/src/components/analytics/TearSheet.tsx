@@ -18,7 +18,7 @@ import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useBacktestList } from "@/hooks/useBacktest";
-import { Download, Grid3X3, RefreshCw, Link2, Check } from "lucide-react";
+import { Download, Grid3X3, RefreshCw, Link2, Check, GitCompare } from "lucide-react";
 import Link from "next/link";
 
 interface TearSheetProps {
@@ -165,6 +165,14 @@ export function TearSheet({ result }: TearSheetProps) {
           >
             <RefreshCw size={11} />
             Walk-Forward
+          </Link>
+          <Link
+            href={`/backtest/${result.id}/diff`}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-yellow transition-colors px-3 py-1.5 rounded"
+            style={{ border: "1px solid var(--color-border)" }}
+          >
+            <GitCompare size={11} />
+            Diff
           </Link>
           <Link
             href={`/backtest/${result.id}/heatmap`}
