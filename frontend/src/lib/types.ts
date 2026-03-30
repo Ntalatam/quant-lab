@@ -153,6 +153,23 @@ export interface MonteCarloResult {
   prob_loss: number;
 }
 
+// ---- Regime Analysis ----
+export interface RegimeStat {
+  regime: string;
+  color: string;
+  days: number;
+  pct_of_period: number;
+  ann_return_pct: number;
+  ann_volatility_pct: number;
+  sharpe: number;
+}
+
+export interface RegimeAnalysisResult {
+  timeline: { date: string; regime: string; return: number }[];
+  regime_stats: RegimeStat[];
+  description: string;
+}
+
 // ---- Factor Exposure ----
 export interface FactorExposureResult {
   alpha_annualized: number;

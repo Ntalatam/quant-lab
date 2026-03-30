@@ -153,6 +153,149 @@ async def export_results(
     raise HTTPException(501, "Only CSV export is currently supported")
 
 
+@router.post("/regime-analysis/{backtest_id}")
+async def regime_analysis(
+    backtest_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Classify market regimes using rolling ADX and volatility.
+
+    Regimes:
+      - High Volatility: rolling 21-day vol > 1.5× long-run average
+      - Trending: ADX > 25
+      - Choppy: ADX < 15
+      - Neutral: otherwise
+
+    Returns per-date regime labels and per-regime performance stats.
+    """
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+    from datetime import date as date_cls
+
+    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = r.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    start = date_cls.fromisoformat(run.start_date)
+    end = date_cls.fromisoformat(run.end_date)
+    benchmark_ticker = run.benchmark or "SPY"
+
+    # Load benchmark OHLCV for ADX calculation
+    loaded = await ensure_data_loaded(db, benchmark_ticker, start, end)
+    if not loaded:
+        raise HTTPException(422, f"Could not load {benchmark_ticker} data")
+
+    bench_df = await get_price_dataframe(db, benchmark_ticker, start, end)
+
+    # Strategy equity
+    strat_series = pd.Series(
+        [p["value"] for p in run.equity_curve],
+        index=pd.to_datetime([p["date"] for p in run.equity_curve]),
+    )
+    strat_returns = strat_series.pct_change().dropna()
+
+    # Compute ADX (14-period)
+    high = bench_df["high"]
+    low = bench_df["low"]
+    close = bench_df["close"]
+
+    # True Range
+    tr = pd.concat([
+        high - low,
+        (high - close.shift(1)).abs(),
+        (low - close.shift(1)).abs(),
+    ], axis=1).max(axis=1)
+
+    # Directional movements
+    up_move = high - high.shift(1)
+    down_move = low.shift(1) - low
+
+    dm_plus = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    dm_minus = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+    period = 14
+    atr = tr.ewm(span=period, adjust=False).mean()
+    di_plus = 100 * pd.Series(dm_plus, index=high.index).ewm(span=period, adjust=False).mean() / atr
+    di_minus = 100 * pd.Series(dm_minus, index=high.index).ewm(span=period, adjust=False).mean() / atr
+
+    dx = 100 * (di_plus - di_minus).abs() / (di_plus + di_minus).replace(0, np.nan)
+    adx = dx.ewm(span=period, adjust=False).mean()
+
+    # Rolling volatility (21-day annualized)
+    bench_returns = close.pct_change().dropna()
+    rolling_vol = bench_returns.rolling(21).std() * np.sqrt(252)
+    avg_vol = rolling_vol.mean()
+
+    # Classify regimes
+    def classify(date_idx):
+        rv = rolling_vol.get(date_idx)
+        adx_val = adx.get(date_idx)
+        if rv is None or adx_val is None or pd.isna(rv) or pd.isna(adx_val):
+            return "Neutral"
+        if rv > avg_vol * 1.5:
+            return "High Volatility"
+        if adx_val > 25:
+            return "Trending"
+        if adx_val < 15:
+            return "Choppy"
+        return "Neutral"
+
+    # Build timeline
+    timeline = []
+    for dt, ret in strat_returns.items():
+        regime = classify(dt)
+        timeline.append({"date": dt.date().isoformat(), "regime": regime, "return": float(ret)})
+
+    # Per-regime stats
+    regime_groups: dict[str, list[float]] = {}
+    for row in timeline:
+        regime_groups.setdefault(row["regime"], []).append(row["return"])
+
+    regime_order = ["Trending", "Choppy", "High Volatility", "Neutral"]
+    regime_colors = {
+        "Trending": "#4488ff",
+        "Choppy": "#ffcc44",
+        "High Volatility": "#ff4757",
+        "Neutral": "#888898",
+    }
+
+    stats = []
+    for regime in regime_order:
+        rets = regime_groups.get(regime, [])
+        if not rets:
+            continue
+        arr = np.array(rets)
+        ann_ret = float(np.mean(arr)) * 252 * 100
+        ann_vol = float(np.std(arr, ddof=1)) * np.sqrt(252) * 100 if len(arr) > 1 else 0
+        sharpe = ann_ret / ann_vol if ann_vol > 0 else 0
+        stats.append({
+            "regime": regime,
+            "color": regime_colors[regime],
+            "days": len(rets),
+            "pct_of_period": round(len(rets) / len(timeline) * 100, 1) if timeline else 0,
+            "ann_return_pct": round(ann_ret, 2),
+            "ann_volatility_pct": round(ann_vol, 2),
+            "sharpe": round(sharpe, 3),
+        })
+
+    # ADX description
+    desc = ""
+    trending_pct = next((s["pct_of_period"] for s in stats if s["regime"] == "Trending"), 0)
+    if trending_pct > 40:
+        desc = "The backtest period was predominantly trending — strategy likely benefits from directional positions."
+    elif next((s["pct_of_period"] for s in stats if s["regime"] == "Choppy"), 0) > 40:
+        desc = "The backtest period was predominantly choppy — mean-reversion strategies should outperform trend-following."
+    else:
+        desc = "Mixed regime environment — strategy performance may vary across sub-periods."
+
+    return {
+        "timeline": timeline,
+        "regime_stats": stats,
+        "description": desc,
+    }
+
+
 @router.post("/factor-exposure/{backtest_id}")
 async def factor_exposure(
     backtest_id: str,

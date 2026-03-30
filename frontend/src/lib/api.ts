@@ -6,6 +6,7 @@ import type {
   FactorExposureResult,
   MonteCarloResult,
   PortfolioBlendResult,
+  RegimeAnalysisResult,
   StrategyInfo,
   SweepResult,
   Sweep2DResult,
@@ -168,6 +169,10 @@ class ApiClient {
 
   async getFactorExposure(backtestId: string): Promise<FactorExposureResult> {
     return this.request(`/analytics/factor-exposure/${backtestId}`, { method: "POST" });
+  }
+
+  async getRegimeAnalysis(backtestId: string): Promise<RegimeAnalysisResult> {
+    return this.request(`/analytics/regime-analysis/${backtestId}`, { method: "POST" });
   }
 
   async portfolioBlend(
