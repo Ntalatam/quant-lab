@@ -2,6 +2,8 @@ import type {
   BacktestConfig,
   BacktestResult,
   BacktestSummary,
+  BayesOptParamSpec,
+  BayesOptResult,
   CapacityResult,
   ComparisonResult,
   FactorExposureResult,
@@ -195,6 +197,26 @@ class ApiClient {
     return this.request("/analytics/portfolio-blend", {
       method: "POST",
       body: JSON.stringify({ backtest_ids: backtestIds, weights, optimize }),
+    });
+  }
+
+  async runBayesOpt(
+    backtestId: string,
+    paramSpecs: BayesOptParamSpec[],
+    metric: string,
+    nTrials: number
+  ): Promise<BayesOptResult> {
+    // Fetch the original backtest to get base_config
+    const result = await this.getBacktestResult(backtestId);
+    return this.request("/backtest/optimize", {
+      method: "POST",
+      body: JSON.stringify({
+        base_config: result.config,
+        param_specs: paramSpecs,
+        metric,
+        n_trials: nTrials,
+        maximize: !["max_drawdown_pct", "annualized_volatility_pct", "var_95_pct", "cvar_95_pct"].includes(metric),
+      }),
     });
   }
 

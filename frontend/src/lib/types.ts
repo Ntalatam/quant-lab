@@ -225,6 +225,30 @@ export interface PortfolioBlendResult {
   }[];
 }
 
+// ---- Bayesian Optimization ----
+export interface BayesOptParamSpec {
+  name: string;
+  type: "int" | "float";
+  low: number;
+  high: number;
+  step?: number | null;
+}
+
+export interface BayesOptTrial {
+  trial: number;
+  params: Record<string, number>;
+  value: number;
+}
+
+export interface BayesOptResult {
+  best_params: Record<string, number | string | boolean>;
+  best_value: number;
+  metric: string;
+  n_trials: number;
+  trials: BayesOptTrial[];
+  param_specs: BayesOptParamSpec[];
+}
+
 // ---- Sweep ----
 export interface SweepResult {
   sweep_param: string;

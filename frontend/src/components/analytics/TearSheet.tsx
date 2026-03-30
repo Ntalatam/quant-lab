@@ -18,7 +18,7 @@ import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useBacktestList } from "@/hooks/useBacktest";
-import { Download, Grid3X3, RefreshCw, Link2, Check, GitCompare } from "lucide-react";
+import { Download, Grid3X3, RefreshCw, Link2, Check, GitCompare, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
 interface TearSheetProps {
@@ -158,6 +158,14 @@ export function TearSheet({ result }: TearSheetProps) {
           ))}
         </div>
         <div className="flex items-center gap-2 mb-1">
+          <Link
+            href={`/backtest/${result.id}/optimize`}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-purple transition-colors px-3 py-1.5 rounded"
+            style={{ border: "1px solid var(--color-border)" }}
+          >
+            <SlidersHorizontal size={11} />
+            Optimize
+          </Link>
           <Link
             href={`/backtest/${result.id}/walkforward`}
             className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-green transition-colors px-3 py-1.5 rounded"
