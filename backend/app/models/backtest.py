@@ -37,6 +37,8 @@ class BacktestRun(Base):
     metrics: Mapped[dict] = mapped_column(JSON)
     benchmark_metrics: Mapped[dict] = mapped_column(JSON)
 
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     trades: Mapped[list["TradeRecord"]] = relationship(

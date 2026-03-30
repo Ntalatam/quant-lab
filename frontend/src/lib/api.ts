@@ -86,6 +86,13 @@ class ApiClient {
     return this.request(`/backtest/${id}`, { method: "DELETE" });
   }
 
+  async updateNotes(id: string, notes: string): Promise<{ id: string; notes: string }> {
+    return this.request(`/backtest/${id}/notes`, {
+      method: "PATCH",
+      body: JSON.stringify({ notes }),
+    });
+  }
+
   // Strategies
   async getStrategies(): Promise<StrategyInfo[]> {
     return this.request("/strategies/list");

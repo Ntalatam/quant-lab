@@ -16,6 +16,7 @@ class Base(DeclarativeBase):
 # databases pick them up without requiring a full Alembic migration.
 _MIGRATIONS = [
     "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS clean_equity_curve JSON",
+    "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS notes VARCHAR(2000)",
 ]
 
 

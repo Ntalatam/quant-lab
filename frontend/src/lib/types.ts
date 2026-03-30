@@ -44,6 +44,7 @@ export interface BacktestResult {
   id: string;
   config: BacktestConfig;
   created_at: string;
+  notes?: string;
   equity_curve: TimeSeriesPoint[];
   clean_equity_curve: TimeSeriesPoint[];
   benchmark_curve: TimeSeriesPoint[];

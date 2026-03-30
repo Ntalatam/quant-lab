@@ -141,6 +141,7 @@ async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
             "rebalance_frequency": run.rebalance_frequency,
         },
         "created_at": run.created_at.isoformat() if run.created_at else None,
+        "notes": run.notes or "",
         "equity_curve": run.equity_curve,
         "clean_equity_curve": run.clean_equity_curve or [],
         "benchmark_curve": run.benchmark_curve,
@@ -187,6 +188,21 @@ async def delete_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
     )
     await db.commit()
     return {"status": "deleted"}
+
+
+@router.patch("/{backtest_id}/notes")
+async def update_notes(
+    backtest_id: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+    run.notes = payload.get("notes", "")[:2000]
+    await db.commit()
+    return {"id": backtest_id, "notes": run.notes}
 
 
 @router.post("/sweep")
