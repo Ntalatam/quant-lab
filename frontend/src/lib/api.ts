@@ -4,6 +4,7 @@ import type {
   BacktestSummary,
   ComparisonResult,
   MonteCarloResult,
+  PortfolioBlendResult,
   StrategyInfo,
   SweepResult,
   Sweep2DResult,
@@ -161,6 +162,17 @@ class ApiClient {
         values_y: valuesY,
         metric,
       }),
+    });
+  }
+
+  async portfolioBlend(
+    backtestIds: string[],
+    weights: number[],
+    optimize: "custom" | "equal" | "max_sharpe" | "min_dd" = "custom"
+  ): Promise<PortfolioBlendResult> {
+    return this.request("/analytics/portfolio-blend", {
+      method: "POST",
+      body: JSON.stringify({ backtest_ids: backtestIds, weights, optimize }),
     });
   }
 

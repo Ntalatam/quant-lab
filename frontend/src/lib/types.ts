@@ -153,6 +153,22 @@ export interface MonteCarloResult {
   prob_loss: number;
 }
 
+// ---- Portfolio Blend ----
+export interface PortfolioBlendResult {
+  weights: number[];
+  optimize: string;
+  equity_curve: TimeSeriesPoint[];
+  metrics: Partial<PerformanceMetrics>;
+  asset_contributions: {
+    id: string;
+    strategy_id: string;
+    tickers: string[];
+    weight: number;
+    asset_return_pct: number;
+    contribution_pct: number;
+  }[];
+}
+
 // ---- Sweep ----
 export interface SweepResult {
   sweep_param: string;
