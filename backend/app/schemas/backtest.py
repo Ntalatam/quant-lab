@@ -29,3 +29,19 @@ class BacktestSweep2DConfig(BaseModel):
     param_y: str
     values_y: list[float | int]
     metric: str = "sharpe_ratio"  # metric to display in the heatmap
+
+
+class BayesOptParamSpec(BaseModel):
+    name: str
+    type: str          # "int" or "float"
+    low: float
+    high: float
+    step: float | None = None  # only for int params
+
+
+class BayesOptConfig(BaseModel):
+    base_config: BacktestConfig
+    param_specs: list[BayesOptParamSpec]
+    metric: str = "sharpe_ratio"  # objective to maximize
+    n_trials: int = 30
+    maximize: bool = True

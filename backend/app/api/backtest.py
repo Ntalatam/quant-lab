@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
-from app.schemas.backtest import BacktestConfig, BacktestSweepConfig, BacktestSweep2DConfig
+from app.schemas.backtest import BacktestConfig, BacktestSweepConfig, BacktestSweep2DConfig, BayesOptConfig
 from app.services.backtest_engine import run_backtest
 from app.services.walk_forward import run_walk_forward
 
@@ -296,6 +296,91 @@ async def walk_forward(
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, f"Walk-forward failed: {e}")
+
+
+@router.post("/optimize")
+async def bayesian_optimize(
+    config: BayesOptConfig,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Run Bayesian optimization (Optuna) to find the best parameter combination.
+
+    Runs up to n_trials evaluations, each a full backtest, and returns the
+    best parameter set along with all trial results for visualization.
+    """
+    try:
+        import optuna
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+    except ImportError:
+        raise HTTPException(500, "optuna is not installed. Run: pip install optuna")
+
+    from app.database import async_session as _async_session
+
+    trials_log = []
+
+    def objective(trial: "optuna.Trial") -> float:  # type: ignore[name-defined]
+        import asyncio
+
+        params = dict(config.base_config.params)
+        for spec in config.param_specs:
+            if spec.type == "int":
+                step = int(spec.step) if spec.step else 1
+                params[spec.name] = trial.suggest_int(spec.name, int(spec.low), int(spec.high), step=step)
+            else:
+                params[spec.name] = trial.suggest_float(spec.name, spec.low, spec.high, step=spec.step)
+
+        trial_config = config.base_config.model_copy(update={"params": params})
+
+        async def _run():
+            async with _async_session() as sess:
+                return await run_backtest(sess, trial_config)
+
+        try:
+            result = asyncio.run(_run())
+        except Exception:
+            return float("-inf") if config.maximize else float("inf")
+
+        metric_val = result["metrics"].get(config.metric)
+        if metric_val is None:
+            return float("-inf") if config.maximize else float("inf")
+
+        trials_log.append({
+            "trial": trial.number,
+            "params": dict(params),
+            "value": float(metric_val),
+        })
+        return float(metric_val) if config.maximize else -float(metric_val)
+
+    # Optuna must run sync — use thread pool to avoid blocking event loop
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    def run_study():
+        direction = "maximize" if config.maximize else "minimize"
+        study = optuna.create_study(direction=direction)
+        study.optimize(objective, n_trials=min(config.n_trials, 50), n_jobs=1)
+        return study
+
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        study = await loop.run_in_executor(pool, run_study)
+
+    best_params = dict(config.base_config.params)
+    best_params.update(study.best_params)
+    best_value = study.best_value if config.maximize else -study.best_value
+
+    # Sort trials for visualization
+    trials_sorted = sorted(trials_log, key=lambda t: t["trial"])
+
+    return {
+        "best_params": best_params,
+        "best_value": round(float(best_value), 4),
+        "metric": config.metric,
+        "n_trials": len(trials_sorted),
+        "trials": trials_sorted,
+        "param_specs": [s.model_dump() for s in config.param_specs],
+    }
 
 
 @router.websocket("/ws")
