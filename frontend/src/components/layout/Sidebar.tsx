@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,7 +11,17 @@ import {
   Database,
   Code2,
   TrendingUp,
+  Keyboard,
+  X,
 } from "lucide-react";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+
+const SHORTCUTS = [
+  { key: "N", label: "New Backtest" },
+  { key: "R", label: "Results" },
+  { key: "D", label: "Dashboard" },
+  { key: "C", label: "Compare" },
+];
 
 const NAV_SECTIONS = [
   {
@@ -38,6 +49,8 @@ const NAV_SECTIONS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  useKeyboardShortcuts();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -127,19 +140,74 @@ export function Sidebar() {
         className="px-4 py-3 shrink-0 space-y-1.5"
         style={{ borderTop: "1px solid var(--color-border)" }}
       >
-        <div className="flex items-center gap-1.5">
-          <span
-            className="w-1.5 h-1.5 rounded-full bg-accent-green shrink-0"
-            style={{ boxShadow: "0 0 6px rgba(0,212,170,0.6)" }}
-          />
-          <span className="text-[10px] text-text-muted">
-            Event-driven · No lookahead bias
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-accent-green shrink-0"
+              style={{ boxShadow: "0 0 6px rgba(0,212,170,0.6)" }}
+            />
+            <span className="text-[10px] text-text-muted">
+              Event-driven · No lookahead
+            </span>
+          </div>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="text-text-muted hover:text-text-secondary transition-colors"
+            title="Keyboard shortcuts"
+          >
+            <Keyboard size={12} />
+          </button>
         </div>
         <p className="text-[10px]" style={{ color: "var(--color-text-muted)", opacity: 0.55 }}>
           QuantLab v1.0 — Local
         </p>
       </div>
+
+      {/* Shortcuts modal */}
+      {showShortcuts && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setShowShortcuts(false)}
+        >
+          <div
+            className="rounded-lg p-6 w-72"
+            style={{
+              background: "var(--color-bg-card)",
+              border: "1px solid var(--color-border)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-semibold text-text-primary">Keyboard Shortcuts</h3>
+              <button onClick={() => setShowShortcuts(false)}>
+                <X size={14} className="text-text-muted hover:text-text-primary transition-colors" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {SHORTCUTS.map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <span className="text-xs text-text-secondary">{label}</span>
+                  <kbd
+                    className="text-[10px] font-mono px-2 py-0.5 rounded"
+                    style={{
+                      background: "rgba(255,255,255,0.06)",
+                      border: "1px solid var(--color-border)",
+                      color: "var(--color-text-primary)",
+                    }}
+                  >
+                    {key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-text-muted mt-4">
+              Shortcuts are disabled when typing in input fields.
+            </p>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
