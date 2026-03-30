@@ -1,20 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useBacktestList } from "@/hooks/useBacktest";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { ErrorMessage } from "@/components/shared/ErrorBoundary";
 import { formatPercent, formatRatio, formatDate } from "@/lib/formatters";
+import { api } from "@/lib/api";
 import {
   Play,
   BarChart3,
   TrendingUp,
   Database,
   Columns3,
-  Code2,
   ChevronRight,
   Zap,
   Activity,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 
 const STRATEGY_CATEGORY_MAP: Record<string, { label: string; cls: string }> = {
@@ -40,9 +45,93 @@ function SharpeCell({ value }: { value: number }) {
   );
 }
 
+// ── Demo seeder ───────────────────────────────────────────────────────
+
+function DemoLoader({ onDone }: { onDone: () => void }) {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const seed = async () => {
+    setState("loading");
+    setMsg("Loading SPY, AAPL, MSFT, GLD and running 3 sample backtests…");
+    try {
+      const result = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/demo/seed`,
+        { method: "POST" }
+      ).then((r) => r.json());
+      if (result.backtests_created?.length > 0) {
+        setState("done");
+        setMsg(`Created ${result.backtests_created.length} demo backtests.`);
+        onDone();
+      } else {
+        setState("error");
+        setMsg(result.errors?.[0] ?? "Demo seeding failed — check backend logs.");
+      }
+    } catch {
+      setState("error");
+      setMsg("Could not reach backend. Make sure the server is running.");
+    }
+  };
+
+  return (
+    <div
+      className="rounded-md p-4 flex items-center justify-between gap-4"
+      style={{
+        background: "rgba(0,212,170,0.04)",
+        border: "1px solid rgba(0,212,170,0.18)",
+      }}
+    >
+      <div>
+        <div className="flex items-center gap-1.5 mb-1">
+          <Sparkles size={11} className="text-accent-green" />
+          <p className="section-label">Demo Mode</p>
+        </div>
+        <p className="text-sm text-text-primary">
+          Load 5 years of real data and run 3 sample backtests in one click
+        </p>
+        {msg && (
+          <p
+            className={`text-[11px] mt-0.5 ${
+              state === "error" ? "text-accent-red" : "text-text-muted"
+            }`}
+          >
+            {msg}
+          </p>
+        )}
+      </div>
+      <button
+        onClick={seed}
+        disabled={state === "loading" || state === "done"}
+        className="shrink-0 flex items-center gap-2 text-xs font-medium px-4 py-2 rounded transition-all disabled:opacity-50"
+        style={
+          state === "done"
+            ? {
+                background: "rgba(0,212,170,0.2)",
+                border: "1px solid rgba(0,212,170,0.4)",
+                color: "var(--color-accent-green)",
+              }
+            : {
+                background: "var(--color-accent-green)",
+                color: "var(--color-bg-primary)",
+                boxShadow: "0 0 12px rgba(0,212,170,0.2)",
+              }
+        }
+      >
+        {state === "loading" ? (
+          <><Loader2 size={12} className="animate-spin" /> Loading…</>
+        ) : state === "done" ? (
+          <><Sparkles size={12} /> Done!</>
+        ) : (
+          <><Sparkles size={12} /> Load Demo Data</>
+        )}
+      </button>
+    </div>
+  );
+}
+
 // ── Empty state: platform onboarding ────────────────────────────────
 
-function EmptyDashboard() {
+function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
   const steps = [
     {
       num: "01",
@@ -149,16 +238,19 @@ function EmptyDashboard() {
         ))}
       </div>
 
+      {/* Demo mode */}
+      <DemoLoader onDone={onDemoLoaded} />
+
       {/* Quick start suggestion */}
       <div
-        className="rounded-md p-4 flex items-center justify-between gap-4"
+        className="rounded-md p-4 flex items-center justify-between gap-4 mt-4"
         style={{
           background: "rgba(68,136,255,0.04)",
           border: "1px solid rgba(68,136,255,0.16)",
         }}
       >
         <div>
-          <p className="section-label mb-1">Quick Start Suggestion</p>
+          <p className="section-label mb-1">Manual Quick Start</p>
           <p className="text-sm text-text-primary">
             Try{" "}
             <span className="font-mono text-accent-blue">AAPL, MSFT, SPY</span>
@@ -216,7 +308,12 @@ function EmptyDashboard() {
 // ── Main dashboard ───────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient();
   const { data: backtests, isLoading, error } = useBacktestList();
+
+  const handleDemoLoaded = () => {
+    queryClient.invalidateQueries({ queryKey: ["backtests"] });
+  };
 
   if (isLoading) return <PageLoading />;
   if (error) return <ErrorMessage message={error.message} />;
@@ -224,7 +321,7 @@ export default function DashboardPage() {
   const recent = backtests?.slice(0, 10) || [];
   const totalRuns = backtests?.length || 0;
 
-  if (totalRuns === 0) return <EmptyDashboard />;
+  if (totalRuns === 0) return <EmptyDashboard onDemoLoaded={handleDemoLoaded} />;
 
   const bestSharpe = Math.max(...backtests!.map((b) => b.sharpe_ratio));
   const bestReturn = Math.max(...backtests!.map((b) => b.total_return_pct));
