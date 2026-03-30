@@ -12,7 +12,8 @@ import { RollingMetrics } from "@/components/charts/RollingMetrics";
 import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
-import { Download } from "lucide-react";
+import { Download, Grid3X3 } from "lucide-react";
+import Link from "next/link";
 
 interface TearSheetProps {
   result: BacktestResult;
@@ -119,14 +120,24 @@ export function TearSheet({ result }: TearSheetProps) {
             </button>
           ))}
         </div>
-        <a
-          href={api.getExportUrl(result.id)}
-          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors px-3 py-1.5 rounded mb-1"
-          style={{ border: "1px solid var(--color-border)" }}
-        >
-          <Download size={11} />
-          Export CSV
-        </a>
+        <div className="flex items-center gap-2 mb-1">
+          <Link
+            href={`/backtest/${result.id}/heatmap`}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-blue transition-colors px-3 py-1.5 rounded"
+            style={{ border: "1px solid var(--color-border)" }}
+          >
+            <Grid3X3 size={11} />
+            2D Heatmap
+          </Link>
+          <a
+            href={api.getExportUrl(result.id)}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors px-3 py-1.5 rounded"
+            style={{ border: "1px solid var(--color-border)" }}
+          >
+            <Download size={11} />
+            Export CSV
+          </a>
+        </div>
       </div>
 
       {/* ── Performance ── */}

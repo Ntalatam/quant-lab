@@ -165,3 +165,22 @@ export interface SweepResult {
     error?: string;
   }[];
 }
+
+// ---- 2D Sweep Heatmap ----
+export interface Sweep2DCell {
+  x: number;
+  y: number;
+  value: number | null;
+  total_return_pct?: number;
+  max_drawdown_pct?: number;
+  error?: string;
+}
+
+export interface Sweep2DResult {
+  param_x: string;
+  param_y: string;
+  metric: string;
+  values_x: number[];
+  values_y: number[];
+  cells: Sweep2DCell[][];
+}

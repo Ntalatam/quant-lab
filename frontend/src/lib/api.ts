@@ -6,6 +6,7 @@ import type {
   MonteCarloResult,
   StrategyInfo,
   SweepResult,
+  Sweep2DResult,
 } from "./types";
 
 const API_BASE =
@@ -126,6 +127,27 @@ class ApiClient {
         base_config: baseConfig,
         sweep_param: sweepParam,
         sweep_values: sweepValues,
+      }),
+    });
+  }
+
+  async runSweep2D(
+    baseConfig: BacktestConfig,
+    paramX: string,
+    valuesX: number[],
+    paramY: string,
+    valuesY: number[],
+    metric: string = "sharpe_ratio"
+  ): Promise<Sweep2DResult> {
+    return this.request("/backtest/sweep2d", {
+      method: "POST",
+      body: JSON.stringify({
+        base_config: baseConfig,
+        param_x: paramX,
+        values_x: valuesX,
+        param_y: paramY,
+        values_y: valuesY,
+        metric,
       }),
     });
   }

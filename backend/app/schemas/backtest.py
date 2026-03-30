@@ -20,3 +20,12 @@ class BacktestSweepConfig(BaseModel):
     base_config: BacktestConfig
     sweep_param: str
     sweep_values: list[float | int | str]
+
+
+class BacktestSweep2DConfig(BaseModel):
+    base_config: BacktestConfig
+    param_x: str
+    values_x: list[float | int]
+    param_y: str
+    values_y: list[float | int]
+    metric: str = "sharpe_ratio"  # metric to display in the heatmap

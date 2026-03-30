@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
-from app.schemas.backtest import BacktestConfig, BacktestSweepConfig
+from app.schemas.backtest import BacktestConfig, BacktestSweepConfig, BacktestSweep2DConfig
 from app.services.backtest_engine import run_backtest
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
@@ -215,4 +215,43 @@ async def parameter_sweep(
     return {
         "sweep_param": config.sweep_param,
         "results": results,
+    }
+
+
+@router.post("/sweep2d")
+async def parameter_sweep_2d(
+    config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)
+):
+    """Run backtests varying two parameters simultaneously and return a heatmap matrix."""
+    cells = []
+    for vx in config.values_x:
+        row = []
+        for vy in config.values_y:
+            params = config.base_config.params.copy()
+            params[config.param_x] = vx
+            params[config.param_y] = vy
+            sweep_config = config.base_config.model_copy(update={"params": params})
+            try:
+                result = await run_backtest(db, sweep_config)
+                metric_val = result["metrics"].get(config.metric)
+                row.append(
+                    {
+                        "x": vx,
+                        "y": vy,
+                        "value": metric_val,
+                        "total_return_pct": result["metrics"].get("total_return_pct"),
+                        "max_drawdown_pct": result["metrics"].get("max_drawdown_pct"),
+                    }
+                )
+            except Exception as e:
+                row.append({"x": vx, "y": vy, "value": None, "error": str(e)})
+        cells.append(row)
+
+    return {
+        "param_x": config.param_x,
+        "param_y": config.param_y,
+        "metric": config.metric,
+        "values_x": config.values_x,
+        "values_y": config.values_y,
+        "cells": cells,
     }
