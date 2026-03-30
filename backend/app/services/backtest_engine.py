@@ -229,7 +229,7 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
 
     # 12. Assemble result
     backtest_id = str(uuid.uuid4())
-    return {
+    result = {
         "id": backtest_id,
         "config": config.model_dump(),
         "created_at": datetime.utcnow().isoformat(),
@@ -243,6 +243,7 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
         "trades": trades_list,
         "monthly_returns": monthly,
     }
+    return _sanitize(result)
 
 
 def _get_rebalance_dates(all_dates, frequency: str) -> set:
@@ -312,3 +313,15 @@ def _trade_to_dict(trade) -> dict:
         "commission": trade.commission,
         "slippage": trade.slippage,
     }
+
+
+def _sanitize(obj):
+    """Recursively replace float NaN/Inf with None so PostgreSQL JSON accepts it."""
+    import math
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
