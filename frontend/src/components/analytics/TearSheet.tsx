@@ -5,6 +5,7 @@ import type { BacktestResult } from "@/lib/types";
 import { MetricsCard } from "./MetricsCard";
 import { TradeLog } from "./TradeLog";
 import { FactorExposure } from "./FactorExposure";
+import { RegimeAnalysis } from "./RegimeAnalysis";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
 import { MonthlyReturnsHeatmap } from "@/components/charts/MonthlyReturnsHeatmap";
@@ -310,6 +311,7 @@ export function TearSheet({ result }: TearSheetProps) {
             <MetricsCard label="Current DD"   value={formatPercent(m.current_drawdown_pct)} positive={m.current_drawdown_pct === 0} />
           </div>
 
+          <RegimeAnalysis backtestId={result.id} />
           <FactorExposure backtestId={result.id} />
 
           <div
