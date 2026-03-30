@@ -15,6 +15,7 @@ dependencies = [
     "scipy>=1.11",
     "yfinance>=0.2.31",
     "optuna>=3.4",
+    "xgboost>=2.0",
 ]
 
 [project.optional-dependencies]
