@@ -17,6 +17,7 @@ import { AnnualReturns } from "@/components/charts/AnnualReturns";
 import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
+import { useBacktestList } from "@/hooks/useBacktest";
 import { Download, Grid3X3, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
@@ -60,10 +61,27 @@ function ChartPanel({
   );
 }
 
+function computePercentile(value: number, allValues: number[], higherIsBetter = true): number {
+  if (allValues.length < 2) return 0.5;
+  const sorted = [...allValues].sort((a, b) => a - b);
+  const rank = sorted.filter((v) => v < value).length;
+  const pct = rank / (sorted.length - 1);
+  return higherIsBetter ? pct : 1 - pct;
+}
+
 export function TearSheet({ result }: TearSheetProps) {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Performance");
   const m = result.metrics;
   const bm = result.benchmark_metrics;
+  const { data: allBacktests } = useBacktestList();
+
+  // Compute percentile ranks across all runs
+  const pct = {
+    sharpe: allBacktests ? computePercentile(m.sharpe_ratio, allBacktests.map((b) => b.sharpe_ratio)) : undefined,
+    return: allBacktests ? computePercentile(m.total_return_pct, allBacktests.map((b) => b.total_return_pct)) : undefined,
+    drawdown: allBacktests ? computePercentile(m.max_drawdown_pct, allBacktests.map((b) => b.max_drawdown_pct), false) : undefined,
+    cagr: allBacktests ? computePercentile(m.cagr_pct, allBacktests.map((b) => b.total_return_pct)) : undefined,
+  };
 
   return (
     <div>
@@ -74,24 +92,28 @@ export function TearSheet({ result }: TearSheetProps) {
           value={formatPercent(m.total_return_pct)}
           benchmark={formatPercent(bm.total_return_pct)}
           positive={m.total_return_pct > 0}
+          percentile={pct.return}
         />
         <MetricsCard
           label="CAGR"
           value={formatPercent(m.cagr_pct)}
           benchmark={formatPercent(bm.cagr_pct)}
           positive={m.cagr_pct > 0}
+          percentile={pct.cagr}
         />
         <MetricsCard
           label="Sharpe Ratio"
           value={formatRatio(m.sharpe_ratio)}
           benchmark={formatRatio(bm.sharpe_ratio)}
           positive={m.sharpe_ratio > 1}
+          percentile={pct.sharpe}
         />
         <MetricsCard
           label="Max Drawdown"
           value={formatPercent(m.max_drawdown_pct)}
           benchmark={formatPercent(bm.max_drawdown_pct)}
           positive={false}
+          percentile={pct.drawdown}
         />
         <MetricsCard
           label="Win Rate"

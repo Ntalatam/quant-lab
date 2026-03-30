@@ -7,6 +7,8 @@ interface MetricsCardProps {
   positive?: boolean;
   description?: string;
   size?: "sm" | "md";
+  /** 0–1 percentile rank among all stored runs (1 = best) */
+  percentile?: number;
 }
 
 export function MetricsCard({
@@ -16,6 +18,7 @@ export function MetricsCard({
   positive,
   description,
   size = "md",
+  percentile,
 }: MetricsCardProps) {
   const accentColor =
     positive === undefined
@@ -68,6 +71,20 @@ export function MetricsCard({
           <p className="text-[10px] text-text-muted mt-1 font-mono tabular-nums">
             <span className="text-text-muted/60">Bench</span>{" "}
             {benchmark}
+          </p>
+        )}
+
+        {/* Percentile rank */}
+        {percentile !== undefined && (
+          <p className="text-[9px] mt-1 font-mono" style={{
+            color: percentile >= 0.67
+              ? "var(--color-accent-green)"
+              : percentile >= 0.33
+              ? "var(--color-accent-yellow)"
+              : "var(--color-accent-red)",
+          }}>
+            {percentile >= 0.67 ? "▲" : percentile >= 0.33 ? "●" : "▼"}{" "}
+            top {Math.round((1 - percentile) * 100) + 1}%
           </p>
         )}
       </div>
