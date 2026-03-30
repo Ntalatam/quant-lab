@@ -6,6 +6,7 @@ import { MetricsCard } from "./MetricsCard";
 import { TradeLog } from "./TradeLog";
 import { FactorExposure } from "./FactorExposure";
 import { RegimeAnalysis } from "./RegimeAnalysis";
+import { CapacityAnalysis } from "./CapacityAnalysis";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
 import { MonthlyReturnsHeatmap } from "@/components/charts/MonthlyReturnsHeatmap";
@@ -312,6 +313,7 @@ export function TearSheet({ result }: TearSheetProps) {
           </div>
 
           <RegimeAnalysis backtestId={result.id} />
+          <CapacityAnalysis backtestId={result.id} />
           <FactorExposure backtestId={result.id} />
 
           <div

@@ -2,6 +2,7 @@ import type {
   BacktestConfig,
   BacktestResult,
   BacktestSummary,
+  CapacityResult,
   ComparisonResult,
   FactorExposureResult,
   MonteCarloResult,
@@ -173,6 +174,10 @@ class ApiClient {
 
   async getRegimeAnalysis(backtestId: string): Promise<RegimeAnalysisResult> {
     return this.request(`/analytics/regime-analysis/${backtestId}`, { method: "POST" });
+  }
+
+  async getCapacityAnalysis(backtestId: string): Promise<CapacityResult> {
+    return this.request(`/analytics/capacity/${backtestId}`, { method: "POST" });
   }
 
   async portfolioBlend(

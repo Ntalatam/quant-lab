@@ -153,6 +153,30 @@ export interface MonteCarloResult {
   prob_loss: number;
 }
 
+// ---- Capacity Analysis ----
+export interface CapacityResult {
+  initial_capital: number;
+  n_trades: number;
+  max_adv_participation_pct: number;
+  avg_adv_participation_pct: number;
+  p90_adv_participation_pct: number;
+  capacity_estimates: {
+    adv_threshold_pct: number;
+    capacity_aum: number | null;
+    label: string;
+  }[];
+  trade_adv_stats: {
+    ticker: string;
+    side: string;
+    date: string;
+    shares: number;
+    notional: number;
+    adv: number;
+    adv_participation_pct: number;
+  }[];
+  message?: string;
+}
+
 // ---- Regime Analysis ----
 export interface RegimeStat {
   regime: string;

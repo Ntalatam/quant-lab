@@ -153,6 +153,110 @@ async def export_results(
     raise HTTPException(501, "Only CSV export is currently supported")
 
 
+@router.post("/capacity/{backtest_id}")
+async def capacity_analysis(
+    backtest_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Estimate strategy capacity: at what AUM does market impact erode the edge?
+
+    For each trade, compute shares_traded / ADV. Scale to find AUM thresholds
+    where the strategy would consume 1%, 5%, and 10% of average daily volume.
+    """
+    from app.services.data_ingestion import get_price_dataframe
+    from app.models.trade import TradeRecord
+    from datetime import date as date_cls
+
+    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = r.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    # Load trades
+    trades_r = await db.execute(
+        select(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
+    )
+    trades = trades_r.scalars().all()
+
+    if not trades:
+        return {"message": "No trades in this backtest", "capacity_estimates": [], "trade_adv_stats": []}
+
+    start = date_cls.fromisoformat(run.start_date)
+    end = date_cls.fromisoformat(run.end_date)
+
+    # Compute ADV per ticker from price data
+    adv_by_ticker: dict[str, float] = {}
+    price_cache: dict[str, pd.DataFrame] = {}
+
+    for ticker in set(t.ticker for t in trades):
+        try:
+            df = await get_price_dataframe(db, ticker, start, end)
+            price_cache[ticker] = df
+            # Dollar ADV = avg(adj_close * volume)
+            dollar_vol = df["adj_close"] * df["volume"]
+            adv_by_ticker[ticker] = float(dollar_vol.mean())
+        except Exception:
+            pass
+
+    # For each trade, compute the ADV participation at baseline capital
+    initial_capital = run.initial_capital
+    trade_stats = []
+    for t in trades:
+        if t.ticker not in price_cache:
+            continue
+        # Trade dollar notional
+        price = t.entry_price if t.entry_price else 0
+        notional = t.shares * price
+        adv = adv_by_ticker.get(t.ticker, 0)
+        if adv <= 0 or notional <= 0:
+            continue
+        adv_participation_pct = notional / adv * 100  # % of ADV at current capital
+        trade_stats.append({
+            "ticker": t.ticker,
+            "side": t.side,
+            "date": t.entry_date,
+            "shares": t.shares,
+            "notional": round(notional, 0),
+            "adv": round(adv, 0),
+            "adv_participation_pct": round(adv_participation_pct, 4),
+        })
+
+    if not trade_stats:
+        return {"message": "Could not compute ADV stats", "capacity_estimates": [], "trade_adv_stats": []}
+
+    # Sort by ADV participation (most impactful first)
+    trade_stats.sort(key=lambda x: x["adv_participation_pct"], reverse=True)
+
+    # Capacity scaling: at what AUM scale does max ADV participation reach threshold?
+    # If strategy uses X% of ADV at current capital C, then at scale S×C it uses X*S%
+    # Capacity at T% threshold = T / max_participation * initial_capital
+    participations = [t["adv_participation_pct"] for t in trade_stats]
+    max_participation = max(participations)
+    avg_participation = float(np.mean(participations))
+    p90_participation = float(np.percentile(participations, 90))
+
+    thresholds = [1.0, 5.0, 10.0]
+    capacity_estimates = []
+    for thresh in thresholds:
+        capacity_aum = thresh / max_participation * initial_capital if max_participation > 0 else None
+        capacity_estimates.append({
+            "adv_threshold_pct": thresh,
+            "capacity_aum": round(capacity_aum) if capacity_aum else None,
+            "label": f"Max trade uses ≤{thresh}% of ADV",
+        })
+
+    return {
+        "initial_capital": initial_capital,
+        "n_trades": len(trade_stats),
+        "max_adv_participation_pct": round(max_participation, 4),
+        "avg_adv_participation_pct": round(avg_participation, 4),
+        "p90_adv_participation_pct": round(p90_participation, 4),
+        "capacity_estimates": capacity_estimates,
+        "trade_adv_stats": trade_stats[:20],  # top 20 most impactful
+    }
+
+
 @router.post("/regime-analysis/{backtest_id}")
 async def regime_analysis(
     backtest_id: str,
