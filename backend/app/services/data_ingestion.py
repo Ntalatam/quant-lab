@@ -83,19 +83,23 @@ async def ensure_data_loaded(
             )
 
         if records:
-            stmt = insert(PriceData).values(records)
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_ticker_date",
-                set_={
-                    "open": stmt.excluded.open,
-                    "high": stmt.excluded.high,
-                    "low": stmt.excluded.low,
-                    "close": stmt.excluded.close,
-                    "adj_close": stmt.excluded.adj_close,
-                    "volume": stmt.excluded.volume,
-                },
-            )
-            await db.execute(stmt)
+            # Batch into 500-row chunks to stay well under asyncpg's parameter limit
+            chunk_size = 500
+            for i in range(0, len(records), chunk_size):
+                chunk = records[i : i + chunk_size]
+                stmt = insert(PriceData).values(chunk)
+                stmt = stmt.on_conflict_do_update(
+                    constraint="uq_ticker_date",
+                    set_={
+                        "open": stmt.excluded.open,
+                        "high": stmt.excluded.high,
+                        "low": stmt.excluded.low,
+                        "close": stmt.excluded.close,
+                        "adj_close": stmt.excluded.adj_close,
+                        "volume": stmt.excluded.volume,
+                    },
+                )
+                await db.execute(stmt)
             await db.commit()
 
         return True

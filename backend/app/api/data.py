@@ -46,6 +46,7 @@ async def get_ohlcv(
     ticker: str = Query(...),
     start_date: str = Query(...),
     end_date: str = Query(...),
+    max_points: int = Query(default=500, ge=50, le=5000),
     db: AsyncSession = Depends(get_db),
 ):
     df = await get_price_dataframe(
@@ -57,8 +58,21 @@ async def get_ohlcv(
     if df.empty:
         raise HTTPException(404, f"No data for {ticker}")
 
+    # Downsample to max_points using uniform sampling — preserves chart shape
+    # while preventing Recharts from rendering thousands of DOM nodes
+    original_rows = len(df)
+    if len(df) > max_points:
+        step = len(df) / max_points
+        indices = [int(i * step) for i in range(max_points)]
+        # Always include the last point so the chart ends at the right date
+        if indices[-1] != len(df) - 1:
+            indices[-1] = len(df) - 1
+        df = df.iloc[indices]
+
     return {
         "ticker": ticker.upper(),
+        "original_rows": original_rows,
+        "returned_rows": len(df),
         "data": [
             {
                 "date": idx.date().isoformat(),

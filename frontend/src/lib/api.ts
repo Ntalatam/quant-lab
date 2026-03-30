@@ -45,6 +45,8 @@ class ApiClient {
   async getOHLCV(ticker: string, startDate: string, endDate: string) {
     return this.request<{
       ticker: string;
+      original_rows: number;
+      returned_rows: number;
       data: {
         date: string;
         open: number;

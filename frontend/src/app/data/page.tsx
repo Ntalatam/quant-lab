@@ -127,9 +127,16 @@ export default function DataExplorerPage() {
         <div className="lg:col-span-2">
           {viewTicker && (
             <div className="bg-bg-card border border-border rounded p-4">
-              <h2 className="text-sm font-medium text-text-secondary mb-3">
-                {viewTicker} Price Chart
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-text-secondary">
+                  {viewTicker} Price Chart
+                </h2>
+                {ohlcv && ohlcv.original_rows > ohlcv.returned_rows && (
+                  <span className="text-xs text-text-muted">
+                    {ohlcv.original_rows} trading days — displaying {ohlcv.returned_rows} sampled points
+                  </span>
+                )}
+              </div>
               {ohlcvLoading ? (
                 <PageLoading />
               ) : ohlcv && ohlcv.data.length > 0 ? (
