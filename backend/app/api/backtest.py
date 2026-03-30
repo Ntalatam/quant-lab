@@ -8,7 +8,8 @@ DELETE /api/backtest/{id}      — Delete a backtest
 POST   /api/backtest/sweep     — Parameter sensitivity sweep
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import json
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -279,3 +280,101 @@ async def walk_forward(
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, f"Walk-forward failed: {e}")
+
+
+@router.websocket("/ws")
+async def backtest_websocket(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time backtest progress streaming.
+
+    Protocol:
+      Client → sends JSON BacktestConfig
+      Server → streams {"type":"progress","bar":N,"total":M,"date":"...","equity":V,"pct":0..1}
+      Server → sends   {"type":"complete","id":"...","result":{...}} on success
+      Server → sends   {"type":"error","message":"..."} on failure
+    """
+    from app.database import async_session
+
+    await websocket.accept()
+    try:
+        raw = await websocket.receive_text()
+        config_data = json.loads(raw)
+        config = BacktestConfig(**config_data)
+
+        async def on_progress(bar_num: int, total_bars: int, date_str: str, equity: float):
+            pct = round(bar_num / total_bars, 4) if total_bars else 0
+            try:
+                await websocket.send_json({
+                    "type":   "progress",
+                    "bar":    bar_num,
+                    "total":  total_bars,
+                    "date":   date_str,
+                    "equity": round(equity, 2),
+                    "pct":    pct,
+                })
+            except Exception:
+                pass  # client disconnected mid-run
+
+        async with async_session() as db:
+            try:
+                result = await run_backtest(db, config, on_progress=on_progress)
+
+                # Persist result (same logic as HTTP endpoint)
+                import uuid as _uuid
+                run = BacktestRun(
+                    id=result["id"],
+                    strategy_id=config.strategy_id,
+                    strategy_params=config.params,
+                    tickers=config.tickers,
+                    benchmark=config.benchmark,
+                    start_date=config.start_date,
+                    end_date=config.end_date,
+                    initial_capital=config.initial_capital,
+                    slippage_bps=config.slippage_bps,
+                    commission_per_share=config.commission_per_share,
+                    position_sizing=config.position_sizing,
+                    max_position_pct=config.max_position_pct,
+                    rebalance_frequency=config.rebalance_frequency,
+                    equity_curve=result["equity_curve"],
+                    clean_equity_curve=result.get("clean_equity_curve", []),
+                    benchmark_curve=result["benchmark_curve"],
+                    drawdown_series=result["drawdown_series"],
+                    rolling_sharpe=result["rolling_sharpe"],
+                    rolling_volatility=result["rolling_volatility"],
+                    monthly_returns=result["monthly_returns"],
+                    metrics=result["metrics"],
+                    benchmark_metrics=result["benchmark_metrics"],
+                )
+                db.add(run)
+                for trade in result["trades"]:
+                    tr = TradeRecord(
+                        id=trade["id"],
+                        backtest_run_id=result["id"],
+                        ticker=trade["ticker"],
+                        side=trade["side"],
+                        entry_date=trade["entry_date"],
+                        entry_price=trade["entry_price"],
+                        exit_date=trade["exit_date"],
+                        exit_price=trade["exit_price"],
+                        shares=trade["shares"],
+                        pnl=trade["pnl"],
+                        pnl_pct=trade["pnl_pct"],
+                        commission=trade["commission"],
+                        slippage=trade["slippage"],
+                    )
+                    db.add(tr)
+                await db.commit()
+
+                await websocket.send_json({"type": "complete", "id": result["id"]})
+            except ValueError as e:
+                await websocket.send_json({"type": "error", "message": str(e)})
+            except Exception as e:
+                await websocket.send_json({"type": "error", "message": f"Backtest failed: {e}"})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass

@@ -3,27 +3,41 @@
 import { useRouter } from "next/navigation";
 import { StrategyForm } from "@/components/backtest/StrategyForm";
 import { useBacktestStore } from "@/store/backtest-store";
-import { useRunBacktest } from "@/hooks/useBacktest";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { ErrorMessage } from "@/components/shared/ErrorBoundary";
-import { Play, Zap } from "lucide-react";
+import { useBacktestProgress } from "@/hooks/useBacktestProgress";
+import { Play, Zap, Wifi, TrendingUp } from "lucide-react";
 import type { BacktestConfig } from "@/lib/types";
+
+function ProgressBar({ pct }: { pct: number }) {
+  return (
+    <div
+      className="w-full rounded-full overflow-hidden"
+      style={{ height: 6, background: "rgba(68,136,255,0.12)" }}
+    >
+      <div
+        className="h-full rounded-full transition-all duration-300"
+        style={{
+          width: `${Math.round(pct * 100)}%`,
+          background: "linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-green))",
+          boxShadow: "0 0 8px rgba(0,212,170,0.4)",
+        }}
+      />
+    </div>
+  );
+}
 
 export default function NewBacktestPage() {
   const router = useRouter();
-  const { config, setLastResult, isRunning, setIsRunning } = useBacktestStore();
-  const runMutation = useRunBacktest();
+  const { config, setLastResult } = useBacktestStore();
+  const { progress, run, reset } = useBacktestProgress();
+
+  const isRunning = progress.status === "running" || progress.status === "connecting";
 
   const handleRun = async () => {
-    setIsRunning(true);
     try {
-      const result = await runMutation.mutateAsync(config as BacktestConfig);
-      setLastResult(result);
-      router.push(`/backtest/${result.id}`);
+      const id = await run(config as BacktestConfig);
+      router.push(`/backtest/${id}`);
     } catch {
-      // Error handled by mutation state
-    } finally {
-      setIsRunning(false);
+      // Error displayed in progress state
     }
   };
 
@@ -63,9 +77,70 @@ export default function NewBacktestPage() {
               className="mt-6 pt-5"
               style={{ borderTop: "1px solid var(--color-border)" }}
             >
-              {runMutation.error && (
-                <div className="mb-4">
-                  <ErrorMessage message={runMutation.error.message} />
+              {/* Error state */}
+              {progress.status === "error" && (
+                <div
+                  className="mb-4 rounded p-3 flex items-start justify-between gap-3"
+                  style={{
+                    background: "rgba(255,71,87,0.08)",
+                    border: "1px solid rgba(255,71,87,0.25)",
+                  }}
+                >
+                  <p className="text-xs text-accent-red">{progress.message}</p>
+                  <button
+                    onClick={reset}
+                    className="text-[10px] text-text-muted hover:text-text-secondary shrink-0"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {/* Live progress UI */}
+              {(progress.status === "connecting" || progress.status === "running") && (
+                <div
+                  className="mb-4 rounded-md p-4 space-y-3"
+                  style={{
+                    background: "rgba(68,136,255,0.05)",
+                    border: "1px solid rgba(68,136,255,0.18)",
+                  }}
+                >
+                  {progress.status === "connecting" && (
+                    <div className="flex items-center gap-2">
+                      <Wifi size={13} className="text-accent-blue animate-pulse" />
+                      <span className="text-xs text-accent-blue">Connecting to simulation engine…</span>
+                    </div>
+                  )}
+
+                  {progress.status === "running" && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp size={13} className="text-accent-green" />
+                          <span className="text-xs font-medium text-text-primary">
+                            Simulating — {Math.round(progress.pct * 100)}%
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-text-muted">
+                          {progress.bar.toLocaleString()} / {progress.total.toLocaleString()} bars
+                        </span>
+                      </div>
+
+                      <ProgressBar pct={progress.pct} />
+
+                      <div className="flex justify-between text-[10px] font-mono">
+                        <span className="text-text-muted">
+                          Date: <span className="text-text-secondary">{progress.date}</span>
+                        </span>
+                        <span className="text-text-muted">
+                          Equity:{" "}
+                          <span className="text-accent-green font-semibold">
+                            ${progress.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </span>
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -87,10 +162,15 @@ export default function NewBacktestPage() {
                       }
                 }
               >
-                {isRunning ? (
+                {progress.status === "connecting" ? (
                   <>
-                    <LoadingSpinner size={15} />
-                    Running Simulation…
+                    <Wifi size={15} className="animate-pulse" />
+                    Connecting…
+                  </>
+                ) : progress.status === "running" ? (
+                  <>
+                    <TrendingUp size={15} />
+                    Running — {Math.round(progress.pct * 100)}%
                   </>
                 ) : (
                   <>
@@ -146,7 +226,24 @@ export default function NewBacktestPage() {
             </dl>
           </div>
 
-          {/* Execution note */}
+          {/* WebSocket streaming note */}
+          <div
+            className="rounded-md p-3"
+            style={{
+              background: "rgba(0,212,170,0.04)",
+              border: "1px solid rgba(0,212,170,0.14)",
+            }}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <Wifi size={10} className="text-accent-green" />
+              <span className="text-[10px] font-medium text-accent-green">Live streaming</span>
+            </div>
+            <p className="text-[10px] text-text-muted leading-relaxed">
+              Progress is streamed in real time via WebSocket — watch equity build bar-by-bar as the simulation runs.
+            </p>
+          </div>
+
+          {/* Engine note */}
           <div
             className="rounded-md p-3"
             style={{

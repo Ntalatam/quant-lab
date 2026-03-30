@@ -25,8 +25,22 @@ from app.services.strategy_registry import get_strategy_class
 from app.schemas.backtest import BacktestConfig
 
 
-async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
-    """Execute a full backtest and return results."""
+from typing import Callable, Awaitable
+
+ProgressCallback = Callable[[int, int, str, float], Awaitable[None]]
+
+
+async def run_backtest(
+    db: AsyncSession,
+    config: BacktestConfig,
+    on_progress: ProgressCallback | None = None,
+) -> dict:
+    """Execute a full backtest and return results.
+
+    Args:
+        on_progress: optional async callback(bar_num, total_bars, date_str, equity)
+                     called every ~1% of bars processed.
+    """
     start = date.fromisoformat(config.start_date)
     end = date.fromisoformat(config.end_date)
 
@@ -65,11 +79,19 @@ async def run_backtest(db: AsyncSession, config: BacktestConfig) -> dict:
     # 5. Main simulation loop
     cumulative_cost = 0.0        # running total of commissions + slippage paid
     cost_by_date: dict = {}      # isoformat date → cumulative cost at that point
+    total_bars = len(all_dates)
+    # emit progress every ~1% of bars (min 1, max 50 to avoid spam)
+    progress_every = max(1, min(50, total_bars // 100))
 
-    for current_date in all_dates:
+    for bar_num, current_date in enumerate(all_dates):
         current_dt = (
             current_date.date() if hasattr(current_date, "date") else current_date
         )
+
+        # Emit progress callback periodically
+        if on_progress is not None and bar_num % progress_every == 0:
+            current_equity = portfolio.total_equity
+            await on_progress(bar_num, total_bars, current_dt.isoformat(), current_equity)
 
         # Build data window (only data up to current bar — no lookahead)
         data_window = {}
