@@ -9,6 +9,7 @@ import { DrawdownChart } from "@/components/charts/DrawdownChart";
 import { MonthlyReturnsHeatmap } from "@/components/charts/MonthlyReturnsHeatmap";
 import { ReturnsDistribution } from "@/components/charts/ReturnsDistribution";
 import { RollingMetrics } from "@/components/charts/RollingMetrics";
+import { AnnualReturns } from "@/components/charts/AnnualReturns";
 import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
@@ -223,6 +224,11 @@ export function TearSheet({ result }: TearSheetProps) {
           >
             <MonthlyReturnsHeatmap data={result.monthly_returns} />
           </ChartPanel>
+
+          <AnnualReturns
+            equity={result.equity_curve}
+            benchmark={result.benchmark_curve}
+          />
         </div>
       )}
 
