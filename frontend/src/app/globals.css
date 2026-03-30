@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg-primary: #0a0a0f;
+  --color-bg-secondary: #12121a;
+  --color-bg-card: #16161f;
+  --color-bg-hover: #1e1e2a;
+  --color-border: #2a2a3a;
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #8888a0;
+  --color-text-muted: #555566;
+  --color-accent-green: #00d4aa;
+  --color-accent-red: #ff4466;
+  --color-accent-blue: #4488ff;
+  --color-accent-yellow: #ffbb33;
+  --color-accent-purple: #8855ff;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--color-border);
+}
+
+.recharts-text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}

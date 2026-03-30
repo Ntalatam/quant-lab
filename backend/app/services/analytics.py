@@ -93,7 +93,7 @@ def compute_all_metrics(
     )
 
     # Benchmark relative
-    if len(aligned) > 10:
+    if len(aligned) > 10 and bench_ret.std() > 1e-10 and strat_ret.std() > 1e-10:
         beta, alpha_daily, _, _, _ = stats.linregress(bench_ret, strat_ret)
         alpha = alpha_daily * 252
         correlation = strat_ret.corr(bench_ret)
