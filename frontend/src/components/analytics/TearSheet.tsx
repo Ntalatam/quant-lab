@@ -18,7 +18,7 @@ import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useBacktestList } from "@/hooks/useBacktest";
-import { Download, Grid3X3, RefreshCw } from "lucide-react";
+import { Download, Grid3X3, RefreshCw, Link2, Check } from "lucide-react";
 import Link from "next/link";
 
 interface TearSheetProps {
@@ -71,6 +71,16 @@ function computePercentile(value: number, allValues: number[], higherIsBetter = 
 
 export function TearSheet({ result }: TearSheetProps) {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Performance");
+  const [copied, setCopied] = useState(false);
+
+  const copyShareLink = () => {
+    const encoded = btoa(JSON.stringify(result.config));
+    const url = `${window.location.origin}/backtest?config=${encodeURIComponent(encoded)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
   const m = result.metrics;
   const bm = result.benchmark_metrics;
   const { data: allBacktests } = useBacktestList();
@@ -164,6 +174,17 @@ export function TearSheet({ result }: TearSheetProps) {
             <Grid3X3 size={11} />
             2D Heatmap
           </Link>
+          <button
+            onClick={copyShareLink}
+            className="flex items-center gap-1.5 text-xs transition-colors px-3 py-1.5 rounded"
+            style={{
+              border: "1px solid var(--color-border)",
+              color: copied ? "var(--color-accent-green)" : "var(--color-text-muted)",
+            }}
+          >
+            {copied ? <Check size={11} /> : <Link2 size={11} />}
+            {copied ? "Copied!" : "Share Config"}
+          </button>
           <a
             href={api.getExportUrl(result.id)}
             className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors px-3 py-1.5 rounded"

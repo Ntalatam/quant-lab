@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { StrategyForm } from "@/components/backtest/StrategyForm";
 import { useBacktestStore } from "@/store/backtest-store";
 import { useBacktestProgress } from "@/hooks/useBacktestProgress";
@@ -23,6 +24,27 @@ function ProgressBar({ pct }: { pct: number }) {
       />
     </div>
   );
+}
+
+function ConfigLoader() {
+  const searchParams = useSearchParams();
+  const { setConfig } = useBacktestStore();
+  const applied = useRef(false);
+
+  useEffect(() => {
+    if (applied.current) return;
+    const encoded = searchParams.get("config");
+    if (!encoded) return;
+    try {
+      const cfg = JSON.parse(atob(decodeURIComponent(encoded)));
+      setConfig(cfg);
+      applied.current = true;
+    } catch {
+      // Invalid config param — ignore silently
+    }
+  }, [searchParams, setConfig]);
+
+  return null;
 }
 
 export default function NewBacktestPage() {
@@ -50,6 +72,9 @@ export default function NewBacktestPage() {
 
   return (
     <div>
+      <Suspense fallback={null}>
+        <ConfigLoader />
+      </Suspense>
       {/* Page header */}
       <div className="mb-7">
         <h1 className="text-xl font-bold text-text-primary tracking-tight">
