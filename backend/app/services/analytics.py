@@ -80,17 +80,8 @@ def compute_all_metrics(
     skew = float(stats.skew(returns)) if len(returns) > 3 else 0
     kurt = float(stats.kurtosis(returns)) if len(returns) > 3 else 0
 
-    # Daily win/loss stats
-    winning_days = returns[returns > 0]
-    losing_days = returns[returns < 0]
-    win_rate = len(winning_days) / len(returns) * 100 if len(returns) > 0 else 0
-    avg_win = winning_days.mean() * 100 if len(winning_days) > 0 else 0
-    avg_loss = losing_days.mean() * 100 if len(losing_days) > 0 else 0
-    profit_factor = (
-        (winning_days.sum() / abs(losing_days.sum()))
-        if abs(losing_days.sum()) > 0
-        else float("inf")
-    )
+    # Trade-level stats are populated by compute_trade_statistics() in the engine.
+    # Defaults here are zero — benchmarks (no trades) stay zero correctly.
 
     # Benchmark relative
     if len(aligned) > 10 and bench_ret.std() > 1e-10 and strat_ret.std() > 1e-10:
@@ -119,13 +110,13 @@ def compute_all_metrics(
         "skewness": round(skew, 3),
         "kurtosis": round(kurt, 3),
         "total_trades": 0,
-        "win_rate_pct": round(win_rate, 2),
-        "avg_win_pct": round(avg_win, 3),
-        "avg_loss_pct": round(avg_loss, 3),
-        "profit_factor": round(min(profit_factor, 9999), 3),
+        "win_rate_pct": 0,
+        "avg_win_pct": 0,
+        "avg_loss_pct": 0,
+        "profit_factor": 0,
         "avg_holding_period_days": 0,
-        "best_trade_pct": round(returns.max() * 100, 3) if len(returns) > 0 else 0,
-        "worst_trade_pct": round(returns.min() * 100, 3) if len(returns) > 0 else 0,
+        "best_trade_pct": 0,
+        "worst_trade_pct": 0,
         "avg_exposure_pct": 0,
         "max_exposure_pct": 0,
         "alpha": round(alpha * 100, 3),
