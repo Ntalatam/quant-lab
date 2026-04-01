@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import String, Float, DateTime, JSON, ForeignKey
+from sqlalchemy import String, Float, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -10,9 +10,6 @@ class BacktestRun(Base):
     __tablename__ = "backtest_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    strategy_config_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("strategy_configs.id"), nullable=True
-    )
     strategy_id: Mapped[str] = mapped_column(String(50))
     strategy_params: Mapped[dict] = mapped_column(JSON)
     tickers: Mapped[list] = mapped_column(JSON)

@@ -17,6 +17,7 @@ class Base(DeclarativeBase):
 _MIGRATIONS = [
     "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS clean_equity_curve JSON",
     "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS notes VARCHAR(2000)",
+    "ALTER TABLE backtest_runs DROP COLUMN IF EXISTS strategy_config_id",
 ]
 
 

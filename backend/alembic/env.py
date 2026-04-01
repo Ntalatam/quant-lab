@@ -11,7 +11,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from app.database import Base
-from app.models import PriceData, StrategyConfig, BacktestRun, TradeRecord
+from app.models import PriceData, BacktestRun, TradeRecord
 
 target_metadata = Base.metadata
 
