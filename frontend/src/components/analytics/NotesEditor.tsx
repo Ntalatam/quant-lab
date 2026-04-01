@@ -13,16 +13,19 @@ export function NotesEditor({ backtestId, initialNotes = "" }: NotesEditorProps)
   const [notes, setNotes] = useState(initialNotes);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   const save = useCallback(async () => {
     if (saving) return;
     setSaving(true);
+    setSaveError(false);
     try {
       await api.updateNotes(backtestId, notes);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      // silently fail — not critical
+      setSaveError(true);
+      setTimeout(() => setSaveError(false), 4000);
     } finally {
       setSaving(false);
     }
@@ -55,11 +58,15 @@ export function NotesEditor({ backtestId, initialNotes = "" }: NotesEditorProps)
           disabled={saving}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded transition-all disabled:opacity-40"
           style={{
-            background: saved
+            background: saveError
+              ? "rgba(255,68,102,0.15)"
+              : saved
               ? "rgba(0,212,170,0.15)"
               : "rgba(68,136,255,0.1)",
-            border: `1px solid ${saved ? "rgba(0,212,170,0.3)" : "rgba(68,136,255,0.2)"}`,
-            color: saved
+            border: `1px solid ${saveError ? "rgba(255,68,102,0.3)" : saved ? "rgba(0,212,170,0.3)" : "rgba(68,136,255,0.2)"}`,
+            color: saveError
+              ? "var(--color-accent-red)"
+              : saved
               ? "var(--color-accent-green)"
               : "var(--color-accent-blue)",
           }}
@@ -71,7 +78,7 @@ export function NotesEditor({ backtestId, initialNotes = "" }: NotesEditorProps)
           ) : (
             <FileText size={11} />
           )}
-          {saving ? "Saving…" : saved ? "Saved" : "Save"}
+          {saving ? "Saving…" : saveError ? "Save failed" : saved ? "Saved" : "Save"}
         </button>
       </div>
       <div className="p-4">
