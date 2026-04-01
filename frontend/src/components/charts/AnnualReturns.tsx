@@ -18,7 +18,8 @@ interface AnnualRow {
 function groupByYear(series: TimeSeriesPoint[]): Map<number, TimeSeriesPoint[]> {
   const map = new Map<number, TimeSeriesPoint[]>();
   for (const pt of series) {
-    const yr = new Date(pt.date).getFullYear();
+    // Parse year directly from ISO string to avoid UTC→local timezone shifts
+    const yr = parseInt(pt.date.slice(0, 4), 10);
     if (!map.has(yr)) map.set(yr, []);
     map.get(yr)!.push(pt);
   }

@@ -27,6 +27,7 @@ const STRATEGY_CATEGORY_MAP: Record<string, { label: string; cls: string }> = {
   mean_reversion:  { label: "MeanRev", cls: "badge-reversion"  },
   momentum:        { label: "Momentum",cls: "badge-momentum"   },
   pairs_trading:   { label: "Arb",     cls: "badge-arb"        },
+  ml_classifier:   { label: "ML",      cls: "badge-arb"        },
 };
 
 function SharpeCell({ value }: { value: number }) {

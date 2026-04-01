@@ -84,7 +84,7 @@ export function MetricsCard({
               : "var(--color-accent-red)",
           }}>
             {percentile >= 0.67 ? "▲" : percentile >= 0.33 ? "●" : "▼"}{" "}
-            top {Math.round((1 - percentile) * 100) + 1}%
+            top {Math.max(1, Math.round((1 - percentile) * 100))}%
           </p>
         )}
       </div>

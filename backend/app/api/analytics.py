@@ -463,7 +463,7 @@ async def factor_exposure(
     factor_returns["Market"] = factor_prices["Market"].pct_change().dropna()
 
     for label in ["Size", "Value", "Momentum"]:
-        if label in factor_prices and spy_prices is not None:
+        if label in factor_prices:
             factor_returns[label] = (
                 factor_prices[label].pct_change() - spy_prices.pct_change()
             ).dropna()

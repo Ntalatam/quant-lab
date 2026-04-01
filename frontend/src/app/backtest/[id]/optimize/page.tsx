@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, useEffect } from "react";
 import { useBacktestResult } from "@/hooks/useBacktest";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -66,7 +66,6 @@ export default function OptimizePage({
 
   // Build initial param rows from strategy definition
   const [paramRows, setParamRows] = useState<ParamRow[]>([]);
-  const [rowsInitialized, setRowsInitialized] = useState(false);
   const [metric, setMetric] = useState("sharpe_ratio");
   const [nTrials, setNTrials] = useState(30);
   const [running, setRunning] = useState(false);
@@ -75,7 +74,8 @@ export default function OptimizePage({
   const [appliedParams, setAppliedParams] = useState(false);
 
   // Initialize rows once strategy info loads
-  if (strategyInfo && !rowsInitialized) {
+  useEffect(() => {
+    if (!strategyInfo) return;
     const rows: ParamRow[] = strategyInfo.params
       .filter((p) => p.type === "int" || p.type === "float")
       .map((p) => {
@@ -94,8 +94,7 @@ export default function OptimizePage({
         };
       });
     setParamRows(rows);
-    setRowsInitialized(true);
-  }
+  }, [strategyInfo, result?.config.params]);
 
   const updateRow = useCallback(
     (idx: number, field: keyof ParamRow, value: string | boolean) => {

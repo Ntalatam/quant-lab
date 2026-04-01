@@ -58,8 +58,6 @@ async def execute_backtest(
         db.add(run)
 
         # Persist trades
-        import uuid
-
         for trade in result["trades"]:
             tr = TradeRecord(
                 id=trade["id"],
@@ -281,7 +279,6 @@ async def walk_forward(
     db: AsyncSession = Depends(get_db),
 ):
     """Run walk-forward analysis on an existing backtest config."""
-    from app.schemas.backtest import BacktestConfig
     config = BacktestConfig(**payload["config"])
     n_folds   = int(payload.get("n_folds",   5))
     train_pct = float(payload.get("train_pct", 0.7))
@@ -362,7 +359,7 @@ async def bayesian_optimize(
         study.optimize(objective, n_trials=min(config.n_trials, 50), n_jobs=1)
         return study
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     with ThreadPoolExecutor(max_workers=1) as pool:
         study = await loop.run_in_executor(pool, run_study)
 
@@ -421,7 +418,6 @@ async def backtest_websocket(websocket: WebSocket):
                 result = await run_backtest(db, config, on_progress=on_progress)
 
                 # Persist result (same logic as HTTP endpoint)
-                import uuid as _uuid
                 run = BacktestRun(
                     id=result["id"],
                     strategy_id=config.strategy_id,
