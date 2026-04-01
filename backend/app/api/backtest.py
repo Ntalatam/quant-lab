@@ -9,7 +9,7 @@ POST   /api/backtest/sweep     — Parameter sensitivity sweep
 """
 
 import json
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,25 +86,38 @@ async def execute_backtest(
 
 
 @router.get("/list")
-async def list_backtests(db: AsyncSession = Depends(get_db)):
+async def list_backtests(
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import func
+
+    total = await db.scalar(select(func.count()).select_from(BacktestRun))
     result = await db.execute(
-        select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(50)
+        select(BacktestRun)
+        .order_by(BacktestRun.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     runs = result.scalars().all()
-    return [
-        {
-            "id": r.id,
-            "strategy_name": r.strategy_id,
-            "tickers": r.tickers,
-            "start_date": r.start_date,
-            "end_date": r.end_date,
-            "total_return_pct": r.metrics.get("total_return_pct", 0),
-            "sharpe_ratio": r.metrics.get("sharpe_ratio", 0),
-            "max_drawdown_pct": r.metrics.get("max_drawdown_pct", 0),
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in runs
-    ]
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "strategy_name": r.strategy_id,
+                "tickers": r.tickers,
+                "start_date": r.start_date,
+                "end_date": r.end_date,
+                "total_return_pct": r.metrics.get("total_return_pct", 0),
+                "sharpe_ratio": r.metrics.get("sharpe_ratio", 0),
+                "max_drawdown_pct": r.metrics.get("max_drawdown_pct", 0),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in runs
+        ],
+        "total": total or 0,
+    }
 
 
 @router.get("/{backtest_id}")

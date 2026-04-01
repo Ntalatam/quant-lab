@@ -81,7 +81,11 @@ class ApiClient {
   }
 
   async listBacktests(): Promise<BacktestSummary[]> {
-    return this.request("/backtest/list");
+    const res = await this.request<{ items: BacktestSummary[]; total: number } | BacktestSummary[]>(
+      "/backtest/list?limit=500"
+    );
+    // Handle both new paginated and old flat array responses
+    return Array.isArray(res) ? res : res.items;
   }
 
   async deleteBacktest(id: string): Promise<void> {
