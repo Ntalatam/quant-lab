@@ -9,6 +9,7 @@ POST   /api/backtest/sweep     — Parameter sensitivity sweep
 """
 
 import json
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -326,6 +327,16 @@ async def bayesian_optimize(
         raise HTTPException(500, "optuna is not installed. Run: pip install optuna")
 
     from app.database import async_session as _async_session
+
+    # Pre-load price data once so individual trials skip ensure_data_loaded DB checks
+    from app.services.data_ingestion import ensure_data_loaded
+    start = date.fromisoformat(config.base_config.start_date)
+    end = date.fromisoformat(config.base_config.end_date)
+    all_tickers = list(set(config.base_config.tickers + [config.base_config.benchmark]))
+    for ticker in all_tickers:
+        loaded = await ensure_data_loaded(db, ticker, start, end)
+        if not loaded:
+            raise HTTPException(400, f"Could not load data for {ticker}")
 
     trials_log = []
 
