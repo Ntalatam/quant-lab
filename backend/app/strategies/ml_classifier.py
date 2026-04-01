@@ -24,10 +24,48 @@ Signal convention:
 
 from __future__ import annotations
 
+import functools
+import hashlib
 import numpy as np
 import pandas as pd
 
 from app.strategies.base import BaseStrategy
+
+# Module-level model cache.  Key = (ticker, train_pct, n_estimators, max_depth,
+# min_train_rows, data_fingerprint).  Avoids retraining identical models when
+# only non-model params (e.g. signal_threshold) change across optimisation
+# trials.  Max 32 entries to bound memory.
+@functools.lru_cache(maxsize=32)
+def _cached_train(
+    ticker: str,
+    train_pct: float,
+    n_estimators: int,
+    max_depth: int,
+    min_train_rows: int,
+    data_fingerprint: str,
+    # These are passed through but included in the cache key via the above args
+    _X_train_bytes: bytes,
+    _y_train_bytes: bytes,
+    _n_features: int,
+):
+    """Train an XGBoost model, cached by all params that affect the result."""
+    import xgboost as xgb
+
+    X_train = np.frombuffer(_X_train_bytes, dtype=np.float32).reshape(-1, _n_features)
+    y_train = np.frombuffer(_y_train_bytes, dtype=np.int32)
+
+    model = xgb.XGBClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        eval_metric="logloss",
+        random_state=42,
+        verbosity=0,
+    )
+    model.fit(X_train, y_train)
+    return model
 
 
 class MLClassifier(BaseStrategy):
@@ -185,10 +223,11 @@ class MLClassifier(BaseStrategy):
     def _train(self, df: pd.DataFrame, ticker: str) -> bool:
         """
         Train one XGBoost model for *ticker* using the first train_pct of *df*.
-        Returns True if training succeeded.
+        Returns True if training succeeded.  Uses the module-level cache so
+        repeated calls with identical data + model hyper-params skip retraining.
         """
         try:
-            import xgboost as xgb  # lazy import — optional dependency
+            import xgboost as xgb  # noqa: F401 — validate import early
         except ImportError:
             raise ImportError(
                 "xgboost is required for the ML Classifier strategy. "
@@ -199,13 +238,9 @@ class MLClassifier(BaseStrategy):
         if len(feats) < self.min_train_rows:
             return False
 
-        # Target: 1 if *next* day's return is positive (shift(-1) into future)
-        # This is computed entirely within the training window, so no future leak
-        # into the live-trading (test) period.
         next_ret = df["adj_close"].astype(float).pct_change(1).shift(-1)
         target = (next_ret > 0).astype(int)
 
-        # Align features and target; drop the last row (no next-day label yet)
         common_idx = feats.index.intersection(target.dropna().index)
         feats = feats.loc[common_idx]
         target = target.loc[common_idx]
@@ -215,19 +250,22 @@ class MLClassifier(BaseStrategy):
             return False
 
         X_train = feats.iloc[:n_train].values.astype(np.float32)
-        y_train = target.iloc[:n_train].values.astype(int)
+        y_train = target.iloc[:n_train].values.astype(np.int32)
 
-        model = xgb.XGBClassifier(
-            n_estimators=self.n_estimators,
-            max_depth=self.max_depth,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            eval_metric="logloss",
-            random_state=42,
-            verbosity=0,
+        # Fingerprint the training data for cache key
+        data_fp = hashlib.md5(X_train.tobytes()[:4096]).hexdigest()[:12]
+
+        model = _cached_train(
+            ticker,
+            self.train_pct,
+            self.n_estimators,
+            self.max_depth,
+            self.min_train_rows,
+            data_fp,
+            X_train.tobytes(),
+            y_train.tobytes(),
+            X_train.shape[1],
         )
-        model.fit(X_train, y_train)
 
         self._models[ticker] = model
         self._trained_on[ticker] = len(df)
