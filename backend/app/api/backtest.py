@@ -222,25 +222,45 @@ async def parameter_sweep(
     config: BacktestSweepConfig, db: AsyncSession = Depends(get_db)
 ):
     """Run multiple backtests varying one parameter."""
-    results = []
-    for value in config.sweep_values:
-        params = config.base_config.params.copy()
-        params[config.sweep_param] = value
-        sweep_config = config.base_config.model_copy(update={"params": params})
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from app.database import async_session as _async_session
+    from app.services.data_ingestion import ensure_data_loaded as _ensure
 
-        try:
-            result = await run_backtest(db, sweep_config)
-            results.append(
-                {
-                    "param_value": value,
-                    "sharpe_ratio": result["metrics"]["sharpe_ratio"],
-                    "total_return_pct": result["metrics"]["total_return_pct"],
-                    "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
-                    "cagr_pct": result["metrics"]["cagr_pct"],
-                }
-            )
-        except Exception as e:
-            results.append({"param_value": value, "error": str(e)})
+    # Pre-load data so individual runs skip DB checks
+    start = date.fromisoformat(config.base_config.start_date)
+    end = date.fromisoformat(config.base_config.end_date)
+    for t in set(config.base_config.tickers + [config.base_config.benchmark]):
+        await _ensure(db, t, start, end)
+
+    def _run_sweep():
+        results = []
+        for value in config.sweep_values:
+            params = config.base_config.params.copy()
+            params[config.sweep_param] = value
+            sweep_config = config.base_config.model_copy(update={"params": params})
+
+            try:
+                async def _run(cfg=sweep_config):
+                    async with _async_session() as sess:
+                        return await run_backtest(sess, cfg)
+                result = asyncio.run(_run())
+                results.append(
+                    {
+                        "param_value": value,
+                        "sharpe_ratio": result["metrics"]["sharpe_ratio"],
+                        "total_return_pct": result["metrics"]["total_return_pct"],
+                        "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
+                        "cagr_pct": result["metrics"]["cagr_pct"],
+                    }
+                )
+            except Exception as e:
+                results.append({"param_value": value, "error": str(e)})
+        return results
+
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        results = await loop.run_in_executor(pool, _run_sweep)
 
     return {
         "sweep_param": config.sweep_param,
@@ -253,29 +273,49 @@ async def parameter_sweep_2d(
     config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)
 ):
     """Run backtests varying two parameters simultaneously and return a heatmap matrix."""
-    cells = []
-    for vx in config.values_x:
-        row = []
-        for vy in config.values_y:
-            params = config.base_config.params.copy()
-            params[config.param_x] = vx
-            params[config.param_y] = vy
-            sweep_config = config.base_config.model_copy(update={"params": params})
-            try:
-                result = await run_backtest(db, sweep_config)
-                metric_val = result["metrics"].get(config.metric)
-                row.append(
-                    {
-                        "x": vx,
-                        "y": vy,
-                        "value": metric_val,
-                        "total_return_pct": result["metrics"].get("total_return_pct"),
-                        "max_drawdown_pct": result["metrics"].get("max_drawdown_pct"),
-                    }
-                )
-            except Exception as e:
-                row.append({"x": vx, "y": vy, "value": None, "error": str(e)})
-        cells.append(row)
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from app.database import async_session as _async_session
+    from app.services.data_ingestion import ensure_data_loaded as _ensure
+
+    # Pre-load data
+    start = date.fromisoformat(config.base_config.start_date)
+    end = date.fromisoformat(config.base_config.end_date)
+    for t in set(config.base_config.tickers + [config.base_config.benchmark]):
+        await _ensure(db, t, start, end)
+
+    def _run_sweep2d():
+        cells = []
+        for vx in config.values_x:
+            row = []
+            for vy in config.values_y:
+                params = config.base_config.params.copy()
+                params[config.param_x] = vx
+                params[config.param_y] = vy
+                sweep_config = config.base_config.model_copy(update={"params": params})
+                try:
+                    async def _run(cfg=sweep_config):
+                        async with _async_session() as sess:
+                            return await run_backtest(sess, cfg)
+                    result = asyncio.run(_run())
+                    metric_val = result["metrics"].get(config.metric)
+                    row.append(
+                        {
+                            "x": vx,
+                            "y": vy,
+                            "value": metric_val,
+                            "total_return_pct": result["metrics"].get("total_return_pct"),
+                            "max_drawdown_pct": result["metrics"].get("max_drawdown_pct"),
+                        }
+                    )
+                except Exception as e:
+                    row.append({"x": vx, "y": vy, "value": None, "error": str(e)})
+            cells.append(row)
+        return cells
+
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        cells = await loop.run_in_executor(pool, _run_sweep2d)
 
     return {
         "param_x": config.param_x,
@@ -293,6 +333,11 @@ async def walk_forward(
     db: AsyncSession = Depends(get_db),
 ):
     """Run walk-forward analysis on an existing backtest config."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from app.database import async_session as _async_session
+    from app.services.data_ingestion import ensure_data_loaded as _ensure
+
     config = BacktestConfig(**payload["config"])
     n_folds   = int(payload.get("n_folds",   5))
     train_pct = float(payload.get("train_pct", 0.7))
@@ -300,8 +345,23 @@ async def walk_forward(
         raise HTTPException(400, "n_folds must be 2–10")
     if not (0.5 <= train_pct <= 0.9):
         raise HTTPException(400, "train_pct must be 0.5–0.9")
+
+    # Pre-load data
+    start = date.fromisoformat(config.start_date)
+    end = date.fromisoformat(config.end_date)
+    for t in set(config.tickers + [config.benchmark]):
+        await _ensure(db, t, start, end)
+
+    def _run_wfa():
+        async def _inner():
+            async with _async_session() as sess:
+                return await run_walk_forward(sess, config, n_folds=n_folds, train_pct=train_pct)
+        return asyncio.run(_inner())
+
     try:
-        result = await run_walk_forward(db, config, n_folds=n_folds, train_pct=train_pct)
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            result = await loop.run_in_executor(pool, _run_wfa)
         return result
     except ValueError as e:
         raise HTTPException(400, str(e))
