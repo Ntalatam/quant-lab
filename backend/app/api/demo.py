@@ -94,8 +94,21 @@ async def demo_status(db: AsyncSession = Depends(get_db)):
 async def seed_demo(db: AsyncSession = Depends(get_db)):
     """
     Load demo tickers and run 3 sample backtests.
-    Returns immediately with IDs of newly created backtests.
+    Idempotent — skips backtest creation if demo runs already exist.
     """
+    # Guard: skip if backtests already exist (prevents duplicates on re-click)
+    existing_count = await db.scalar(
+        select(func.count()).select_from(BacktestRun)
+    )
+    if existing_count and existing_count > 0:
+        return {
+            "status": "already_seeded",
+            "tickers_loaded": DEMO_TICKERS,
+            "tickers_failed": [],
+            "backtests_created": [],
+            "errors": [],
+        }
+
     start = date.fromisoformat(DEMO_START)
     end = date.fromisoformat(DEMO_END)
 

@@ -60,7 +60,11 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/demo/seed`,
         { method: "POST" }
       ).then((r) => r.json());
-      if (result.backtests_created?.length > 0) {
+      if (result.status === "already_seeded") {
+        setState("done");
+        setMsg("Demo data already loaded.");
+        onDone();
+      } else if (result.backtests_created?.length > 0) {
         setState("done");
         setMsg(`Created ${result.backtests_created.length} demo backtests.`);
         onDone();
