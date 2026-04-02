@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { BacktestResult } from "@/lib/types";
+import type { LogicalRange } from "@/components/charts/LightweightChartWrapper";
 import { MetricsCard } from "./MetricsCard";
 import { TradeLog } from "./TradeLog";
 import { FactorExposure } from "./FactorExposure";
@@ -72,6 +73,12 @@ function computePercentile(value: number, allValues: number[], higherIsBetter = 
 export function TearSheet({ result }: TearSheetProps) {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Performance");
   const [copied, setCopied] = useState(false);
+  // Sync visible range across all lightweight-charts in the same tab
+  const [syncRange, setSyncRange] = useState<LogicalRange | null>(null);
+  const handleRangeChange = useCallback(
+    (range: LogicalRange | null) => setSyncRange(range),
+    []
+  );
 
   const copyShareLink = () => {
     const encoded = btoa(JSON.stringify(result.config));
@@ -224,6 +231,8 @@ export function TearSheet({ result }: TearSheetProps) {
               benchmark={result.benchmark_curve}
               cleanEquity={result.clean_equity_curve}
               trades={result.trades}
+              syncRange={syncRange}
+              onVisibleRangeChange={handleRangeChange}
             />
           </ChartPanel>
 
@@ -278,7 +287,11 @@ export function TearSheet({ result }: TearSheetProps) {
             title="Drawdown"
             subtitle="Percentage decline from rolling peak equity"
           >
-            <DrawdownChart data={result.drawdown_series} />
+            <DrawdownChart
+              data={result.drawdown_series}
+              syncRange={syncRange}
+              onVisibleRangeChange={handleRangeChange}
+            />
           </ChartPanel>
 
           <ChartPanel
@@ -321,6 +334,8 @@ export function TearSheet({ result }: TearSheetProps) {
               data={result.rolling_sharpe}
               label="Rolling Sharpe (63-day)"
               color={CHART_COLORS.blue}
+              syncRange={syncRange}
+              onVisibleRangeChange={handleRangeChange}
             />
           </ChartPanel>
 
@@ -333,6 +348,8 @@ export function TearSheet({ result }: TearSheetProps) {
               label="Rolling Volatility (63-day)"
               color={CHART_COLORS.yellow}
               unit="%"
+              syncRange={syncRange}
+              onVisibleRangeChange={handleRangeChange}
             />
           </ChartPanel>
 

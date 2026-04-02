@@ -1,21 +1,90 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useAvailableTickers, useLoadTicker, useOHLCV } from "@/hooks/useMarketData";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import {
-  ResponsiveContainer,
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+  LightweightChart,
+  CandlestickSeries,
+  HistogramSeries,
+  toTime,
+  type IChartApi,
+  type MouseEventParams,
+  type Time,
+} from "@/components/charts/LightweightChartWrapper";
 import { CHART_COLORS } from "@/lib/constants";
-import { formatCompactDate } from "@/lib/formatters";
+import type {
+  CandlestickData,
+  HistogramData,
+} from "lightweight-charts";
+
+// ── OHLCV legend overlay ────────────────────────────────────────────────
+
+interface OHLCVLegend {
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+  change: number;
+}
+
+function OHLCVOverlay({
+  ticker,
+  legend,
+}: {
+  ticker: string;
+  legend: OHLCVLegend | null;
+}) {
+  if (!legend) return null;
+  const up = legend.change >= 0;
+  const color = up ? CHART_COLORS.positive : CHART_COLORS.negative;
+  const fmt = (v: number) => v.toFixed(2);
+  const fmtVol = (v: number) =>
+    v >= 1e9
+      ? `${(v / 1e9).toFixed(2)}B`
+      : v >= 1e6
+        ? `${(v / 1e6).toFixed(2)}M`
+        : v >= 1e3
+          ? `${(v / 1e3).toFixed(1)}K`
+          : String(v);
+
+  return (
+    <div
+      className="absolute top-2 left-3 z-10 flex items-center gap-3 pointer-events-none select-none"
+      style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+    >
+      <span className="font-bold text-text-primary text-sm">{ticker}</span>
+      <span>
+        <span className="text-text-muted">O </span>
+        <span style={{ color }}>{fmt(legend.o)}</span>
+      </span>
+      <span>
+        <span className="text-text-muted">H </span>
+        <span style={{ color }}>{fmt(legend.h)}</span>
+      </span>
+      <span>
+        <span className="text-text-muted">L </span>
+        <span style={{ color }}>{fmt(legend.l)}</span>
+      </span>
+      <span>
+        <span className="text-text-muted">C </span>
+        <span style={{ color }}>{fmt(legend.c)}</span>
+      </span>
+      <span style={{ color }}>
+        {up ? "+" : ""}
+        {legend.change.toFixed(2)}%
+      </span>
+      <span>
+        <span className="text-text-muted">Vol </span>
+        <span className="text-text-secondary">{fmtVol(legend.v)}</span>
+      </span>
+    </div>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────
 
 export default function DataExplorerPage() {
   const { data: tickers, isLoading: tickersLoading } = useAvailableTickers();
@@ -25,6 +94,7 @@ export default function DataExplorerPage() {
   const [startDate, setStartDate] = useState("2020-01-01");
   const [endDate, setEndDate] = useState("2024-01-01");
   const [viewTicker, setViewTicker] = useState("");
+  const [legend, setLegend] = useState<OHLCVLegend | null>(null);
 
   const {
     data: ohlcv,
@@ -41,6 +111,94 @@ export default function DataExplorerPage() {
     setViewTicker(newTicker.toUpperCase());
     setNewTicker("");
   };
+
+  // Build lightweight-charts data arrays
+  const candleData: CandlestickData<Time>[] = (ohlcv?.data ?? []).map((d) => ({
+    time: toTime(d.date),
+    open: d.open,
+    high: d.high,
+    low: d.low,
+    close: d.close,
+  }));
+
+  const volumeData: HistogramData<Time>[] = (ohlcv?.data ?? []).map((d) => ({
+    time: toTime(d.date),
+    value: d.volume,
+    color:
+      d.close >= d.open
+        ? "rgba(0,212,170,0.18)"
+        : "rgba(255,68,102,0.18)",
+  }));
+
+  // Chart init callback
+  const handleChartInit = useCallback(
+    (chart: IChartApi) => {
+      if (!candleData.length) return;
+
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: CHART_COLORS.positive,
+        downColor: CHART_COLORS.negative,
+        borderUpColor: CHART_COLORS.positive,
+        borderDownColor: CHART_COLORS.negative,
+        wickUpColor: CHART_COLORS.positive,
+        wickDownColor: CHART_COLORS.negative,
+      });
+      candleSeries.setData(candleData);
+
+      const volumeSeries = chart.addSeries(HistogramSeries, {
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+      });
+      volumeSeries.setData(volumeData);
+      chart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.82, bottom: 0 },
+      });
+
+      // Set initial legend from last bar
+      const last = ohlcv?.data?.[ohlcv.data.length - 1];
+      const prev = ohlcv?.data?.[ohlcv.data.length - 2];
+      if (last) {
+        setLegend({
+          o: last.open,
+          h: last.high,
+          l: last.low,
+          c: last.close,
+          v: last.volume,
+          change: prev
+            ? ((last.close - prev.close) / prev.close) * 100
+            : 0,
+        });
+      }
+
+      // Crosshair → update legend
+      chart.subscribeCrosshairMove((param: MouseEventParams<Time>) => {
+        const candle = param.seriesData?.get(candleSeries) as
+          | CandlestickData<Time>
+          | undefined;
+        const vol = param.seriesData?.get(volumeSeries) as
+          | HistogramData<Time>
+          | undefined;
+        if (candle) {
+          const idx = candleData.findIndex(
+            (d) => d.time === candle.time
+          );
+          const prevBar = idx > 0 ? candleData[idx - 1] : null;
+          setLegend({
+            o: candle.open,
+            h: candle.high,
+            l: candle.low,
+            c: candle.close,
+            v: vol?.value ?? 0,
+            change: prevBar
+              ? ((candle.close - prevBar.close) / prevBar.close) * 100
+              : 0,
+          });
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ohlcv]
+  );
 
   return (
     <div>
@@ -126,76 +284,31 @@ export default function DataExplorerPage() {
         <div className="lg:col-span-2">
           {viewTicker && (
             <div className="bg-bg-card border border-border rounded p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-medium text-text-secondary">
-                  {viewTicker} Price Chart
-                </h2>
-                {ohlcv && ohlcv.original_rows > ohlcv.returned_rows && (
-                  <span className="text-xs text-text-muted">
-                    {ohlcv.original_rows} trading days — displaying {ohlcv.returned_rows} sampled points
-                  </span>
+              <div className="relative">
+                <OHLCVOverlay ticker={viewTicker} legend={legend} />
+                {ohlcvLoading ? (
+                  <PageLoading />
+                ) : ohlcv && ohlcv.data.length > 0 ? (
+                  <LightweightChart
+                    key={`${viewTicker}-${ohlcv.data.length}`}
+                    height={480}
+                    onInit={handleChartInit}
+                    options={{
+                      rightPriceScale: {
+                        scaleMargins: { top: 0.05, bottom: 0.2 },
+                      },
+                    }}
+                  />
+                ) : (
+                  <p className="text-text-muted text-sm text-center py-8">
+                    No data available for this range
+                  </p>
                 )}
               </div>
-              {ohlcvLoading ? (
-                <PageLoading />
-              ) : ohlcv && ohlcv.data.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400}>
-                  <ComposedChart data={ohlcv.data}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke={CHART_COLORS.grid}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={formatCompactDate}
-                      stroke={CHART_COLORS.axis}
-                      tick={{ fontSize: 11 }}
-                      minTickGap={50}
-                    />
-                    <YAxis
-                      yAxisId="price"
-                      stroke={CHART_COLORS.axis}
-                      tick={{ fontSize: 11 }}
-                      width={60}
-                      tickFormatter={(v) => `$${v}`}
-                    />
-                    <YAxis
-                      yAxisId="volume"
-                      orientation="right"
-                      stroke={CHART_COLORS.axis}
-                      tick={{ fontSize: 10 }}
-                      width={50}
-                      tickFormatter={(v) =>
-                        `${(v / 1_000_000).toFixed(0)}M`
-                      }
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: CHART_COLORS.tooltip,
-                        border: `1px solid ${CHART_COLORS.grid}`,
-                        borderRadius: 4,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar
-                      yAxisId="volume"
-                      dataKey="volume"
-                      fill={CHART_COLORS.blue}
-                      opacity={0.15}
-                    />
-                    <Line
-                      yAxisId="price"
-                      type="monotone"
-                      dataKey="close"
-                      stroke={CHART_COLORS.strategy}
-                      strokeWidth={1.5}
-                      dot={false}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-text-muted text-sm text-center py-8">
-                  No data available for this range
+              {ohlcv && ohlcv.original_rows > ohlcv.returned_rows && (
+                <p className="text-xs text-text-muted mt-2">
+                  {ohlcv.original_rows} trading days — displaying{" "}
+                  {ohlcv.returned_rows} sampled points
                 </p>
               )}
             </div>
