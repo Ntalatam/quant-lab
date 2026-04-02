@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useAvailableTickers, useLoadTicker, useOHLCV } from "@/hooks/useMarketData";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
-import { ErrorMessage } from "@/components/shared/ErrorBoundary";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import {
   ResponsiveContainer,

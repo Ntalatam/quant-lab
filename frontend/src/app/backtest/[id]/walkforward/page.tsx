@@ -77,8 +77,6 @@ export default function WalkForwardPage({
     );
   })();
 
-  const inputCls = "bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue";
-
   return (
     <div>
       {/* Header */}

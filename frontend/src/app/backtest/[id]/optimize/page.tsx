@@ -523,10 +523,10 @@ export default function OptimizePage({
                           borderRadius: 4,
                           fontSize: 11,
                         }}
-                        formatter={(value: number, name: string) => [
-                          formatMetricValue(value, optResult.metric),
+                        formatter={((value: unknown, name: unknown) => [
+                          formatMetricValue(Number(value ?? 0), optResult.metric),
                           name === "best" ? "Running Best" : "Trial Value",
-                        ]}
+                        ]) as never}
                       />
                       <ReferenceLine
                         y={optResult.best_value}

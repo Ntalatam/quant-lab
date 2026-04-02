@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import type { Sweep2DResult, Sweep2DCell } from "@/lib/types";
 
 interface HeatmapProps {

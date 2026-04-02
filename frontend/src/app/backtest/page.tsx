@@ -49,7 +49,7 @@ function ConfigLoader() {
 
 export default function NewBacktestPage() {
   const router = useRouter();
-  const { config, setLastResult } = useBacktestStore();
+  const { config } = useBacktestStore();
   const { progress, run, reset } = useBacktestProgress();
 
   const isRunning = progress.status === "running" || progress.status === "connecting";

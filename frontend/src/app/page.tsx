@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBacktestList } from "@/hooks/useBacktest";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { ErrorMessage } from "@/components/shared/ErrorBoundary";
 import { formatPercent, formatRatio, formatDate } from "@/lib/formatters";
-import { api } from "@/lib/api";
 import {
   Play,
   BarChart3,
