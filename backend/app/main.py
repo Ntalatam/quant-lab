@@ -31,6 +31,37 @@ configure_logging(
 )
 logger = get_logger(__name__)
 
+OPENAPI_TAGS = [
+    {
+        "name": "system",
+        "description": "Readiness probes and operational health endpoints.",
+    },
+    {
+        "name": "data",
+        "description": "Market-data loading and chart-ready OHLCV retrieval.",
+    },
+    {
+        "name": "backtest",
+        "description": "Historical simulation, parameter sweeps, and optimization workflows.",
+    },
+    {
+        "name": "analytics",
+        "description": "Post-trade analytics, comparison, attribution, and portfolio blending.",
+    },
+    {
+        "name": "paper-trading",
+        "description": "Persistent live paper-trading sessions and real-time monitoring.",
+    },
+    {
+        "name": "strategies",
+        "description": "Strategy metadata, parameter schemas, and discoverability helpers.",
+    },
+    {
+        "name": "demo",
+        "description": "Workspace seeding helpers for the demo and onboarding flows.",
+    },
+]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,8 +82,23 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="QuantLab API",
-        description="Quantitative research and backtesting platform",
+        summary="API for QuantLab's quantitative research, backtesting, and paper-trading platform.",
+        description=(
+            "QuantLab exposes historical simulation, analytics, data-ingestion, and "
+            "paper-trading endpoints for the frontend research workstation.\n\n"
+            "Use these docs to inspect request and response contracts, replay sample "
+            "payloads, and understand how backtests, analytics, and live paper sessions "
+            "flow through the system."
+        ),
         version="1.0.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_tags=OPENAPI_TAGS,
+        swagger_ui_parameters={
+            "displayRequestDuration": True,
+            "docExpansion": "list",
+            "defaultModelsExpandDepth": 1,
+        },
         lifespan=lifespan,
     )
 

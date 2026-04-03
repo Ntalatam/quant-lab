@@ -12,6 +12,7 @@ from app.models.backtest import BacktestRun
 from app.models.price_data import PriceData
 from app.models.trade import TradeRecord
 from app.schemas.backtest import BacktestConfig
+from app.schemas.demo import DemoSeedResponse, DemoStatusResponse
 from app.services.backtest_engine import run_backtest
 from app.services.data_ingestion import ensure_data_loaded
 from datetime import date
@@ -118,7 +119,15 @@ DEMO_BACKTESTS = [
 ]
 
 
-@router.get("/status")
+@router.get(
+    "/status",
+    response_model=DemoStatusResponse,
+    summary="Check demo-data readiness",
+    description=(
+        "Reports whether the repo has enough cached demo market data and saved "
+        "backtests to power the sample UX."
+    ),
+)
 async def demo_status(db: AsyncSession = Depends(get_db)):
     """Check if demo data is already loaded."""
     ticker_count = await db.scalar(
@@ -140,7 +149,15 @@ async def demo_status(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/seed")
+@router.post(
+    "/seed",
+    response_model=DemoSeedResponse,
+    summary="Seed the demo workspace",
+    description=(
+        "Loads demo ticker data and runs a curated set of sample backtests. "
+        "The operation is idempotent and safe to call multiple times."
+    ),
+)
 async def seed_demo(db: AsyncSession = Depends(get_db)):
     """
     Load demo tickers and run 3 sample backtests.

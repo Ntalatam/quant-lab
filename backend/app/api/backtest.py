@@ -11,6 +11,7 @@ POST   /api/backtest/sweep     — Parameter sensitivity sweep
 import json
 import time
 from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +20,22 @@ from app.database import get_db
 from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
 from app.observability import elapsed_ms, get_logger
-from app.schemas.backtest import BacktestConfig, BacktestSweepConfig, BacktestSweep2DConfig, BayesOptConfig
+from app.schemas.backtest import (
+    BacktestConfig,
+    BacktestListResponse,
+    BacktestResultResponse,
+    BacktestSweep2DConfig,
+    BacktestSweepConfig,
+    BayesOptConfig,
+    BayesOptResponse,
+    NotesUpdateRequest,
+    NotesUpdateResponse,
+    Sweep2DResponse,
+    SweepResponse,
+    WalkForwardRequest,
+    WalkForwardResponse,
+)
+from app.schemas.common import DeleteResponse, ErrorResponse
 from app.services.backtest_engine import run_backtest
 from app.services.walk_forward import run_walk_forward
 
@@ -27,165 +43,7 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 logger = get_logger(__name__)
 
 
-@router.post("/run")
-async def execute_backtest(
-    config: BacktestConfig, db: AsyncSession = Depends(get_db)
-):
-    start_time = time.perf_counter()
-    log = logger.bind(
-        strategy_id=config.strategy_id,
-        tickers=config.tickers,
-        benchmark=config.benchmark,
-    )
-    try:
-        result = await run_backtest(db, config)
-
-        # Persist to database
-        run = BacktestRun(
-            id=result["id"],
-            strategy_id=config.strategy_id,
-            strategy_params=config.params,
-            tickers=config.tickers,
-            benchmark=config.benchmark,
-            start_date=config.start_date,
-            end_date=config.end_date,
-            initial_capital=config.initial_capital,
-            slippage_bps=config.slippage_bps,
-            commission_per_share=config.commission_per_share,
-            market_impact_model=config.market_impact_model,
-            max_volume_participation_pct=config.max_volume_participation_pct,
-            position_sizing=config.position_sizing,
-            portfolio_construction_model=config.portfolio_construction_model,
-            portfolio_lookback_days=config.portfolio_lookback_days,
-            max_position_pct=config.max_position_pct,
-            max_gross_exposure_pct=config.max_gross_exposure_pct,
-            turnover_limit_pct=config.turnover_limit_pct,
-            max_sector_exposure_pct=config.max_sector_exposure_pct,
-            allow_short_selling=config.allow_short_selling,
-            max_short_position_pct=config.max_short_position_pct,
-            short_margin_requirement_pct=config.short_margin_requirement_pct,
-            short_borrow_rate_bps=config.short_borrow_rate_bps,
-            short_locate_fee_bps=config.short_locate_fee_bps,
-            short_squeeze_threshold_pct=config.short_squeeze_threshold_pct,
-            rebalance_frequency=config.rebalance_frequency,
-            equity_curve=result["equity_curve"],
-            clean_equity_curve=result.get("clean_equity_curve", []),
-            benchmark_curve=result["benchmark_curve"],
-            drawdown_series=result["drawdown_series"],
-            rolling_sharpe=result["rolling_sharpe"],
-            rolling_volatility=result["rolling_volatility"],
-            monthly_returns=result["monthly_returns"],
-            metrics=result["metrics"],
-            benchmark_metrics=result["benchmark_metrics"],
-        )
-        db.add(run)
-
-        # Persist trades
-        for trade in result["trades"]:
-            tr = TradeRecord(
-                id=trade["id"],
-                backtest_run_id=result["id"],
-                ticker=trade["ticker"],
-                side=trade["side"],
-                position_direction=trade["position_direction"],
-                entry_date=trade["entry_date"],
-                entry_price=trade["entry_price"],
-                exit_date=trade["exit_date"],
-                exit_price=trade["exit_price"],
-                shares=trade["shares"],
-                requested_shares=trade["requested_shares"],
-                unfilled_shares=trade["unfilled_shares"],
-                pnl=trade["pnl"],
-                pnl_pct=trade["pnl_pct"],
-                commission=trade["commission"],
-                slippage=trade["slippage"],
-                spread_cost=trade["spread_cost"],
-                market_impact_cost=trade["market_impact_cost"],
-                timing_cost=trade["timing_cost"],
-                opportunity_cost=trade["opportunity_cost"],
-                participation_rate_pct=trade["participation_rate_pct"],
-                implementation_shortfall=trade["implementation_shortfall"],
-                borrow_cost=trade["borrow_cost"],
-                locate_fee=trade["locate_fee"],
-                risk_event=trade["risk_event"],
-            )
-            db.add(tr)
-
-        await db.commit()
-        log.info(
-            "backtest.persisted",
-            duration_ms=elapsed_ms(start_time),
-            backtest_id=result["id"],
-            trade_count=len(result["trades"]),
-        )
-        return result
-
-    except ValueError as e:
-        log.warning(
-            "backtest.rejected",
-            duration_ms=elapsed_ms(start_time),
-            error=str(e),
-        )
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        log.exception(
-            "backtest.request_failed",
-            duration_ms=elapsed_ms(start_time),
-            error=str(e),
-        )
-        raise HTTPException(500, f"Backtest failed: {str(e)}")
-
-
-@router.get("/list")
-async def list_backtests(
-    limit: int = Query(200, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
-):
-    from sqlalchemy import func
-
-    total = await db.scalar(select(func.count()).select_from(BacktestRun))
-    result = await db.execute(
-        select(BacktestRun)
-        .order_by(BacktestRun.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    runs = result.scalars().all()
-    return {
-        "items": [
-            {
-                "id": r.id,
-                "strategy_name": r.strategy_id,
-                "tickers": r.tickers,
-                "start_date": r.start_date,
-                "end_date": r.end_date,
-                "total_return_pct": r.metrics.get("total_return_pct", 0),
-                "sharpe_ratio": r.metrics.get("sharpe_ratio", 0),
-                "max_drawdown_pct": r.metrics.get("max_drawdown_pct", 0),
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in runs
-        ],
-        "total": total or 0,
-    }
-
-
-@router.get("/{backtest_id}")
-async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(BacktestRun).where(BacktestRun.id == backtest_id)
-    )
-    run = result.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
-
-    # Load trades
-    trades_result = await db.execute(
-        select(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
-    )
-    trades = trades_result.scalars().all()
-
+def serialize_backtest_run(run: BacktestRun, trades: list[TradeRecord]) -> dict:
     return {
         "id": run.id,
         "config": {
@@ -259,7 +117,201 @@ async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.delete("/{backtest_id}")
+@router.post(
+    "/run",
+    response_model=BacktestResultResponse,
+    summary="Run and persist a backtest",
+    description=(
+        "Executes a full historical simulation, persists the run and trade log, "
+        "and returns the full tear-sheet payload used by the frontend."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "Backtest configuration was invalid."},
+        500: {"model": ErrorResponse, "description": "Backtest execution failed unexpectedly."},
+    },
+)
+async def execute_backtest(
+    config: BacktestConfig, db: AsyncSession = Depends(get_db)
+):
+    start_time = time.perf_counter()
+    log = logger.bind(
+        strategy_id=config.strategy_id,
+        tickers=config.tickers,
+        benchmark=config.benchmark,
+    )
+    try:
+        result = await run_backtest(db, config)
+
+        # Persist to database
+        run = BacktestRun(
+            id=result["id"],
+            strategy_id=config.strategy_id,
+            strategy_params=config.params,
+            tickers=config.tickers,
+            benchmark=config.benchmark,
+            start_date=config.start_date,
+            end_date=config.end_date,
+            initial_capital=config.initial_capital,
+            slippage_bps=config.slippage_bps,
+            commission_per_share=config.commission_per_share,
+            market_impact_model=config.market_impact_model,
+            max_volume_participation_pct=config.max_volume_participation_pct,
+            position_sizing=config.position_sizing,
+            portfolio_construction_model=config.portfolio_construction_model,
+            portfolio_lookback_days=config.portfolio_lookback_days,
+            max_position_pct=config.max_position_pct,
+            max_gross_exposure_pct=config.max_gross_exposure_pct,
+            turnover_limit_pct=config.turnover_limit_pct,
+            max_sector_exposure_pct=config.max_sector_exposure_pct,
+            allow_short_selling=config.allow_short_selling,
+            max_short_position_pct=config.max_short_position_pct,
+            short_margin_requirement_pct=config.short_margin_requirement_pct,
+            short_borrow_rate_bps=config.short_borrow_rate_bps,
+            short_locate_fee_bps=config.short_locate_fee_bps,
+            short_squeeze_threshold_pct=config.short_squeeze_threshold_pct,
+            rebalance_frequency=config.rebalance_frequency,
+            equity_curve=result["equity_curve"],
+            clean_equity_curve=result.get("clean_equity_curve", []),
+            benchmark_curve=result["benchmark_curve"],
+            drawdown_series=result["drawdown_series"],
+            rolling_sharpe=result["rolling_sharpe"],
+            rolling_volatility=result["rolling_volatility"],
+            monthly_returns=result["monthly_returns"],
+            metrics=result["metrics"],
+            benchmark_metrics=result["benchmark_metrics"],
+        )
+        db.add(run)
+
+        persisted_trades: list[TradeRecord] = []
+        # Persist trades
+        for trade in result["trades"]:
+            tr = TradeRecord(
+                id=trade["id"],
+                backtest_run_id=result["id"],
+                ticker=trade["ticker"],
+                side=trade["side"],
+                position_direction=trade["position_direction"],
+                entry_date=trade["entry_date"],
+                entry_price=trade["entry_price"],
+                exit_date=trade["exit_date"],
+                exit_price=trade["exit_price"],
+                shares=trade["shares"],
+                requested_shares=trade["requested_shares"],
+                unfilled_shares=trade["unfilled_shares"],
+                pnl=trade["pnl"],
+                pnl_pct=trade["pnl_pct"],
+                commission=trade["commission"],
+                slippage=trade["slippage"],
+                spread_cost=trade["spread_cost"],
+                market_impact_cost=trade["market_impact_cost"],
+                timing_cost=trade["timing_cost"],
+                opportunity_cost=trade["opportunity_cost"],
+                participation_rate_pct=trade["participation_rate_pct"],
+                implementation_shortfall=trade["implementation_shortfall"],
+                borrow_cost=trade["borrow_cost"],
+                locate_fee=trade["locate_fee"],
+                risk_event=trade["risk_event"],
+            )
+            db.add(tr)
+            persisted_trades.append(tr)
+
+        await db.commit()
+        await db.refresh(run)
+        log.info(
+            "backtest.persisted",
+            duration_ms=elapsed_ms(start_time),
+            backtest_id=result["id"],
+            trade_count=len(result["trades"]),
+        )
+        return serialize_backtest_run(run, persisted_trades)
+
+    except ValueError as e:
+        log.warning(
+            "backtest.rejected",
+            duration_ms=elapsed_ms(start_time),
+            error=str(e),
+        )
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        log.exception(
+            "backtest.request_failed",
+            duration_ms=elapsed_ms(start_time),
+            error=str(e),
+        )
+        raise HTTPException(500, f"Backtest failed: {str(e)}")
+
+
+@router.get(
+    "/list",
+    response_model=BacktestListResponse,
+    summary="List saved backtests",
+    description="Returns paginated saved backtests with summary performance metrics for result-table views.",
+)
+async def list_backtests(
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import func
+
+    total = await db.scalar(select(func.count()).select_from(BacktestRun))
+    result = await db.execute(
+        select(BacktestRun)
+        .order_by(BacktestRun.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    runs = result.scalars().all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "strategy_name": r.strategy_id,
+                "tickers": r.tickers,
+                "start_date": r.start_date,
+                "end_date": r.end_date,
+                "total_return_pct": r.metrics.get("total_return_pct", 0),
+                "sharpe_ratio": r.metrics.get("sharpe_ratio", 0),
+                "max_drawdown_pct": r.metrics.get("max_drawdown_pct", 0),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in runs
+        ],
+        "total": total or 0,
+    }
+
+
+@router.get(
+    "/{backtest_id}",
+    response_model=BacktestResultResponse,
+    summary="Read a saved backtest",
+    description="Returns the persisted run configuration, analytics series, trade log, and notes for one backtest.",
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
+async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(BacktestRun).where(BacktestRun.id == backtest_id)
+    )
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    # Load trades
+    trades_result = await db.execute(
+        select(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
+    )
+    trades = trades_result.scalars().all()
+
+    return serialize_backtest_run(run, trades)
+
+
+@router.delete(
+    "/{backtest_id}",
+    response_model=DeleteResponse,
+    summary="Delete a saved backtest",
+    description="Deletes the saved backtest record and its persisted trade ledger.",
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
 async def delete_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(BacktestRun).where(BacktestRun.id == backtest_id)
@@ -278,22 +330,37 @@ async def delete_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
     return {"status": "deleted"}
 
 
-@router.patch("/{backtest_id}/notes")
+@router.patch(
+    "/{backtest_id}/notes",
+    response_model=NotesUpdateResponse,
+    summary="Update analyst notes for a backtest",
+    description="Stores free-form notes used to annotate a saved backtest result.",
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
 async def update_notes(
     backtest_id: str,
-    payload: dict,
+    payload: NotesUpdateRequest,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = result.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
-    run.notes = payload.get("notes", "")[:2000]
+    run.notes = payload.notes[:2000]
     await db.commit()
     return {"id": backtest_id, "notes": run.notes}
 
 
-@router.post("/sweep")
+@router.post(
+    "/sweep",
+    response_model=SweepResponse,
+    summary="Run a one-dimensional parameter sweep",
+    description=(
+        "Runs the same base configuration multiple times while varying a single "
+        "parameter and returns summary metrics for each value."
+    ),
+    responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
+)
 async def parameter_sweep(
     config: BacktestSweepConfig, db: AsyncSession = Depends(get_db)
 ):
@@ -344,7 +411,16 @@ async def parameter_sweep(
     }
 
 
-@router.post("/sweep2d")
+@router.post(
+    "/sweep2d",
+    response_model=Sweep2DResponse,
+    summary="Run a two-dimensional parameter sweep",
+    description=(
+        "Evaluates a backtest across a 2D grid of parameter combinations and "
+        "returns a heatmap-ready response."
+    ),
+    responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
+)
 async def parameter_sweep_2d(
     config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)
 ):
@@ -403,9 +479,21 @@ async def parameter_sweep_2d(
     }
 
 
-@router.post("/walk-forward")
+@router.post(
+    "/walk-forward",
+    response_model=WalkForwardResponse,
+    summary="Run walk-forward analysis",
+    description=(
+        "Splits a strategy into rolling in-sample and out-of-sample windows to "
+        "measure robustness and out-of-sample degradation."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "Walk-forward request was invalid."},
+        500: {"model": ErrorResponse, "description": "Walk-forward execution failed."},
+    },
+)
 async def walk_forward(
-    payload: dict,
+    payload: WalkForwardRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """Run walk-forward analysis on an existing backtest config."""
@@ -414,9 +502,9 @@ async def walk_forward(
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
 
-    config = BacktestConfig(**payload["config"])
-    n_folds   = int(payload.get("n_folds",   5))
-    train_pct = float(payload.get("train_pct", 0.7))
+    config = payload.config
+    n_folds = int(payload.n_folds)
+    train_pct = float(payload.train_pct)
     if not (2 <= n_folds <= 10):
         raise HTTPException(400, "n_folds must be 2–10")
     if not (0.5 <= train_pct <= 0.9):
@@ -445,7 +533,19 @@ async def walk_forward(
         raise HTTPException(500, f"Walk-forward failed: {e}")
 
 
-@router.post("/optimize")
+@router.post(
+    "/optimize",
+    response_model=BayesOptResponse,
+    summary="Run Bayesian parameter optimization",
+    description=(
+        "Uses Optuna to evaluate full backtests across parameter ranges and "
+        "returns the best parameter set plus the complete trial log."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "Optimization request was invalid."},
+        500: {"model": ErrorResponse, "description": "Optimization could not be completed."},
+    },
+)
 async def bayesian_optimize(
     config: BayesOptConfig,
     db: AsyncSession = Depends(get_db),

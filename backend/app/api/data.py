@@ -14,13 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.price_data import PriceData
-from app.schemas.price_data import LoadDataRequest
+from app.schemas.common import ErrorResponse
+from app.schemas.price_data import LoadDataRequest, LoadDataResponse, OHLCVResponse
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
 router = APIRouter(prefix="/data", tags=["data"])
 
 
-@router.get("/tickers")
+@router.get(
+    "/tickers",
+    response_model=list[str],
+    summary="List cached tickers",
+    description="Returns every ticker symbol currently cached in the local market-data store.",
+)
 async def list_tickers(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(distinct(PriceData.ticker)).order_by(PriceData.ticker)
@@ -28,7 +34,16 @@ async def list_tickers(db: AsyncSession = Depends(get_db)):
     return [row[0] for row in result.fetchall()]
 
 
-@router.post("/load")
+@router.post(
+    "/load",
+    response_model=LoadDataResponse,
+    summary="Load market data for a ticker",
+    description=(
+        "Fetches historical OHLCV data for the requested ticker and date range, "
+        "then persists it in the local price-data table."
+    ),
+    responses={400: {"model": ErrorResponse, "description": "Data load failed."}},
+)
 async def load_data(request: LoadDataRequest, db: AsyncSession = Depends(get_db)):
     success = await ensure_data_loaded(
         db,
@@ -41,7 +56,16 @@ async def load_data(request: LoadDataRequest, db: AsyncSession = Depends(get_db)
     return {"status": "ok", "ticker": request.ticker.upper()}
 
 
-@router.get("/ohlcv")
+@router.get(
+    "/ohlcv",
+    response_model=OHLCVResponse,
+    summary="Read chart-ready OHLCV data",
+    description=(
+        "Returns cached OHLCV candles for the requested period. Results are "
+        "uniformly downsampled when needed to keep chart payloads lightweight."
+    ),
+    responses={404: {"model": ErrorResponse, "description": "No cached data found."}},
+)
 async def get_ohlcv(
     ticker: str = Query(...),
     start_date: str = Query(...),

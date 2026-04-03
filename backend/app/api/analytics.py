@@ -15,6 +15,18 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.analytics import (
+    CapacityResponse,
+    CompareRequest,
+    ComparisonResponse,
+    FactorExposureResponse,
+    MonteCarloResult,
+    PortfolioBlendRequest,
+    PortfolioBlendResponse,
+    RegimeAnalysisResponse,
+    TransactionCostAnalysisResponse,
+)
+from app.schemas.common import ErrorResponse
 from app.database import get_db
 from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
@@ -23,12 +35,24 @@ from app.services.analytics import compute_monte_carlo, compute_all_metrics
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-@router.post("/compare")
+@router.post(
+    "/compare",
+    response_model=ComparisonResponse,
+    summary="Compare multiple backtests",
+    description=(
+        "Loads multiple saved backtests, aligns their equity curves, and returns "
+        "a comparison bundle including the return-correlation matrix."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "At least two backtests are required."},
+        404: {"model": ErrorResponse, "description": "One of the requested backtests was not found."},
+    },
+)
 async def compare_backtests(
-    payload: dict,
+    payload: CompareRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    ids = payload.get("backtest_ids", [])
+    ids = payload.backtest_ids
     if len(ids) < 2:
         raise HTTPException(400, "Need at least 2 backtests to compare")
 
@@ -71,7 +95,16 @@ async def compare_backtests(
     }
 
 
-@router.post("/monte-carlo/{backtest_id}")
+@router.post(
+    "/monte-carlo/{backtest_id}",
+    response_model=MonteCarloResult,
+    summary="Run Monte Carlo simulation",
+    description=(
+        "Bootstraps historical daily returns from a saved backtest to project a "
+        "distribution of potential future equity paths."
+    ),
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
 async def monte_carlo(
     backtest_id: str,
     n_simulations: int = Query(1000, ge=100, le=10000),
@@ -100,7 +133,26 @@ async def monte_carlo(
     return result
 
 
-@router.get("/export/{backtest_id}")
+@router.get(
+    "/export/{backtest_id}",
+    summary="Export a backtest as CSV",
+    description=(
+        "Exports configuration, performance metrics, equity curve, and monthly "
+        "returns for a saved backtest in CSV format."
+    ),
+    responses={
+        200: {
+            "description": "CSV export stream.",
+            "content": {
+                "text/csv": {
+                    "example": "=== Configuration ===\nstrategy,sma_crossover\n",
+                }
+            },
+        },
+        404: {"model": ErrorResponse, "description": "Backtest was not found."},
+        501: {"model": ErrorResponse, "description": "Export format is unsupported."},
+    },
+)
 async def export_results(
     backtest_id: str,
     format: str = Query("csv"),
@@ -154,7 +206,16 @@ async def export_results(
     raise HTTPException(501, "Only CSV export is currently supported")
 
 
-@router.post("/capacity/{backtest_id}")
+@router.post(
+    "/capacity/{backtest_id}",
+    response_model=CapacityResponse,
+    summary="Estimate strategy capacity",
+    description=(
+        "Estimates how much capital a strategy can absorb before its trade size "
+        "becomes an excessive share of average daily volume."
+    ),
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
 async def capacity_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
@@ -258,7 +319,16 @@ async def capacity_analysis(
     }
 
 
-@router.post("/tca/{backtest_id}")
+@router.post(
+    "/tca/{backtest_id}",
+    response_model=TransactionCostAnalysisResponse,
+    summary="Analyze transaction costs",
+    description=(
+        "Aggregates commissions, spread, impact, timing, opportunity costs, "
+        "and fill-quality metrics for a saved backtest."
+    ),
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
 async def transaction_cost_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
@@ -274,11 +344,31 @@ async def transaction_cost_analysis(
         .order_by(TradeRecord.entry_date.asc(), TradeRecord.ticker.asc())
     )
     trades = trades_result.scalars().all()
+    model = {
+        "market_impact_model": run.market_impact_model or "almgren_chriss",
+        "max_volume_participation_pct": run.max_volume_participation_pct or 5,
+        "slippage_bps": run.slippage_bps,
+        "commission_per_share": run.commission_per_share,
+    }
     if not trades:
         return {
             "message": "No trades in this backtest",
-            "model": {},
-            "summary": {},
+            "model": model,
+            "summary": {
+                "total_trades": 0,
+                "total_commission": 0.0,
+                "total_spread_cost": 0.0,
+                "total_market_impact_cost": 0.0,
+                "total_timing_cost": 0.0,
+                "total_opportunity_cost": 0.0,
+                "total_borrow_cost": 0.0,
+                "total_locate_fees": 0.0,
+                "total_implementation_shortfall": 0.0,
+                "avg_fill_rate_pct": 0.0,
+                "avg_participation_rate_pct": 0.0,
+                "p90_participation_rate_pct": 0.0,
+                "cost_as_pct_of_initial_capital": 0.0,
+            },
             "ticker_breakdown": [],
             "top_cost_trades": [],
         }
@@ -400,19 +490,26 @@ async def transaction_cost_analysis(
     ]
 
     return {
-        "model": {
-            "market_impact_model": run.market_impact_model or "almgren_chriss",
-            "max_volume_participation_pct": run.max_volume_participation_pct or 5,
-            "slippage_bps": run.slippage_bps,
-            "commission_per_share": run.commission_per_share,
-        },
+        "model": model,
         "summary": summary,
         "ticker_breakdown": ticker_breakdown,
         "top_cost_trades": top_cost_trades,
     }
 
 
-@router.post("/regime-analysis/{backtest_id}")
+@router.post(
+    "/regime-analysis/{backtest_id}",
+    response_model=RegimeAnalysisResponse,
+    summary="Run regime analysis",
+    description=(
+        "Classifies the benchmark environment into trend, chop, high-volatility, "
+        "and neutral regimes, then summarizes strategy performance inside each regime."
+    ),
+    responses={
+        404: {"model": ErrorResponse, "description": "Backtest was not found."},
+        422: {"model": ErrorResponse, "description": "Required market data could not be loaded."},
+    },
+)
 async def regime_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
@@ -555,7 +652,20 @@ async def regime_analysis(
     }
 
 
-@router.post("/factor-exposure/{backtest_id}")
+@router.post(
+    "/factor-exposure/{backtest_id}",
+    response_model=FactorExposureResponse,
+    summary="Estimate factor exposures",
+    description=(
+        "Runs a multi-factor regression of strategy returns against market, size, "
+        "value, and momentum proxies."
+    ),
+    responses={
+        404: {"model": ErrorResponse, "description": "Backtest was not found."},
+        422: {"model": ErrorResponse, "description": "Insufficient or missing factor data."},
+        500: {"model": ErrorResponse, "description": "Regression could not be completed."},
+    },
+)
 async def factor_exposure(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
@@ -672,9 +782,21 @@ async def factor_exposure(
     return result
 
 
-@router.post("/portfolio-blend")
+@router.post(
+    "/portfolio-blend",
+    response_model=PortfolioBlendResponse,
+    summary="Blend multiple backtests into a portfolio",
+    description=(
+        "Combines multiple saved backtests using custom or optimized weights and "
+        "returns a portfolio-level equity curve, metrics, and contribution breakdown."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "At least two backtests are required."},
+        404: {"model": ErrorResponse, "description": "One of the requested backtests was not found."},
+    },
+)
 async def portfolio_blend(
-    payload: dict,
+    payload: PortfolioBlendRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -682,9 +804,9 @@ async def portfolio_blend(
 
     payload: { backtest_ids: [...], weights: [...], optimize: "equal"|"max_sharpe"|"min_dd" }
     """
-    ids = payload.get("backtest_ids", [])
-    weights_in = payload.get("weights", [])
-    optimize = payload.get("optimize", "custom")
+    ids = payload.backtest_ids
+    weights_in = payload.weights
+    optimize = payload.optimize
 
     if len(ids) < 2:
         raise HTTPException(400, "Need at least 2 backtests to blend")
