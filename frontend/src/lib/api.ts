@@ -25,8 +25,22 @@ const API_BASE =
 
 class ApiClient {
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
+    const headers = new Headers(options?.headers);
+
+    if (
+      options?.body &&
+      !(options.body instanceof FormData) &&
+      !headers.has("Content-Type")
+    ) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    if (!headers.has("Accept")) {
+      headers.set("Accept", "application/json");
+    }
+
     const response = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers,
       ...options,
     });
     if (!response.ok) {

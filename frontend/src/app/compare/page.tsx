@@ -148,6 +148,7 @@ export default function ComparePage() {
                 type="checkbox"
                 checked={selectedIds.includes(bt.id)}
                 onChange={() => toggleSelect(bt.id)}
+                aria-label={`Select ${bt.strategy_name}`}
                 className="accent-accent-blue"
               />
               <span className="text-text-primary">{bt.strategy_name}</span>

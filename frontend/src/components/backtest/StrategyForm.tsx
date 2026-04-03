@@ -43,10 +43,14 @@ export function StrategyForm() {
     <div className="space-y-6">
       {/* Strategy Selection */}
       <div>
-        <label className="block text-sm text-text-secondary mb-1.5">
+        <label
+          htmlFor="strategy-select"
+          className="block text-sm text-text-secondary mb-1.5"
+        >
           Strategy
         </label>
         <select
+          id="strategy-select"
           value={config.strategy_id || ""}
           onChange={(e) => setConfig({ strategy_id: e.target.value })}
           className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -143,10 +147,14 @@ export function StrategyForm() {
 
       {/* Tickers */}
       <div>
-        <label className="block text-sm text-text-secondary mb-1.5">
+        <label
+          htmlFor="ticker-input"
+          className="block text-sm text-text-secondary mb-1.5"
+        >
           Tickers (comma-separated)
         </label>
         <input
+          id="ticker-input"
           type="text"
           value={config.tickers?.join(", ") || ""}
           onChange={(e) =>
@@ -164,10 +172,14 @@ export function StrategyForm() {
 
       {/* Benchmark */}
       <div>
-        <label className="block text-sm text-text-secondary mb-1.5">
+        <label
+          htmlFor="benchmark-select"
+          className="block text-sm text-text-secondary mb-1.5"
+        >
           Benchmark
         </label>
         <select
+          id="benchmark-select"
           value={config.benchmark || "SPY"}
           onChange={(e) => setConfig({ benchmark: e.target.value })}
           className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -183,10 +195,14 @@ export function StrategyForm() {
       {/* Date Range */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm text-text-secondary mb-1.5">
+          <label
+            htmlFor="start-date-input"
+            className="block text-sm text-text-secondary mb-1.5"
+          >
             Start Date
           </label>
           <input
+            id="start-date-input"
             type="date"
             value={config.start_date || ""}
             onChange={(e) => setConfig({ start_date: e.target.value })}
@@ -194,10 +210,14 @@ export function StrategyForm() {
           />
         </div>
         <div>
-          <label className="block text-sm text-text-secondary mb-1.5">
+          <label
+            htmlFor="end-date-input"
+            className="block text-sm text-text-secondary mb-1.5"
+          >
             End Date
           </label>
           <input
+            id="end-date-input"
             type="date"
             value={config.end_date || ""}
             onChange={(e) => setConfig({ end_date: e.target.value })}
