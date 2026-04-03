@@ -266,12 +266,20 @@ export function StrategyForm() {
 
           <div>
             <label className="block text-xs text-text-secondary mb-1">
-              Position Sizing
+              Portfolio Construction
             </label>
             <select
-              value={config.position_sizing || "equal_weight"}
+              value={
+                config.portfolio_construction_model ||
+                config.position_sizing ||
+                "equal_weight"
+              }
               onChange={(e) =>
-                setConfig({ position_sizing: e.target.value as BacktestConfig["position_sizing"] })
+                setConfig({
+                  position_sizing: e.target.value as BacktestConfig["portfolio_construction_model"],
+                  portfolio_construction_model:
+                    e.target.value as BacktestConfig["portfolio_construction_model"],
+                })
               }
               className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
@@ -281,6 +289,87 @@ export function StrategyForm() {
                 </option>
               ))}
             </select>
+            <p className="text-[10px] text-text-muted mt-1">
+              Convert raw strategy signals into target weights before execution.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Risk Lookback (days)
+              </label>
+              <input
+                type="number"
+                min={20}
+                max={252}
+                step={1}
+                value={config.portfolio_lookback_days ?? 63}
+                onChange={(e) =>
+                  setConfig({
+                    portfolio_lookback_days: parseInt(e.target.value, 10),
+                  })
+                }
+                className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Max Gross Exposure (%)
+              </label>
+              <input
+                type="number"
+                min={25}
+                max={300}
+                step={5}
+                value={config.max_gross_exposure_pct ?? 150}
+                onChange={(e) =>
+                  setConfig({
+                    max_gross_exposure_pct: parseFloat(e.target.value),
+                  })
+                }
+                className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Turnover Cap (%)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={300}
+                step={5}
+                value={config.turnover_limit_pct ?? 100}
+                onChange={(e) =>
+                  setConfig({
+                    turnover_limit_pct: parseFloat(e.target.value),
+                  })
+                }
+                className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Sector Cap (% gross)
+              </label>
+              <input
+                type="number"
+                min={10}
+                max={200}
+                step={5}
+                value={config.max_sector_exposure_pct ?? 100}
+                onChange={(e) =>
+                  setConfig({
+                    max_sector_exposure_pct: parseFloat(e.target.value),
+                  })
+                }
+                className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              />
+            </div>
           </div>
 
           <div>

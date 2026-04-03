@@ -3,7 +3,8 @@ export const BENCHMARKS = ["SPY", "QQQ", "IWM", "DIA", "TLT"] as const;
 export const POSITION_SIZING_OPTIONS = [
   { value: "equal_weight", label: "Equal Weight" },
   { value: "risk_parity", label: "Risk Parity" },
-  { value: "kelly", label: "Kelly Criterion" },
+  { value: "mean_variance", label: "Mean-Variance" },
+  { value: "black_litterman", label: "Black-Litterman" },
 ] as const;
 
 export const REBALANCE_OPTIONS = [

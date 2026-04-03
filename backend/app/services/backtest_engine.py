@@ -21,8 +21,12 @@ from app.services.analytics import (
 )
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 from app.services.execution import simulate_fill
+from app.services.portfolio_optimizer import (
+    PortfolioConstructionRequest,
+    construct_target_weights,
+)
 from app.services.strategy_registry import get_strategy_class
-from app.services.trading import execute_signals
+from app.services.trading import execute_target_weights
 from app.schemas.backtest import BacktestConfig
 
 
@@ -84,6 +88,7 @@ async def run_backtest(
     # 5. Main simulation loop
     cumulative_cost = 0.0        # running total of trading + borrow costs paid
     cost_by_date: dict = {}      # isoformat date → cumulative cost at that point
+    turnover_history: list[float] = []
     total_bars = len(all_dates)
     # emit progress every ~1% of bars (min 1, max 50 to avoid spam)
     progress_every = max(1, min(50, total_bars // 100))
@@ -182,19 +187,35 @@ async def run_backtest(
             if ticker in signals:
                 signals[ticker] = 0.0
 
-        # 7. Process signals into orders and execute
-        executions = execute_signals(
+        construction = await construct_target_weights(
+            PortfolioConstructionRequest(
+                raw_signals=signals,
+                data_window=data_window,
+                current_prices=current_prices,
+                portfolio=portfolio,
+                signal_mode=strategy.signal_mode,
+                construction_model=config.portfolio_construction_model,
+                lookback_days=config.portfolio_lookback_days,
+                max_position_pct=config.max_position_pct,
+                max_short_position_pct=config.max_short_position_pct,
+                max_gross_exposure_pct=config.max_gross_exposure_pct,
+                turnover_limit_pct=config.turnover_limit_pct,
+                max_sector_exposure_pct=config.max_sector_exposure_pct,
+                allow_short_selling=config.allow_short_selling,
+            )
+        )
+        turnover_history.append(construction.turnover_pct)
+
+        # 7. Process target weights into orders and execute
+        executions = execute_target_weights(
             portfolio=portfolio,
-            signals=signals,
+            target_weights=construction.target_weights,
             current_bars=current_bars,
             current_prices=current_prices,
-            max_position_pct=config.max_position_pct,
             slippage_bps=config.slippage_bps,
             commission_per_share=config.commission_per_share,
             trade_date=current_dt,
-            signal_mode=strategy.signal_mode,
             allow_short_selling=config.allow_short_selling,
-            max_short_position_pct=config.max_short_position_pct,
             short_margin_requirement_pct=config.short_margin_requirement_pct,
             short_locate_fee_bps=config.short_locate_fee_bps,
         )
@@ -278,6 +299,9 @@ async def run_backtest(
         ]
         metrics["avg_short_exposure_pct"] = round(np.mean(short_exposure_pct), 2)
         metrics["max_short_exposure_pct"] = round(max(short_exposure_pct), 2)
+    if turnover_history:
+        metrics["avg_turnover_pct"] = round(float(np.mean(turnover_history)), 2)
+        metrics["max_turnover_pct"] = round(float(max(turnover_history)), 2)
 
     # Transaction cost stats
     total_commission = sum(t.commission for t in portfolio.trade_log if t.commission)

@@ -343,7 +343,15 @@ export default function PaperTradingSessionPage({
               ["Capital", formatCurrency(session.initial_capital)],
               ["Slippage", `${session.slippage_bps} bps`],
               ["Commission", `$${session.commission_per_share}/share`],
+              [
+                "Construction",
+                session.portfolio_construction_model ?? "equal_weight",
+              ],
+              ["Risk Lookback", `${session.portfolio_lookback_days} days`],
               ["Max Position", `${session.max_position_pct}%`],
+              ["Max Gross", `${session.max_gross_exposure_pct}%`],
+              ["Turnover", `${session.turnover_limit_pct}%`],
+              ["Sector Cap", `${session.max_sector_exposure_pct}% gross`],
               ["Shorting", session.allow_short_selling ? "Enabled" : "Disabled"],
               ...(session.allow_short_selling
                 ? [

@@ -12,7 +12,12 @@ class BacktestConfig(BaseModel):
     slippage_bps: float = 5.0
     commission_per_share: float = 0.005
     position_sizing: str = "equal_weight"
+    portfolio_construction_model: str = "equal_weight"
+    portfolio_lookback_days: int = 63
     max_position_pct: float = 25.0
+    max_gross_exposure_pct: float = 150.0
+    turnover_limit_pct: float = 100.0
+    max_sector_exposure_pct: float = 100.0
     allow_short_selling: bool = False
     max_short_position_pct: float = 25.0
     short_margin_requirement_pct: float = 50.0

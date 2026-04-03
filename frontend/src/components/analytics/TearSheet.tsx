@@ -397,6 +397,7 @@ export function TearSheet({ result }: TearSheetProps) {
             <MetricsCard label="Avg Gross"    value={formatPercent(m.avg_exposure_pct, 1)}                         description="Average gross exposure" />
             <MetricsCard label="Avg Net"      value={formatPercent(m.avg_net_exposure_pct ?? 0, 1)}               description="Directional net exposure" />
             <MetricsCard label="Max Short"    value={formatPercent(m.max_short_exposure_pct ?? 0, 1)}             description="Largest short book" />
+            <MetricsCard label="Avg Turnover" value={formatPercent(m.avg_turnover_pct ?? 0, 1)}                   description="Rebalance turnover per event" />
             <MetricsCard label="Borrow Cost"  value={formatCurrency(m.total_borrow_cost ?? 0)}                    description="Carry paid on shorts" />
             <MetricsCard label="DD Duration"  value={`${m.max_drawdown_duration_days}d`}                           description="Longest drawdown period" />
             <MetricsCard label="Current DD"   value={formatPercent(m.current_drawdown_pct)} positive={m.current_drawdown_pct === 0} />
@@ -431,8 +432,18 @@ export function TearSheet({ result }: TearSheetProps) {
                   ["Capital",     formatCurrency(result.config.initial_capital)],
                   ["Slippage",    `${result.config.slippage_bps} bps`],
                   ["Commission",  `$${result.config.commission_per_share}/share`],
+                  [
+                    "Construction",
+                    result.config.portfolio_construction_model ??
+                      result.config.position_sizing ??
+                      "equal_weight",
+                  ],
+                  ["Risk Lookback", `${result.config.portfolio_lookback_days ?? 63} days`],
                   ["Rebalance",   result.config.rebalance_frequency],
                   ["Max Position",`${result.config.max_position_pct}%`],
+                  ["Max Gross",   `${result.config.max_gross_exposure_pct ?? 150}%`],
+                  ["Turnover Cap",`${result.config.turnover_limit_pct ?? 100}%`],
+                  ["Sector Cap",  `${result.config.max_sector_exposure_pct ?? 100}% gross`],
                   ["Shorting",    result.config.allow_short_selling ? "Enabled" : "Disabled"],
                   ...(result.config.allow_short_selling
                     ? [

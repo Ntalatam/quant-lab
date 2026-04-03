@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { useStrategies } from "@/hooks/useAnalytics";
 import { useCreatePaperSession } from "@/hooks/usePaperTrading";
-import { BENCHMARKS, PAPER_INTERVAL_OPTIONS } from "@/lib/constants";
+import {
+  BENCHMARKS,
+  PAPER_INTERVAL_OPTIONS,
+  POSITION_SIZING_OPTIONS,
+} from "@/lib/constants";
 import type {
   BacktestConfig,
   PaperTradingSessionCreate,
@@ -23,7 +27,12 @@ function defaultDraft(): PaperTradingSessionCreate {
     initial_capital: 100_000,
     slippage_bps: 5,
     commission_per_share: 0.005,
+    portfolio_construction_model: "equal_weight",
+    portfolio_lookback_days: 63,
     max_position_pct: 25,
+    max_gross_exposure_pct: 150,
+    turnover_limit_pct: 100,
+    max_sector_exposure_pct: 100,
     allow_short_selling: false,
     max_short_position_pct: 25,
     short_margin_requirement_pct: 50,
@@ -83,8 +92,20 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
         slippage_bps: prefillConfig.slippage_bps ?? draft.slippage_bps,
         commission_per_share:
           prefillConfig.commission_per_share ?? draft.commission_per_share,
+        portfolio_construction_model:
+          prefillConfig.portfolio_construction_model ??
+          prefillConfig.position_sizing ??
+          draft.portfolio_construction_model,
+        portfolio_lookback_days:
+          prefillConfig.portfolio_lookback_days ?? draft.portfolio_lookback_days,
         max_position_pct:
           prefillConfig.max_position_pct ?? draft.max_position_pct,
+        max_gross_exposure_pct:
+          prefillConfig.max_gross_exposure_pct ?? draft.max_gross_exposure_pct,
+        turnover_limit_pct:
+          prefillConfig.turnover_limit_pct ?? draft.turnover_limit_pct,
+        max_sector_exposure_pct:
+          prefillConfig.max_sector_exposure_pct ?? draft.max_sector_exposure_pct,
         allow_short_selling:
           strategy.requires_short_selling
             ? true
@@ -129,9 +150,19 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
     effectiveDraft.slippage_bps >= 0 &&
     isFiniteNumber(effectiveDraft.commission_per_share) &&
     effectiveDraft.commission_per_share >= 0 &&
+    !!effectiveDraft.portfolio_construction_model &&
+    Number.isInteger(effectiveDraft.portfolio_lookback_days) &&
+    effectiveDraft.portfolio_lookback_days >= 20 &&
+    effectiveDraft.portfolio_lookback_days <= 252 &&
     isFiniteNumber(effectiveDraft.max_position_pct) &&
     effectiveDraft.max_position_pct > 0 &&
     effectiveDraft.max_position_pct <= 100 &&
+    isFiniteNumber(effectiveDraft.max_gross_exposure_pct) &&
+    effectiveDraft.max_gross_exposure_pct > 0 &&
+    isFiniteNumber(effectiveDraft.turnover_limit_pct) &&
+    effectiveDraft.turnover_limit_pct >= 0 &&
+    isFiniteNumber(effectiveDraft.max_sector_exposure_pct) &&
+    effectiveDraft.max_sector_exposure_pct > 0 &&
     (!effectiveDraft.allow_short_selling ||
       (isFiniteNumber(effectiveDraft.max_short_position_pct) &&
         effectiveDraft.max_short_position_pct > 0 &&
@@ -548,6 +579,125 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
                 }
                 className="w-full accent-accent-blue"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Portfolio Construction
+              </label>
+              <select
+                value={effectiveDraft.portfolio_construction_model}
+                onChange={(event) =>
+                  setDraft({
+                    ...effectiveDraft,
+                    portfolio_construction_model:
+                      event.target.value as PaperTradingSessionCreate["portfolio_construction_model"],
+                  })
+                }
+                className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+              >
+                {POSITION_SIZING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">
+                  Risk Lookback (days)
+                </label>
+                <input
+                  type="number"
+                  min={20}
+                  max={252}
+                  step={1}
+                  value={effectiveDraft.portfolio_lookback_days}
+                  onChange={(event) => {
+                    const nextValue = Number.parseInt(event.target.value, 10);
+                    if (!Number.isNaN(nextValue)) {
+                      setDraft({
+                        ...effectiveDraft,
+                        portfolio_lookback_days: nextValue,
+                      });
+                    }
+                  }}
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">
+                  Max Gross Exposure (%)
+                </label>
+                <input
+                  type="number"
+                  min={25}
+                  max={300}
+                  step={5}
+                  value={effectiveDraft.max_gross_exposure_pct}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    if (!Number.isNaN(nextValue)) {
+                      setDraft({
+                        ...effectiveDraft,
+                        max_gross_exposure_pct: nextValue,
+                      });
+                    }
+                  }}
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">
+                  Turnover Cap (%)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={300}
+                  step={5}
+                  value={effectiveDraft.turnover_limit_pct}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    if (!Number.isNaN(nextValue)) {
+                      setDraft({
+                        ...effectiveDraft,
+                        turnover_limit_pct: nextValue,
+                      });
+                    }
+                  }}
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">
+                  Sector Cap (% gross)
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  max={200}
+                  step={5}
+                  value={effectiveDraft.max_sector_exposure_pct}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    if (!Number.isNaN(nextValue)) {
+                      setDraft({
+                        ...effectiveDraft,
+                        max_sector_exposure_pct: nextValue,
+                      });
+                    }
+                  }}
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
             </div>
 
             <div

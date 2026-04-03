@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, String, Float, DateTime, JSON
+from sqlalchemy import Boolean, String, Float, DateTime, JSON, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,7 +20,12 @@ class BacktestRun(Base):
     slippage_bps: Mapped[float] = mapped_column(Float)
     commission_per_share: Mapped[float] = mapped_column(Float)
     position_sizing: Mapped[str] = mapped_column(String(20))
+    portfolio_construction_model: Mapped[str] = mapped_column(String(32), default="equal_weight")
+    portfolio_lookback_days: Mapped[int] = mapped_column(Integer, default=63)
     max_position_pct: Mapped[float] = mapped_column(Float)
+    max_gross_exposure_pct: Mapped[float] = mapped_column(Float, default=150.0)
+    turnover_limit_pct: Mapped[float] = mapped_column(Float, default=100.0)
+    max_sector_exposure_pct: Mapped[float] = mapped_column(Float, default=100.0)
     allow_short_selling: Mapped[bool] = mapped_column(Boolean, default=False)
     max_short_position_pct: Mapped[float] = mapped_column(Float, default=25.0)
     short_margin_requirement_pct: Mapped[float] = mapped_column(Float, default=50.0)

@@ -234,8 +234,17 @@ export default function NewBacktestPage() {
                 { label: "Capital",    value: `$${(config.initial_capital || 100000).toLocaleString()}` },
                 { label: "Slippage",   value: `${config.slippage_bps ?? 5} bps` },
                 { label: "Commission", value: `$${config.commission_per_share ?? 0.005}/share` },
+                {
+                  label: "Construction",
+                  value:
+                    config.portfolio_construction_model ??
+                    config.position_sizing ??
+                    "equal_weight",
+                },
                 { label: "Rebalance",  value: config.rebalance_frequency || "daily" },
                 { label: "Max Pos",    value: `${config.max_position_pct ?? 25}%` },
+                { label: "Max Gross",  value: `${config.max_gross_exposure_pct ?? 150}%` },
+                { label: "Turnover",   value: `${config.turnover_limit_pct ?? 100}%` },
                 { label: "Shorting",   value: config.allow_short_selling ? "Enabled" : "Disabled" },
                 ...(config.allow_short_selling
                   ? [

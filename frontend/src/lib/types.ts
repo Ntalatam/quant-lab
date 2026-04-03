@@ -36,8 +36,23 @@ export interface BacktestConfig {
   initial_capital: number;
   slippage_bps: number;
   commission_per_share: number;
-  position_sizing: "equal_weight" | "risk_parity" | "kelly";
+  position_sizing?:
+    | "equal_weight"
+    | "risk_parity"
+    | "mean_variance"
+    | "black_litterman"
+    | "kelly";
+  portfolio_construction_model:
+    | "equal_weight"
+    | "risk_parity"
+    | "mean_variance"
+    | "black_litterman"
+    | "kelly";
+  portfolio_lookback_days: number;
   max_position_pct: number;
+  max_gross_exposure_pct: number;
+  turnover_limit_pct: number;
+  max_sector_exposure_pct: number;
   allow_short_selling: boolean;
   max_short_position_pct: number;
   short_margin_requirement_pct: number;
@@ -100,6 +115,8 @@ export interface PerformanceMetrics {
   max_net_exposure_pct: number;
   avg_short_exposure_pct: number;
   max_short_exposure_pct: number;
+  avg_turnover_pct: number;
+  max_turnover_pct: number;
   alpha: number;
   beta: number;
   correlation: number;
@@ -170,7 +187,17 @@ export interface PaperTradingSessionCreate {
   initial_capital: number;
   slippage_bps: number;
   commission_per_share: number;
+  portfolio_construction_model:
+    | "equal_weight"
+    | "risk_parity"
+    | "mean_variance"
+    | "black_litterman"
+    | "kelly";
+  portfolio_lookback_days: number;
   max_position_pct: number;
+  max_gross_exposure_pct: number;
+  turnover_limit_pct: number;
+  max_sector_exposure_pct: number;
   allow_short_selling: boolean;
   max_short_position_pct: number;
   short_margin_requirement_pct: number;
@@ -242,7 +269,17 @@ export interface PaperTradingSessionDetail extends PaperTradingSessionSummary {
   strategy_params: Record<string, number | string | boolean>;
   slippage_bps: number;
   commission_per_share: number;
+  portfolio_construction_model:
+    | "equal_weight"
+    | "risk_parity"
+    | "mean_variance"
+    | "black_litterman"
+    | "kelly";
+  portfolio_lookback_days: number;
   max_position_pct: number;
+  max_gross_exposure_pct: number;
+  turnover_limit_pct: number;
+  max_sector_exposure_pct: number;
   allow_short_selling: boolean;
   max_short_position_pct: number;
   short_margin_requirement_pct: number;

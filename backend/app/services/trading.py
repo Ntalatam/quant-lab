@@ -246,3 +246,155 @@ def execute_signals(
         )
 
     return executions
+
+
+def execute_target_weights(
+    portfolio: Portfolio,
+    target_weights: dict[str, float],
+    current_bars: dict[str, pd.Series],
+    current_prices: dict[str, float],
+    slippage_bps: float,
+    commission_per_share: float,
+    trade_date: date,
+    allow_short_selling: bool = False,
+    short_margin_requirement_pct: float = 50.0,
+    short_locate_fee_bps: float = 0.0,
+) -> list[SignalExecution]:
+    """
+    Rebalance the portfolio to explicit target weights.
+
+    The caller is responsible for applying any portfolio construction logic.
+    This executor focuses on turning target weights into realistic fills.
+    """
+    planned: list[tuple[str, float, str, int]] = []
+    executions: list[SignalExecution] = []
+    tickers = set(target_weights) | set(portfolio.positions)
+
+    for ticker in tickers:
+        if ticker not in current_bars or ticker not in current_prices:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weights.get(ticker, 0.0),
+                    action="BUY" if target_weights.get(ticker, 0.0) >= 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="No market data available for execution",
+                )
+            )
+            continue
+
+        current_price = current_prices[ticker]
+        if current_price <= 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weights.get(ticker, 0.0),
+                    action="BUY" if target_weights.get(ticker, 0.0) >= 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="Invalid execution price",
+                )
+            )
+            continue
+
+        target_weight = target_weights.get(ticker, 0.0)
+        if target_weight < 0 and not allow_short_selling:
+            target_weight = 0.0
+
+        current_shares = portfolio.positions[ticker].shares if ticker in portfolio.positions else 0
+        target_value = portfolio.total_equity * target_weight
+        target_shares = int(target_value / current_price)
+        share_delta = target_shares - current_shares
+
+        if share_delta == 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weight,
+                    action="BUY" if target_weight >= 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="Target already matched the current position",
+                )
+            )
+            continue
+
+        action = "BUY" if share_delta > 0 else "SELL"
+        planned.append((ticker, target_weight, action, abs(share_delta)))
+
+    planned.sort(key=lambda item: (0 if item[2] == "SELL" else 1, -item[3]))
+
+    for ticker, target_weight, action, requested_shares in planned:
+        bar = current_bars[ticker]
+        fill = simulate_fill(
+            side=action,
+            shares=requested_shares,
+            bar_open=float(bar["open"]),
+            bar_high=float(bar["high"]),
+            bar_low=float(bar["low"]),
+            bar_close=float(bar["close"]),
+            bar_volume=int(bar["volume"]),
+            slippage_bps=slippage_bps,
+            commission_per_share=commission_per_share,
+        )
+        if not fill.filled or fill.shares_filled <= 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weight,
+                    action=action,
+                    requested_shares=requested_shares,
+                    status="rejected",
+                    reason=fill.reason or "Order could not be filled",
+                )
+            )
+            continue
+
+        transaction = portfolio.apply_transaction(
+            ticker=ticker,
+            side=action,
+            shares=fill.shares_filled,
+            fill_price=fill.fill_price,
+            commission=fill.commission,
+            slippage_cost=fill.slippage_cost,
+            trade_date=trade_date,
+            allow_short_selling=allow_short_selling,
+            short_margin_requirement_pct=short_margin_requirement_pct,
+            short_locate_fee_bps=short_locate_fee_bps,
+        )
+        if transaction.executed_shares <= 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weight,
+                    action=action,
+                    requested_shares=requested_shares,
+                    status="rejected",
+                    reason="Order failed cash or margin checks",
+                )
+            )
+            continue
+
+        executions.append(
+            SignalExecution(
+                ticker=ticker,
+                signal=target_weight,
+                action=action,
+                requested_shares=requested_shares,
+                filled_shares=transaction.executed_shares,
+                fill_price=fill.fill_price,
+                commission=transaction.commission,
+                slippage_cost=transaction.slippage,
+                locate_fee=transaction.locate_fee,
+                borrow_cost=transaction.borrow_cost,
+                status="filled"
+                if transaction.executed_shares == fill.shares_filled
+                else "partial",
+                reason="Executed successfully"
+                if transaction.executed_shares == fill.shares_filled
+                else "Executed partially due to cash or margin constraints",
+            )
+        )
+
+    return executions

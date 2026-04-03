@@ -123,6 +123,8 @@ def compute_all_metrics(
         "max_net_exposure_pct": 0,
         "avg_short_exposure_pct": 0,
         "max_short_exposure_pct": 0,
+        "avg_turnover_pct": 0,
+        "max_turnover_pct": 0,
         "alpha": round(alpha * 100, 3),
         "beta": round(beta, 3),
         "correlation": round(correlation, 3),
@@ -246,6 +248,7 @@ def _empty_metrics() -> dict:
             "avg_exposure_pct", "max_exposure_pct", "avg_net_exposure_pct",
             "max_net_exposure_pct", "avg_short_exposure_pct",
             "max_short_exposure_pct", "alpha", "beta", "correlation",
-            "tracking_error_pct", "total_borrow_cost", "total_locate_fees",
+            "tracking_error_pct", "avg_turnover_pct", "max_turnover_pct",
+            "total_borrow_cost", "total_locate_fees",
         ]
     }

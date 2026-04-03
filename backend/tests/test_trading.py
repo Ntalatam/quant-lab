@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 
 from app.services.portfolio import Portfolio
-from app.services.trading import execute_signals
+from app.services.trading import execute_signals, execute_target_weights
 
 
 def _bar(price: float, volume: int = 1_000_000) -> pd.Series:
@@ -108,4 +108,34 @@ class TestExecuteSignals:
         )
 
         assert executions[0].status == "skipped"
+        assert "AAPL" not in portfolio.positions
+
+    def test_execute_target_weights_flattens_existing_long_short_position(self):
+        portfolio = Portfolio(initial_capital=100_000)
+        portfolio.apply_transaction(
+            ticker="AAPL",
+            side="SELL",
+            shares=100,
+            fill_price=100.0,
+            commission=0.0,
+            slippage_cost=0.0,
+            trade_date=date(2024, 1, 2),
+            allow_short_selling=True,
+        )
+        portfolio.update_prices({"AAPL": 100.0}, date(2024, 1, 2))
+
+        executions = execute_target_weights(
+            portfolio=portfolio,
+            target_weights={"AAPL": 0.0},
+            current_bars={"AAPL": _bar(100)},
+            current_prices={"AAPL": 100},
+            slippage_bps=0,
+            commission_per_share=0,
+            trade_date=date(2024, 1, 3),
+            allow_short_selling=True,
+            short_margin_requirement_pct=50,
+            short_locate_fee_bps=0,
+        )
+
+        assert executions[0].status == "filled"
         assert "AAPL" not in portfolio.positions

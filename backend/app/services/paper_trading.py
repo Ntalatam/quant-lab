@@ -24,9 +24,13 @@ from app.schemas.paper import (
     PaperTradingSessionSummary,
 )
 from app.services.execution import simulate_fill
+from app.services.portfolio_optimizer import (
+    PortfolioConstructionRequest,
+    construct_target_weights,
+)
 from app.services.portfolio import Portfolio, Position
 from app.services.strategy_registry import get_strategy_class
-from app.services.trading import execute_signals
+from app.services.trading import execute_target_weights
 
 NO_MARKET_DATA_ERROR = "No live market data was returned."
 
@@ -127,7 +131,12 @@ class PaperTradingManager:
                 initial_capital=payload.initial_capital,
                 slippage_bps=payload.slippage_bps,
                 commission_per_share=payload.commission_per_share,
+                portfolio_construction_model=payload.portfolio_construction_model,
+                portfolio_lookback_days=payload.portfolio_lookback_days,
                 max_position_pct=payload.max_position_pct,
+                max_gross_exposure_pct=payload.max_gross_exposure_pct,
+                turnover_limit_pct=payload.turnover_limit_pct,
+                max_sector_exposure_pct=payload.max_sector_exposure_pct,
                 allow_short_selling=payload.allow_short_selling,
                 max_short_position_pct=payload.max_short_position_pct,
                 short_margin_requirement_pct=payload.short_margin_requirement_pct,
@@ -497,18 +506,32 @@ class PaperTradingManager:
                         for ticker in forced_cover_tickers:
                             if ticker in signals:
                                 signals[ticker] = 0.0
-                        executions = execute_signals(
+                        construction = await construct_target_weights(
+                            PortfolioConstructionRequest(
+                                raw_signals=signals,
+                                data_window=signal_windows,
+                                current_prices=current_prices,
+                                portfolio=runtime.portfolio,
+                                signal_mode=runtime.strategy.signal_mode,
+                                construction_model=session.portfolio_construction_model,
+                                lookback_days=session.portfolio_lookback_days,
+                                max_position_pct=session.max_position_pct,
+                                max_short_position_pct=session.max_short_position_pct,
+                                max_gross_exposure_pct=session.max_gross_exposure_pct,
+                                turnover_limit_pct=session.turnover_limit_pct,
+                                max_sector_exposure_pct=session.max_sector_exposure_pct,
+                                allow_short_selling=session.allow_short_selling,
+                            )
+                        )
+                        executions = execute_target_weights(
                             portfolio=runtime.portfolio,
-                            signals=signals,
+                            target_weights=construction.target_weights,
                             current_bars=execution_bars,
                             current_prices=current_prices,
-                            max_position_pct=session.max_position_pct,
                             slippage_bps=session.slippage_bps,
                             commission_per_share=session.commission_per_share,
                             trade_date=current_dt.date(),
-                            signal_mode=runtime.strategy.signal_mode,
                             allow_short_selling=session.allow_short_selling,
-                            max_short_position_pct=session.max_short_position_pct,
                             short_margin_requirement_pct=session.short_margin_requirement_pct,
                             short_locate_fee_bps=session.short_locate_fee_bps,
                         )
@@ -707,7 +730,12 @@ class PaperTradingManager:
             strategy_params=session.strategy_params,
             slippage_bps=session.slippage_bps,
             commission_per_share=session.commission_per_share,
+            portfolio_construction_model=session.portfolio_construction_model,
+            portfolio_lookback_days=session.portfolio_lookback_days,
             max_position_pct=session.max_position_pct,
+            max_gross_exposure_pct=session.max_gross_exposure_pct,
+            turnover_limit_pct=session.turnover_limit_pct,
+            max_sector_exposure_pct=session.max_sector_exposure_pct,
             allow_short_selling=session.allow_short_selling,
             max_short_position_pct=session.max_short_position_pct,
             short_margin_requirement_pct=session.short_margin_requirement_pct,

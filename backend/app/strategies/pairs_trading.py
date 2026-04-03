@@ -127,8 +127,8 @@ class PairsTrading(BaseStrategy):
         else:
             if abs(z_score) < self.exit_z:
                 # Spread reverted — exit both
-                signals[ticker_a] = -1.0
-                signals[ticker_b] = -1.0
+                signals[ticker_a] = 0.0
+                signals[ticker_b] = 0.0
                 self._in_trade = False
                 self._trade_direction = None
 
