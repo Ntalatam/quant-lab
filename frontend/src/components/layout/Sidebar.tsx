@@ -161,6 +161,17 @@ export function Sidebar() {
         <p className="text-[10px]" style={{ color: "var(--color-text-muted)", opacity: 0.55 }}>
           QuantLab v1.0 — Local
         </p>
+        <p className="text-[10px]" style={{ color: "var(--color-text-muted)", opacity: 0.4 }}>
+          Charts by{" "}
+          <a
+            href="https://www.tradingview.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:opacity-70 transition-opacity underline underline-offset-2"
+          >
+            TradingView
+          </a>
+        </p>
       </div>
 
       {/* Shortcuts modal */}

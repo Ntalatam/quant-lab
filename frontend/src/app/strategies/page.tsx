@@ -10,10 +10,11 @@ const CATEGORY_CONFIG: Record<
   string,
   { label: string; cls: string; accent: string; desc: string }
 > = {
-  trend_following:       { label: "Trend Following",       cls: "badge-trend",      accent: "var(--color-accent-blue)",   desc: "Captures directional price moves" },
-  mean_reversion:        { label: "Mean Reversion",         cls: "badge-reversion",  accent: "var(--color-accent-purple)", desc: "Exploits price deviations from mean" },
-  momentum:              { label: "Cross-Sectional Momentum", cls: "badge-momentum", accent: "var(--color-accent-green)", desc: "Rotates into top relative performers" },
-  statistical_arbitrage: { label: "Statistical Arbitrage",  cls: "badge-arb",        accent: "var(--color-accent-yellow)", desc: "Pairs cointegration & spread z-score" },
+  trend_following:       { label: "Trend Following",         cls: "badge-trend",      accent: "var(--color-accent-blue)",   desc: "Captures directional price moves" },
+  mean_reversion:        { label: "Mean Reversion",           cls: "badge-reversion",  accent: "var(--color-accent-purple)", desc: "Exploits price deviations from mean" },
+  momentum:              { label: "Cross-Sectional Momentum", cls: "badge-momentum",   accent: "var(--color-accent-green)", desc: "Rotates into top relative performers" },
+  statistical_arbitrage: { label: "Statistical Arbitrage",    cls: "badge-arb",        accent: "var(--color-accent-yellow)", desc: "Pairs cointegration & spread z-score" },
+  risk_management:       { label: "Risk Management",          cls: "badge-momentum",   accent: "var(--color-accent-green)", desc: "Volatility-scaled sizing & drawdown protection" },
 };
 
 export default function StrategiesPage() {

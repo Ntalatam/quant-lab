@@ -8,6 +8,10 @@ from app.strategies.mean_reversion import MeanReversion
 from app.strategies.momentum import MomentumStrategy
 from app.strategies.pairs_trading import PairsTrading
 from app.strategies.ml_classifier import MLClassifier
+from app.strategies.rsi_mean_reversion import RSIMeanReversion
+from app.strategies.macd_crossover import MACDCrossover
+from app.strategies.donchian_breakout import DonchianBreakout
+from app.strategies.vol_target_trend import VolTargetTrend
 
 STRATEGIES: dict[str, type[BaseStrategy]] = {
     "sma_crossover": SMACrossover,
@@ -15,6 +19,10 @@ STRATEGIES: dict[str, type[BaseStrategy]] = {
     "momentum": MomentumStrategy,
     "pairs_trading": PairsTrading,
     "ml_classifier": MLClassifier,
+    "rsi_mean_reversion": RSIMeanReversion,
+    "macd_crossover": MACDCrossover,
+    "donchian_breakout": DonchianBreakout,
+    "vol_target_trend": VolTargetTrend,
 }
 
 

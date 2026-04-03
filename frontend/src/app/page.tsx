@@ -21,11 +21,15 @@ import {
 } from "lucide-react";
 
 const STRATEGY_CATEGORY_MAP: Record<string, { label: string; cls: string }> = {
-  sma_crossover:   { label: "Trend",   cls: "badge-trend"     },
-  mean_reversion:  { label: "MeanRev", cls: "badge-reversion"  },
-  momentum:        { label: "Momentum",cls: "badge-momentum"   },
-  pairs_trading:   { label: "Arb",     cls: "badge-arb"        },
-  ml_classifier:   { label: "ML",      cls: "badge-arb"        },
+  sma_crossover:       { label: "Trend",    cls: "badge-trend"     },
+  mean_reversion:      { label: "MeanRev",  cls: "badge-reversion" },
+  momentum:            { label: "Momentum", cls: "badge-momentum"  },
+  pairs_trading:       { label: "Arb",      cls: "badge-arb"       },
+  ml_classifier:       { label: "ML",       cls: "badge-arb"       },
+  rsi_mean_reversion:  { label: "RSI",      cls: "badge-reversion" },
+  macd_crossover:      { label: "MACD",     cls: "badge-trend"     },
+  donchian_breakout:   { label: "Turtle",   cls: "badge-trend"     },
+  vol_target_trend:    { label: "VolTgt",   cls: "badge-momentum"  },
 };
 
 function SharpeCell({ value }: { value: number }) {

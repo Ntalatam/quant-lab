@@ -30,6 +30,7 @@ export const TV_CHART_OPTIONS: DeepPartial<ChartOptions> = {
     fontFamily:
       'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: 11,
+    attributionLogo: false,
   },
   grid: {
     vertLines: { color: "rgba(30,30,42,0.6)" },
