@@ -31,7 +31,7 @@ export default function StrategiesPage() {
           Strategy Library
         </h1>
         <p className="text-xs text-text-muted mt-0.5">
-          Four strategy families — each with tunable parameters and distinct market regimes
+          Five strategy families — each with tunable parameters and distinct market regimes
         </p>
       </div>
 
