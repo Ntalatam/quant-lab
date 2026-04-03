@@ -16,6 +16,7 @@ import type {
   StrategyInfo,
   SweepResult,
   Sweep2DResult,
+  TransactionCostAnalysisResult,
   WalkForwardResult,
 } from "./types";
 
@@ -224,6 +225,12 @@ class ApiClient {
 
   async getCapacityAnalysis(backtestId: string): Promise<CapacityResult> {
     return this.request(`/analytics/capacity/${backtestId}`, { method: "POST" });
+  }
+
+  async getTransactionCostAnalysis(
+    backtestId: string
+  ): Promise<TransactionCostAnalysisResult> {
+    return this.request(`/analytics/tca/${backtestId}`, { method: "POST" });
   }
 
   async portfolioBlend(

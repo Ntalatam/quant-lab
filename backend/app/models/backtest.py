@@ -19,6 +19,8 @@ class BacktestRun(Base):
     initial_capital: Mapped[float] = mapped_column(Float)
     slippage_bps: Mapped[float] = mapped_column(Float)
     commission_per_share: Mapped[float] = mapped_column(Float)
+    market_impact_model: Mapped[str] = mapped_column(String(24), default="almgren_chriss")
+    max_volume_participation_pct: Mapped[float] = mapped_column(Float, default=5.0)
     position_sizing: Mapped[str] = mapped_column(String(20))
     portfolio_construction_model: Mapped[str] = mapped_column(String(32), default="equal_weight")
     portfolio_lookback_days: Mapped[int] = mapped_column(Integer, default=63)

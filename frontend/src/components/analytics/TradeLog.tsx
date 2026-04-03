@@ -133,13 +133,16 @@ export function TradeLog({ trades }: TradeLogProps) {
                   : "-"}
               </td>
               <td className="py-1.5 px-2 text-text-muted">
-                $
-                {(
-                  trade.commission +
-                  trade.slippage +
-                  trade.borrow_cost +
-                  trade.locate_fee
+                ${(
+                  (trade.implementation_shortfall ?? 0) +
+                  (trade.borrow_cost ?? 0) +
+                  (trade.locate_fee ?? 0)
                 ).toFixed(2)}
+                {(trade.unfilled_shares > 0 || trade.opportunity_cost > 0) && (
+                  <div className="text-[10px] mt-0.5">
+                    {trade.unfilled_shares} unfilled
+                  </div>
+                )}
               </td>
             </tr>
           ))}

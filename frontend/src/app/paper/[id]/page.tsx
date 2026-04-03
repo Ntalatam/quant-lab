@@ -343,6 +343,8 @@ export default function PaperTradingSessionPage({
               ["Capital", formatCurrency(session.initial_capital)],
               ["Slippage", `${session.slippage_bps} bps`],
               ["Commission", `$${session.commission_per_share}/share`],
+              ["Impact", session.market_impact_model],
+              ["Max Vol", `${session.max_volume_participation_pct}%`],
               [
                 "Construction",
                 session.portfolio_construction_model ?? "equal_weight",

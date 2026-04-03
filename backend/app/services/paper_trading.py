@@ -131,6 +131,8 @@ class PaperTradingManager:
                 initial_capital=payload.initial_capital,
                 slippage_bps=payload.slippage_bps,
                 commission_per_share=payload.commission_per_share,
+                market_impact_model=payload.market_impact_model,
+                max_volume_participation_pct=payload.max_volume_participation_pct,
                 portfolio_construction_model=payload.portfolio_construction_model,
                 portfolio_lookback_days=payload.portfolio_lookback_days,
                 max_position_pct=payload.max_position_pct,
@@ -466,6 +468,8 @@ class PaperTradingManager:
                                 bar_volume=int(execution_bars[ticker]["volume"]),
                                 slippage_bps=session.slippage_bps,
                                 commission_per_share=session.commission_per_share,
+                                market_impact_model=session.market_impact_model,
+                                max_volume_participation=session.max_volume_participation_pct / 100,
                             )
                             if not fill.filled or fill.shares_filled <= 0:
                                 continue
@@ -478,6 +482,12 @@ class PaperTradingManager:
                                 commission=fill.commission,
                                 slippage_cost=fill.slippage_cost,
                                 trade_date=current_dt.date(),
+                                requested_shares=fill.requested_shares,
+                                spread_cost=fill.spread_cost,
+                                market_impact_cost=fill.market_impact_cost,
+                                timing_cost=fill.timing_cost,
+                                opportunity_cost=fill.opportunity_cost,
+                                participation_rate_pct=fill.participation_rate_pct,
                                 risk_event="short_squeeze_cover",
                             )
                             if transaction.executed_shares <= 0:
@@ -534,6 +544,8 @@ class PaperTradingManager:
                             allow_short_selling=session.allow_short_selling,
                             short_margin_requirement_pct=session.short_margin_requirement_pct,
                             short_locate_fee_bps=session.short_locate_fee_bps,
+                            market_impact_model=session.market_impact_model,
+                            max_volume_participation=session.max_volume_participation_pct / 100,
                         )
                         runtime.last_processed_bar = current_ts
                         session.last_signal_at = datetime.utcnow()
@@ -730,6 +742,8 @@ class PaperTradingManager:
             strategy_params=session.strategy_params,
             slippage_bps=session.slippage_bps,
             commission_per_share=session.commission_per_share,
+            market_impact_model=session.market_impact_model,
+            max_volume_participation_pct=session.max_volume_participation_pct,
             portfolio_construction_model=session.portfolio_construction_model,
             portfolio_lookback_days=session.portfolio_lookback_days,
             max_position_pct=session.max_position_pct,

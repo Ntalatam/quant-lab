@@ -67,23 +67,54 @@ class TradeEntry:
     slippage: float = 0.0
     borrow_cost: float = 0.0
     locate_fee: float = 0.0
+    requested_shares: int = 0
+    unfilled_shares: int = 0
+    spread_cost: float = 0.0
+    market_impact_cost: float = 0.0
+    timing_cost: float = 0.0
+    opportunity_cost: float = 0.0
+    participation_rate_pct: float = 0.0
+    implementation_shortfall: float = 0.0
     risk_event: str | None = None
 
 
 @dataclass
 class PortfolioTransactionResult:
     executed_shares: int = 0
+    requested_shares: int = 0
+    unfilled_shares: int = 0
     commission: float = 0.0
     slippage: float = 0.0
     borrow_cost: float = 0.0
     locate_fee: float = 0.0
+    spread_cost: float = 0.0
+    market_impact_cost: float = 0.0
+    timing_cost: float = 0.0
+    opportunity_cost: float = 0.0
+    participation_rate_pct: float = 0.0
+    implementation_shortfall: float = 0.0
 
     def merge(self, other: "PortfolioTransactionResult"):
         self.executed_shares += other.executed_shares
+        self.requested_shares += other.requested_shares
+        self.unfilled_shares += other.unfilled_shares
         self.commission += other.commission
         self.slippage += other.slippage
         self.borrow_cost += other.borrow_cost
         self.locate_fee += other.locate_fee
+        self.spread_cost += other.spread_cost
+        self.market_impact_cost += other.market_impact_cost
+        self.timing_cost += other.timing_cost
+        self.opportunity_cost += other.opportunity_cost
+        self.implementation_shortfall += other.implementation_shortfall
+        if self.executed_shares > 0:
+            self.participation_rate_pct = (
+                (
+                    self.participation_rate_pct
+                    * max(self.executed_shares - other.executed_shares, 0)
+                )
+                + (other.participation_rate_pct * other.executed_shares)
+            ) / self.executed_shares
 
 
 @dataclass
@@ -239,6 +270,12 @@ class Portfolio:
         commission: float,
         slippage_cost: float,
         trade_date: date,
+        requested_shares: int | None = None,
+        spread_cost: float = 0.0,
+        market_impact_cost: float = 0.0,
+        timing_cost: float = 0.0,
+        opportunity_cost: float = 0.0,
+        participation_rate_pct: float = 0.0,
         allow_short_selling: bool = False,
         short_margin_requirement_pct: float = 50.0,
         short_locate_fee_bps: float = 0.0,
@@ -248,8 +285,14 @@ class Portfolio:
         if shares <= 0:
             return result
 
+        requested_shares = requested_shares or shares
         commission_per_share = commission / shares if shares else 0.0
         slippage_per_share = slippage_cost / shares if shares else 0.0
+        spread_per_share = spread_cost / shares if shares else 0.0
+        market_impact_per_share = market_impact_cost / shares if shares else 0.0
+        timing_per_share = timing_cost / shares if shares else 0.0
+        opportunity_per_share = opportunity_cost / max(requested_shares, 1)
+        participation_per_share = participation_rate_pct / shares if shares else 0.0
         existing = self.positions.get(ticker)
 
         if side == "BUY":
@@ -258,24 +301,37 @@ class Portfolio:
                 result.merge(
                     self._cover_short(
                         ticker=ticker,
+                        requested_shares=min(requested_shares, cover_shares),
                         shares=cover_shares,
                         fill_price=fill_price,
                         commission_per_share=commission_per_share,
                         slippage_per_share=slippage_per_share,
+                        spread_per_share=spread_per_share,
+                        market_impact_per_share=market_impact_per_share,
+                        timing_per_share=timing_per_share,
+                        opportunity_per_share=opportunity_per_share,
+                        participation_per_share=participation_per_share,
                         trade_date=trade_date,
                         risk_event=risk_event,
                     )
                 )
                 shares -= cover_shares
+                requested_shares = max(requested_shares - cover_shares, 0)
 
             if shares > 0:
                 result.merge(
                     self._open_or_add_long(
                         ticker=ticker,
+                        requested_shares=requested_shares,
                         shares=shares,
                         fill_price=fill_price,
                         commission_per_share=commission_per_share,
                         slippage_per_share=slippage_per_share,
+                        spread_per_share=spread_per_share,
+                        market_impact_per_share=market_impact_per_share,
+                        timing_per_share=timing_per_share,
+                        opportunity_per_share=opportunity_per_share,
+                        participation_per_share=participation_per_share,
                         trade_date=trade_date,
                         short_margin_requirement_pct=short_margin_requirement_pct,
                     )
@@ -287,24 +343,37 @@ class Portfolio:
             result.merge(
                 self._reduce_or_close_long(
                     ticker=ticker,
+                    requested_shares=min(requested_shares, long_shares),
                     shares=long_shares,
                     fill_price=fill_price,
                     commission_per_share=commission_per_share,
                     slippage_per_share=slippage_per_share,
+                    spread_per_share=spread_per_share,
+                    market_impact_per_share=market_impact_per_share,
+                    timing_per_share=timing_per_share,
+                    opportunity_per_share=opportunity_per_share,
+                    participation_per_share=participation_per_share,
                     trade_date=trade_date,
                     risk_event=risk_event,
                 )
             )
             shares -= long_shares
+            requested_shares = max(requested_shares - long_shares, 0)
 
         if shares > 0 and allow_short_selling:
             result.merge(
                 self._open_or_add_short(
                     ticker=ticker,
+                    requested_shares=requested_shares,
                     shares=shares,
                     fill_price=fill_price,
                     commission_per_share=commission_per_share,
                     slippage_per_share=slippage_per_share,
+                    spread_per_share=spread_per_share,
+                    market_impact_per_share=market_impact_per_share,
+                    timing_per_share=timing_per_share,
+                    opportunity_per_share=opportunity_per_share,
+                    participation_per_share=participation_per_share,
                     trade_date=trade_date,
                     short_margin_requirement_pct=short_margin_requirement_pct,
                     short_locate_fee_bps=short_locate_fee_bps,
@@ -339,10 +408,16 @@ class Portfolio:
     def _open_or_add_long(
         self,
         ticker: str,
+        requested_shares: int,
         shares: int,
         fill_price: float,
         commission_per_share: float,
         slippage_per_share: float,
+        spread_per_share: float,
+        market_impact_per_share: float,
+        timing_per_share: float,
+        opportunity_per_share: float,
+        participation_per_share: float,
         trade_date: date,
         short_margin_requirement_pct: float,
     ) -> PortfolioTransactionResult:
@@ -360,6 +435,11 @@ class Portfolio:
 
         commission = commission_per_share * affordable
         slippage = slippage_per_share * affordable
+        spread_cost = spread_per_share * affordable
+        market_impact_cost = market_impact_per_share * affordable
+        timing_cost = timing_per_share * affordable
+        opportunity_cost = opportunity_per_share * max(requested_shares - affordable, 0)
+        participation_rate_pct = participation_per_share * affordable
         total_cost = (fill_price * affordable) + commission + slippage
         self.cash -= total_cost
 
@@ -390,20 +470,54 @@ class Portfolio:
                 shares=affordable,
                 commission=commission,
                 slippage=slippage,
+                requested_shares=requested_shares,
+                unfilled_shares=max(requested_shares - affordable, 0),
+                spread_cost=spread_cost,
+                market_impact_cost=market_impact_cost,
+                timing_cost=timing_cost,
+                opportunity_cost=opportunity_cost,
+                participation_rate_pct=participation_rate_pct,
+                implementation_shortfall=(
+                    commission
+                    + spread_cost
+                    + market_impact_cost
+                    + timing_cost
+                    + opportunity_cost
+                ),
             )
         )
         result.executed_shares = affordable
+        result.requested_shares = requested_shares
+        result.unfilled_shares = max(requested_shares - affordable, 0)
         result.commission = commission
         result.slippage = slippage
+        result.spread_cost = spread_cost
+        result.market_impact_cost = market_impact_cost
+        result.timing_cost = timing_cost
+        result.opportunity_cost = opportunity_cost
+        result.participation_rate_pct = participation_rate_pct
+        result.implementation_shortfall = (
+            commission
+            + spread_cost
+            + market_impact_cost
+            + timing_cost
+            + opportunity_cost
+        )
         return result
 
     def _reduce_or_close_long(
         self,
         ticker: str,
+        requested_shares: int,
         shares: int,
         fill_price: float,
         commission_per_share: float,
         slippage_per_share: float,
+        spread_per_share: float,
+        market_impact_per_share: float,
+        timing_per_share: float,
+        opportunity_per_share: float,
+        participation_per_share: float,
         trade_date: date,
         risk_event: str | None,
     ) -> PortfolioTransactionResult:
@@ -418,6 +532,11 @@ class Portfolio:
 
         commission = commission_per_share * shares
         slippage = slippage_per_share * shares
+        spread_cost = spread_per_share * shares
+        market_impact_cost = market_impact_per_share * shares
+        timing_cost = timing_per_share * shares
+        opportunity_cost = opportunity_per_share * max(requested_shares - shares, 0)
+        participation_rate_pct = participation_per_share * shares
         proceeds = (fill_price * shares) - commission - slippage
         self.cash += proceeds
 
@@ -441,6 +560,20 @@ class Portfolio:
                 pnl_pct=pnl_pct,
                 commission=commission,
                 slippage=slippage,
+                requested_shares=requested_shares,
+                unfilled_shares=max(requested_shares - shares, 0),
+                spread_cost=spread_cost,
+                market_impact_cost=market_impact_cost,
+                timing_cost=timing_cost,
+                opportunity_cost=opportunity_cost,
+                participation_rate_pct=participation_rate_pct,
+                implementation_shortfall=(
+                    commission
+                    + spread_cost
+                    + market_impact_cost
+                    + timing_cost
+                    + opportunity_cost
+                ),
                 risk_event=risk_event,
             )
         )
@@ -450,17 +583,37 @@ class Portfolio:
             del self.positions[ticker]
 
         result.executed_shares = shares
+        result.requested_shares = requested_shares
+        result.unfilled_shares = max(requested_shares - shares, 0)
         result.commission = commission
         result.slippage = slippage
+        result.spread_cost = spread_cost
+        result.market_impact_cost = market_impact_cost
+        result.timing_cost = timing_cost
+        result.opportunity_cost = opportunity_cost
+        result.participation_rate_pct = participation_rate_pct
+        result.implementation_shortfall = (
+            commission
+            + spread_cost
+            + market_impact_cost
+            + timing_cost
+            + opportunity_cost
+        )
         return result
 
     def _open_or_add_short(
         self,
         ticker: str,
+        requested_shares: int,
         shares: int,
         fill_price: float,
         commission_per_share: float,
         slippage_per_share: float,
+        spread_per_share: float,
+        market_impact_per_share: float,
+        timing_per_share: float,
+        opportunity_per_share: float,
+        participation_per_share: float,
         trade_date: date,
         short_margin_requirement_pct: float,
         short_locate_fee_bps: float,
@@ -482,6 +635,11 @@ class Portfolio:
         commission = commission_per_share * affordable
         slippage = slippage_per_share * affordable
         locate_fee = locate_fee_per_share * affordable
+        spread_cost = spread_per_share * affordable
+        market_impact_cost = market_impact_per_share * affordable
+        timing_cost = timing_per_share * affordable
+        opportunity_cost = opportunity_per_share * max(requested_shares - affordable, 0)
+        participation_rate_pct = participation_per_share * affordable
         proceeds = (fill_price * affordable) - commission - slippage - locate_fee
         self.cash += proceeds
         self.total_locate_fees_paid += locate_fee
@@ -517,21 +675,55 @@ class Portfolio:
                 commission=commission,
                 slippage=slippage,
                 locate_fee=locate_fee,
+                requested_shares=requested_shares,
+                unfilled_shares=max(requested_shares - affordable, 0),
+                spread_cost=spread_cost,
+                market_impact_cost=market_impact_cost,
+                timing_cost=timing_cost,
+                opportunity_cost=opportunity_cost,
+                participation_rate_pct=participation_rate_pct,
+                implementation_shortfall=(
+                    commission
+                    + spread_cost
+                    + market_impact_cost
+                    + timing_cost
+                    + opportunity_cost
+                ),
             )
         )
         result.executed_shares = affordable
+        result.requested_shares = requested_shares
+        result.unfilled_shares = max(requested_shares - affordable, 0)
         result.commission = commission
         result.slippage = slippage
         result.locate_fee = locate_fee
+        result.spread_cost = spread_cost
+        result.market_impact_cost = market_impact_cost
+        result.timing_cost = timing_cost
+        result.opportunity_cost = opportunity_cost
+        result.participation_rate_pct = participation_rate_pct
+        result.implementation_shortfall = (
+            commission
+            + spread_cost
+            + market_impact_cost
+            + timing_cost
+            + opportunity_cost
+        )
         return result
 
     def _cover_short(
         self,
         ticker: str,
+        requested_shares: int,
         shares: int,
         fill_price: float,
         commission_per_share: float,
         slippage_per_share: float,
+        spread_per_share: float,
+        market_impact_per_share: float,
+        timing_per_share: float,
+        opportunity_per_share: float,
+        participation_per_share: float,
         trade_date: date,
         risk_event: str | None,
     ) -> PortfolioTransactionResult:
@@ -546,6 +738,11 @@ class Portfolio:
 
         commission = commission_per_share * shares
         slippage = slippage_per_share * shares
+        spread_cost = spread_per_share * shares
+        market_impact_cost = market_impact_per_share * shares
+        timing_cost = timing_per_share * shares
+        opportunity_cost = opportunity_per_share * max(requested_shares - shares, 0)
+        participation_rate_pct = participation_per_share * shares
         total_cost = (fill_price * shares) + commission + slippage
         self.cash -= total_cost
 
@@ -588,6 +785,20 @@ class Portfolio:
                 slippage=slippage,
                 borrow_cost=borrow_cost,
                 locate_fee=locate_fee,
+                requested_shares=requested_shares,
+                unfilled_shares=max(requested_shares - shares, 0),
+                spread_cost=spread_cost,
+                market_impact_cost=market_impact_cost,
+                timing_cost=timing_cost,
+                opportunity_cost=opportunity_cost,
+                participation_rate_pct=participation_rate_pct,
+                implementation_shortfall=(
+                    commission
+                    + spread_cost
+                    + market_impact_cost
+                    + timing_cost
+                    + opportunity_cost
+                ),
                 risk_event=risk_event,
             )
         )
@@ -599,8 +810,22 @@ class Portfolio:
             del self.positions[ticker]
 
         result.executed_shares = shares
+        result.requested_shares = requested_shares
+        result.unfilled_shares = max(requested_shares - shares, 0)
         result.commission = commission
         result.slippage = slippage
         result.borrow_cost = borrow_cost
         result.locate_fee = locate_fee
+        result.spread_cost = spread_cost
+        result.market_impact_cost = market_impact_cost
+        result.timing_cost = timing_cost
+        result.opportunity_cost = opportunity_cost
+        result.participation_rate_pct = participation_rate_pct
+        result.implementation_shortfall = (
+            commission
+            + spread_cost
+            + market_impact_cost
+            + timing_cost
+            + opportunity_cost
+        )
         return result

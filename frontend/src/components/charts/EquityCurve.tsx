@@ -185,12 +185,26 @@ function TradePanel({ trade, onClose }: TradePanelProps) {
           },
           { label: "Shares", value: String(trade.shares) },
           {
+            label: "Fill Rate",
+            value:
+              trade.requested_shares > 0
+                ? `${((trade.shares / trade.requested_shares) * 100).toFixed(1)}%`
+                : "100.0%",
+          },
+          {
+            label: "Participation",
+            value: `${(trade.participation_rate_pct ?? 0).toFixed(3)}%`,
+          },
+          {
             label: "Commission",
             value: `$${(trade.commission ?? 0).toFixed(2)}`,
           },
+          { label: "Spread", value: `$${(trade.spread_cost ?? 0).toFixed(2)}` },
+          { label: "Impact", value: `$${(trade.market_impact_cost ?? 0).toFixed(2)}` },
+          { label: "Timing", value: `$${(trade.timing_cost ?? 0).toFixed(2)}` },
           {
-            label: "Slippage",
-            value: `$${(trade.slippage ?? 0).toFixed(2)}`,
+            label: "Opportunity",
+            value: `$${(trade.opportunity_cost ?? 0).toFixed(2)}`,
           },
           {
             label: "Borrow Cost",
@@ -199,6 +213,10 @@ function TradePanel({ trade, onClose }: TradePanelProps) {
           {
             label: "Locate Fee",
             value: `$${(trade.locate_fee ?? 0).toFixed(2)}`,
+          },
+          {
+            label: "Shortfall",
+            value: `$${(trade.implementation_shortfall ?? 0).toFixed(2)}`,
           },
         ].map(({ label, value }) => (
           <div key={label} className="flex justify-between text-xs">

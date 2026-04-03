@@ -24,6 +24,8 @@ const DEFAULT_CONFIG: Partial<BacktestConfig> = {
   initial_capital: 100_000,
   slippage_bps: 5.0,
   commission_per_share: 0.005,
+  market_impact_model: "almgren_chriss",
+  max_volume_participation_pct: 5,
   position_sizing: "equal_weight",
   portfolio_construction_model: "equal_weight",
   portfolio_lookback_days: 63,

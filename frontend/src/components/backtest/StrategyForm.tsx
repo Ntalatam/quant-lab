@@ -6,6 +6,7 @@ import { useStrategies } from "@/hooks/useAnalytics";
 import { useBacktestStore } from "@/store/backtest-store";
 import {
   BENCHMARKS,
+  MARKET_IMPACT_MODEL_OPTIONS,
   POSITION_SIZING_OPTIONS,
   REBALANCE_OPTIONS,
   CATEGORY_LABELS,
@@ -262,6 +263,48 @@ export function StrategyForm() {
               }
               className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Impact Model
+              </label>
+              <select
+                value={config.market_impact_model ?? "almgren_chriss"}
+                onChange={(e) =>
+                  setConfig({
+                    market_impact_model:
+                      e.target.value as BacktestConfig["market_impact_model"],
+                  })
+                }
+                className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              >
+                {MARKET_IMPACT_MODEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-text-secondary mb-1">
+                Max Volume Participation (%)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                step={1}
+                value={config.max_volume_participation_pct ?? 5}
+                onChange={(e) =>
+                  setConfig({
+                    max_volume_participation_pct: parseFloat(e.target.value),
+                  })
+                }
+                className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              />
+            </div>
           </div>
 
           <div>

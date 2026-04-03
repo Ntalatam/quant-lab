@@ -235,6 +235,14 @@ export default function NewBacktestPage() {
                 { label: "Slippage",   value: `${config.slippage_bps ?? 5} bps` },
                 { label: "Commission", value: `$${config.commission_per_share ?? 0.005}/share` },
                 {
+                  label: "Impact",
+                  value: config.market_impact_model ?? "almgren_chriss",
+                },
+                {
+                  label: "Max Vol",
+                  value: `${config.max_volume_participation_pct ?? 5}%`,
+                },
+                {
                   label: "Construction",
                   value:
                     config.portfolio_construction_model ??

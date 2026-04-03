@@ -21,6 +21,11 @@ export const PAPER_INTERVAL_OPTIONS = [
   { value: "1d", label: "1 Day" },
 ] as const;
 
+export const MARKET_IMPACT_MODEL_OPTIONS = [
+  { value: "almgren_chriss", label: "Almgren-Chriss" },
+  { value: "constant", label: "Constant Slippage" },
+] as const;
+
 export const CATEGORY_LABELS: Record<string, string> = {
   trend_following: "Trend Following",
   mean_reversion: "Mean Reversion",

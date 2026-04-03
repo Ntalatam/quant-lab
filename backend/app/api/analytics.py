@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.backtest import BacktestRun
+from app.models.trade import TradeRecord
 from app.services.analytics import compute_monte_carlo, compute_all_metrics
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -254,6 +255,160 @@ async def capacity_analysis(
         "p90_adv_participation_pct": round(p90_participation, 4),
         "capacity_estimates": capacity_estimates,
         "trade_adv_stats": trade_stats[:20],  # top 20 most impactful
+    }
+
+
+@router.post("/tca/{backtest_id}")
+async def transaction_cost_analysis(
+    backtest_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    run_result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = run_result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    trades_result = await db.execute(
+        select(TradeRecord)
+        .where(TradeRecord.backtest_run_id == backtest_id)
+        .order_by(TradeRecord.entry_date.asc(), TradeRecord.ticker.asc())
+    )
+    trades = trades_result.scalars().all()
+    if not trades:
+        return {
+            "message": "No trades in this backtest",
+            "model": {},
+            "summary": {},
+            "ticker_breakdown": [],
+            "top_cost_trades": [],
+        }
+
+    def _fill_rate(trade: TradeRecord) -> float:
+        requested = trade.requested_shares or trade.shares
+        return (trade.shares / max(requested, 1)) * 100
+
+    summary = {
+        "total_trades": len(trades),
+        "total_commission": round(sum(trade.commission for trade in trades), 2),
+        "total_spread_cost": round(sum(trade.spread_cost for trade in trades), 2),
+        "total_market_impact_cost": round(
+            sum(trade.market_impact_cost for trade in trades), 2
+        ),
+        "total_timing_cost": round(sum(trade.timing_cost for trade in trades), 2),
+        "total_opportunity_cost": round(
+            sum(trade.opportunity_cost for trade in trades), 2
+        ),
+        "total_borrow_cost": round(sum(trade.borrow_cost for trade in trades), 2),
+        "total_locate_fees": round(sum(trade.locate_fee for trade in trades), 2),
+        "total_implementation_shortfall": round(
+            sum(trade.implementation_shortfall for trade in trades), 2
+        ),
+        "avg_fill_rate_pct": round(
+            float(np.mean([_fill_rate(trade) for trade in trades])), 2
+        ),
+        "avg_participation_rate_pct": round(
+            float(np.mean([trade.participation_rate_pct for trade in trades])), 3
+        ),
+        "p90_participation_rate_pct": round(
+            float(np.percentile([trade.participation_rate_pct for trade in trades], 90)), 3
+        ),
+        "cost_as_pct_of_initial_capital": round(
+            (
+                sum(trade.implementation_shortfall for trade in trades)
+                / max(run.initial_capital, 1e-8)
+            )
+            * 100,
+            3,
+        ),
+    }
+
+    ticker_map: dict[str, dict] = {}
+    for trade in trades:
+        row = ticker_map.setdefault(
+            trade.ticker,
+            {
+                "ticker": trade.ticker,
+                "trades": 0,
+                "total_commission": 0.0,
+                "total_spread_cost": 0.0,
+                "total_market_impact_cost": 0.0,
+                "total_timing_cost": 0.0,
+                "total_opportunity_cost": 0.0,
+                "total_implementation_shortfall": 0.0,
+                "fill_rates": [],
+                "participation_rates": [],
+            },
+        )
+        row["trades"] += 1
+        row["total_commission"] += trade.commission
+        row["total_spread_cost"] += trade.spread_cost
+        row["total_market_impact_cost"] += trade.market_impact_cost
+        row["total_timing_cost"] += trade.timing_cost
+        row["total_opportunity_cost"] += trade.opportunity_cost
+        row["total_implementation_shortfall"] += trade.implementation_shortfall
+        row["fill_rates"].append(_fill_rate(trade))
+        row["participation_rates"].append(trade.participation_rate_pct)
+
+    ticker_breakdown = []
+    for row in ticker_map.values():
+        ticker_breakdown.append(
+            {
+                "ticker": row["ticker"],
+                "trades": row["trades"],
+                "total_commission": round(row["total_commission"], 2),
+                "total_spread_cost": round(row["total_spread_cost"], 2),
+                "total_market_impact_cost": round(row["total_market_impact_cost"], 2),
+                "total_timing_cost": round(row["total_timing_cost"], 2),
+                "total_opportunity_cost": round(row["total_opportunity_cost"], 2),
+                "total_implementation_shortfall": round(
+                    row["total_implementation_shortfall"], 2
+                ),
+                "avg_fill_rate_pct": round(float(np.mean(row["fill_rates"])), 2),
+                "avg_participation_rate_pct": round(
+                    float(np.mean(row["participation_rates"])), 3
+                ),
+            }
+        )
+
+    ticker_breakdown.sort(
+        key=lambda row: row["total_implementation_shortfall"], reverse=True
+    )
+
+    top_cost_trades = [
+        {
+            "id": trade.id,
+            "ticker": trade.ticker,
+            "side": trade.side,
+            "position_direction": trade.position_direction,
+            "date": trade.exit_date or trade.entry_date,
+            "shares": trade.shares,
+            "requested_shares": trade.requested_shares,
+            "unfilled_shares": trade.unfilled_shares,
+            "commission": trade.commission,
+            "spread_cost": trade.spread_cost,
+            "market_impact_cost": trade.market_impact_cost,
+            "timing_cost": trade.timing_cost,
+            "opportunity_cost": trade.opportunity_cost,
+            "implementation_shortfall": trade.implementation_shortfall,
+            "fill_rate_pct": round(_fill_rate(trade), 2),
+            "participation_rate_pct": round(trade.participation_rate_pct, 3),
+            "risk_event": trade.risk_event,
+        }
+        for trade in sorted(
+            trades, key=lambda trade: trade.implementation_shortfall, reverse=True
+        )[:15]
+    ]
+
+    return {
+        "model": {
+            "market_impact_model": run.market_impact_model or "almgren_chriss",
+            "max_volume_participation_pct": run.max_volume_participation_pct or 5,
+            "slippage_bps": run.slippage_bps,
+            "commission_per_share": run.commission_per_share,
+        },
+        "summary": summary,
+        "ticker_breakdown": ticker_breakdown,
+        "top_cost_trades": top_cost_trades,
     }
 
 

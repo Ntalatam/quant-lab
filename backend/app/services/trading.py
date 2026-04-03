@@ -42,6 +42,8 @@ def execute_signals(
     max_short_position_pct: float | None = None,
     short_margin_requirement_pct: float = 50.0,
     short_locate_fee_bps: float = 0.0,
+    market_impact_model: str = "constant",
+    max_volume_participation: float = 0.05,
 ) -> list[SignalExecution]:
     """
     Execute strategy signals against the provided market bars.
@@ -185,6 +187,8 @@ def execute_signals(
             bar_volume=int(bar["volume"]),
             slippage_bps=slippage_bps,
             commission_per_share=commission_per_share,
+            market_impact_model=market_impact_model,
+            max_volume_participation=max_volume_participation,
         )
         if not fill.filled or fill.shares_filled <= 0:
             executions.append(
@@ -207,6 +211,12 @@ def execute_signals(
             commission=fill.commission,
             slippage_cost=fill.slippage_cost,
             trade_date=trade_date,
+            requested_shares=fill.requested_shares,
+            spread_cost=fill.spread_cost,
+            market_impact_cost=fill.market_impact_cost,
+            timing_cost=fill.timing_cost,
+            opportunity_cost=fill.opportunity_cost,
+            participation_rate_pct=fill.participation_rate_pct,
             allow_short_selling=allow_short_selling and signal_mode == "long_short",
             short_margin_requirement_pct=short_margin_requirement_pct,
             short_locate_fee_bps=short_locate_fee_bps,
@@ -224,6 +234,7 @@ def execute_signals(
             )
             continue
 
+        fully_executed = transaction.executed_shares == fill.requested_shares
         executions.append(
             SignalExecution(
                 ticker=ticker,
@@ -236,12 +247,10 @@ def execute_signals(
                 slippage_cost=transaction.slippage,
                 locate_fee=transaction.locate_fee,
                 borrow_cost=transaction.borrow_cost,
-                status="filled"
-                if transaction.executed_shares == fill.shares_filled
-                else "partial",
+                status="filled" if fully_executed else "partial",
                 reason="Executed successfully"
-                if transaction.executed_shares == fill.shares_filled
-                else "Executed partially due to cash or margin constraints",
+                if fully_executed
+                else "Executed partially due to volume, cash, or margin constraints",
             )
         )
 
@@ -259,6 +268,8 @@ def execute_target_weights(
     allow_short_selling: bool = False,
     short_margin_requirement_pct: float = 50.0,
     short_locate_fee_bps: float = 0.0,
+    market_impact_model: str = "constant",
+    max_volume_participation: float = 0.05,
 ) -> list[SignalExecution]:
     """
     Rebalance the portfolio to explicit target weights.
@@ -266,7 +277,7 @@ def execute_target_weights(
     The caller is responsible for applying any portfolio construction logic.
     This executor focuses on turning target weights into realistic fills.
     """
-    planned: list[tuple[str, float, str, int]] = []
+    planned: list[tuple[int, str, float, str, int]] = []
     executions: list[SignalExecution] = []
     tickers = set(target_weights) | set(portfolio.positions)
 
@@ -305,9 +316,7 @@ def execute_target_weights(
         current_shares = portfolio.positions[ticker].shares if ticker in portfolio.positions else 0
         target_value = portfolio.total_equity * target_weight
         target_shares = int(target_value / current_price)
-        share_delta = target_shares - current_shares
-
-        if share_delta == 0:
+        if target_shares == current_shares:
             executions.append(
                 SignalExecution(
                     ticker=ticker,
@@ -320,12 +329,23 @@ def execute_target_weights(
             )
             continue
 
+        if current_shares > 0 and target_shares < 0:
+            planned.append((0, ticker, 0.0, "SELL", current_shares))
+            planned.append((1, ticker, target_weight, "SELL", abs(target_shares)))
+            continue
+
+        if current_shares < 0 and target_shares > 0:
+            planned.append((0, ticker, 0.0, "BUY", abs(current_shares)))
+            planned.append((1, ticker, target_weight, "BUY", target_shares))
+            continue
+
+        share_delta = target_shares - current_shares
         action = "BUY" if share_delta > 0 else "SELL"
-        planned.append((ticker, target_weight, action, abs(share_delta)))
+        planned.append((2, ticker, target_weight, action, abs(share_delta)))
 
-    planned.sort(key=lambda item: (0 if item[2] == "SELL" else 1, -item[3]))
+    planned.sort(key=lambda item: (item[0], 0 if item[3] == "SELL" else 1, -item[4]))
 
-    for ticker, target_weight, action, requested_shares in planned:
+    for _, ticker, target_weight, action, requested_shares in planned:
         bar = current_bars[ticker]
         fill = simulate_fill(
             side=action,
@@ -337,6 +357,8 @@ def execute_target_weights(
             bar_volume=int(bar["volume"]),
             slippage_bps=slippage_bps,
             commission_per_share=commission_per_share,
+            market_impact_model=market_impact_model,
+            max_volume_participation=max_volume_participation,
         )
         if not fill.filled or fill.shares_filled <= 0:
             executions.append(
@@ -359,6 +381,12 @@ def execute_target_weights(
             commission=fill.commission,
             slippage_cost=fill.slippage_cost,
             trade_date=trade_date,
+            requested_shares=fill.requested_shares,
+            spread_cost=fill.spread_cost,
+            market_impact_cost=fill.market_impact_cost,
+            timing_cost=fill.timing_cost,
+            opportunity_cost=fill.opportunity_cost,
+            participation_rate_pct=fill.participation_rate_pct,
             allow_short_selling=allow_short_selling,
             short_margin_requirement_pct=short_margin_requirement_pct,
             short_locate_fee_bps=short_locate_fee_bps,
@@ -376,6 +404,7 @@ def execute_target_weights(
             )
             continue
 
+        fully_executed = transaction.executed_shares == fill.requested_shares
         executions.append(
             SignalExecution(
                 ticker=ticker,
@@ -388,12 +417,10 @@ def execute_target_weights(
                 slippage_cost=transaction.slippage,
                 locate_fee=transaction.locate_fee,
                 borrow_cost=transaction.borrow_cost,
-                status="filled"
-                if transaction.executed_shares == fill.shares_filled
-                else "partial",
                 reason="Executed successfully"
-                if transaction.executed_shares == fill.shares_filled
-                else "Executed partially due to cash or margin constraints",
+                if fully_executed
+                else "Executed partially due to volume, cash, or margin constraints",
+                status="filled" if fully_executed else "partial",
             )
         )
 

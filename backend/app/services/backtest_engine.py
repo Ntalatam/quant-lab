@@ -151,6 +151,8 @@ async def run_backtest(
                     bar_volume=int(bar["volume"]),
                     slippage_bps=config.slippage_bps,
                     commission_per_share=config.commission_per_share,
+                    market_impact_model=config.market_impact_model,
+                    max_volume_participation=config.max_volume_participation_pct / 100,
                 )
                 if not fill.filled or fill.shares_filled <= 0:
                     continue
@@ -163,6 +165,12 @@ async def run_backtest(
                     commission=fill.commission,
                     slippage_cost=fill.slippage_cost,
                     trade_date=current_dt,
+                    requested_shares=fill.requested_shares,
+                    spread_cost=fill.spread_cost,
+                    market_impact_cost=fill.market_impact_cost,
+                    timing_cost=fill.timing_cost,
+                    opportunity_cost=fill.opportunity_cost,
+                    participation_rate_pct=fill.participation_rate_pct,
                     risk_event="short_squeeze_cover",
                 )
 
@@ -218,6 +226,8 @@ async def run_backtest(
             allow_short_selling=config.allow_short_selling,
             short_margin_requirement_pct=config.short_margin_requirement_pct,
             short_locate_fee_bps=config.short_locate_fee_bps,
+            market_impact_model=config.market_impact_model,
+            max_volume_participation=config.max_volume_participation_pct / 100,
         )
         current_total_cost = _current_total_cost(portfolio)
         if current_total_cost != cumulative_cost:
@@ -308,11 +318,45 @@ async def run_backtest(
     total_slippage   = sum(t.slippage   for t in portfolio.trade_log if t.slippage)
     total_borrow_cost = portfolio.total_borrow_cost_paid
     total_locate_fees = portfolio.total_locate_fees_paid
+    total_spread_cost = sum(t.spread_cost for t in portfolio.trade_log if t.spread_cost)
+    total_market_impact_cost = sum(
+        t.market_impact_cost for t in portfolio.trade_log if t.market_impact_cost
+    )
+    total_timing_cost = sum(t.timing_cost for t in portfolio.trade_log if t.timing_cost)
+    total_opportunity_cost = sum(
+        t.opportunity_cost for t in portfolio.trade_log if t.opportunity_cost
+    )
     total_cost = total_commission + total_slippage + total_borrow_cost + total_locate_fees
+    implementation_shortfall = (
+        total_commission
+        + total_spread_cost
+        + total_market_impact_cost
+        + total_timing_cost
+        + total_opportunity_cost
+    )
+    fill_rates = [
+        (trade.shares / max(trade.requested_shares, 1)) * 100
+        for trade in portfolio.trade_log
+        if trade.requested_shares > 0
+    ]
+    participation_rates = [
+        trade.participation_rate_pct
+        for trade in portfolio.trade_log
+        if trade.participation_rate_pct > 0
+    ]
     metrics["total_commission"] = round(total_commission, 2)
     metrics["total_slippage"]   = round(total_slippage,   2)
     metrics["total_borrow_cost"] = round(total_borrow_cost, 2)
     metrics["total_locate_fees"] = round(total_locate_fees, 2)
+    metrics["total_spread_cost"] = round(total_spread_cost, 2)
+    metrics["total_market_impact_cost"] = round(total_market_impact_cost, 2)
+    metrics["total_timing_cost"] = round(total_timing_cost, 2)
+    metrics["total_opportunity_cost"] = round(total_opportunity_cost, 2)
+    metrics["total_implementation_shortfall"] = round(implementation_shortfall, 2)
+    metrics["avg_fill_rate_pct"] = round(float(np.mean(fill_rates)), 2) if fill_rates else 100.0
+    metrics["avg_participation_rate_pct"] = (
+        round(float(np.mean(participation_rates)), 3) if participation_rates else 0.0
+    )
     metrics["total_cost"]       = round(total_cost,       2)
     metrics["cost_drag_bps"]    = round(total_cost / config.initial_capital * 10_000, 1) if config.initial_capital else 0
     metrics["cost_drag_pct"]    = round(total_cost / config.initial_capital * 100,     3) if config.initial_capital else 0
@@ -406,10 +450,18 @@ def _trade_to_dict(trade) -> dict:
         "exit_date": trade.exit_date.isoformat() if trade.exit_date else None,
         "exit_price": trade.exit_price,
         "shares": trade.shares,
+        "requested_shares": trade.requested_shares,
+        "unfilled_shares": trade.unfilled_shares,
         "pnl": trade.pnl,
         "pnl_pct": trade.pnl_pct,
         "commission": trade.commission,
         "slippage": trade.slippage,
+        "spread_cost": trade.spread_cost,
+        "market_impact_cost": trade.market_impact_cost,
+        "timing_cost": trade.timing_cost,
+        "opportunity_cost": trade.opportunity_cost,
+        "participation_rate_pct": trade.participation_rate_pct,
+        "implementation_shortfall": trade.implementation_shortfall,
         "borrow_cost": trade.borrow_cost,
         "locate_fee": trade.locate_fee,
         "risk_event": trade.risk_event,

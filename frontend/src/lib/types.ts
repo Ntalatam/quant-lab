@@ -36,6 +36,8 @@ export interface BacktestConfig {
   initial_capital: number;
   slippage_bps: number;
   commission_per_share: number;
+  market_impact_model: "constant" | "almgren_chriss";
+  max_volume_participation_pct: number;
   position_sizing?:
     | "equal_weight"
     | "risk_parity"
@@ -124,6 +126,13 @@ export interface PerformanceMetrics {
   // Transaction cost metrics
   total_commission: number;
   total_slippage: number;
+  total_spread_cost: number;
+  total_market_impact_cost: number;
+  total_timing_cost: number;
+  total_opportunity_cost: number;
+  total_implementation_shortfall: number;
+  avg_fill_rate_pct: number;
+  avg_participation_rate_pct: number;
   total_borrow_cost: number;
   total_locate_fees: number;
   total_cost: number;
@@ -141,10 +150,18 @@ export interface Trade {
   exit_date: string | null;
   exit_price: number | null;
   shares: number;
+  requested_shares: number;
+  unfilled_shares: number;
   pnl: number | null;
   pnl_pct: number | null;
   commission: number;
   slippage: number;
+  spread_cost: number;
+  market_impact_cost: number;
+  timing_cost: number;
+  opportunity_cost: number;
+  participation_rate_pct: number;
+  implementation_shortfall: number;
   borrow_cost: number;
   locate_fee: number;
   risk_event: string | null;
@@ -187,6 +204,8 @@ export interface PaperTradingSessionCreate {
   initial_capital: number;
   slippage_bps: number;
   commission_per_share: number;
+  market_impact_model: "constant" | "almgren_chriss";
+  max_volume_participation_pct: number;
   portfolio_construction_model:
     | "equal_weight"
     | "risk_parity"
@@ -269,6 +288,8 @@ export interface PaperTradingSessionDetail extends PaperTradingSessionSummary {
   strategy_params: Record<string, number | string | boolean>;
   slippage_bps: number;
   commission_per_share: number;
+  market_impact_model: "constant" | "almgren_chriss";
+  max_volume_participation_pct: number;
   portfolio_construction_model:
     | "equal_weight"
     | "risk_parity"
@@ -332,6 +353,63 @@ export interface CapacityResult {
     notional: number;
     adv: number;
     adv_participation_pct: number;
+  }[];
+  message?: string;
+}
+
+// ---- Transaction Cost Analysis ----
+export interface TransactionCostAnalysisResult {
+  model: {
+    market_impact_model: string;
+    max_volume_participation_pct: number;
+    slippage_bps: number;
+    commission_per_share: number;
+  };
+  summary: {
+    total_trades: number;
+    total_commission: number;
+    total_spread_cost: number;
+    total_market_impact_cost: number;
+    total_timing_cost: number;
+    total_opportunity_cost: number;
+    total_borrow_cost: number;
+    total_locate_fees: number;
+    total_implementation_shortfall: number;
+    avg_fill_rate_pct: number;
+    avg_participation_rate_pct: number;
+    p90_participation_rate_pct: number;
+    cost_as_pct_of_initial_capital: number;
+  };
+  ticker_breakdown: {
+    ticker: string;
+    trades: number;
+    total_commission: number;
+    total_spread_cost: number;
+    total_market_impact_cost: number;
+    total_timing_cost: number;
+    total_opportunity_cost: number;
+    total_implementation_shortfall: number;
+    avg_fill_rate_pct: number;
+    avg_participation_rate_pct: number;
+  }[];
+  top_cost_trades: {
+    id: string;
+    ticker: string;
+    side: string;
+    position_direction: string;
+    date: string;
+    shares: number;
+    requested_shares: number;
+    unfilled_shares: number;
+    commission: number;
+    spread_cost: number;
+    market_impact_cost: number;
+    timing_cost: number;
+    opportunity_cost: number;
+    implementation_shortfall: number;
+    fill_rate_pct: number;
+    participation_rate_pct: number;
+    risk_event?: string | null;
   }[];
   message?: string;
 }

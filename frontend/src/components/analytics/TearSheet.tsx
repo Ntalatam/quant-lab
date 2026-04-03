@@ -8,6 +8,7 @@ import { TradeLog } from "./TradeLog";
 import { FactorExposure } from "./FactorExposure";
 import { RegimeAnalysis } from "./RegimeAnalysis";
 import { CapacityAnalysis } from "./CapacityAnalysis";
+import { TransactionCostAnalysis } from "./TransactionCostAnalysis";
 import { NotesEditor } from "./NotesEditor";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
@@ -273,11 +274,14 @@ export function TearSheet({ result }: TearSheetProps) {
                   <p className="text-[10px] text-text-muted">{m.cost_drag_bps ?? 0} bps total drag</p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
                   { label: "Commission", value: m.total_commission ?? 0, color: "var(--color-accent-yellow)" },
-                  { label: "Slippage",   value: m.total_slippage ?? 0,   color: "var(--color-accent-red)"    },
-                  { label: "Total Cost", value: m.total_cost ?? 0,       color: "var(--color-accent-red)"    },
+                  { label: "Spread", value: m.total_spread_cost ?? 0, color: "var(--color-accent-yellow)" },
+                  { label: "Impact", value: m.total_market_impact_cost ?? 0, color: "var(--color-accent-blue)" },
+                  { label: "Timing", value: m.total_timing_cost ?? 0, color: "var(--color-accent-purple)" },
+                  { label: "Opportunity", value: m.total_opportunity_cost ?? 0, color: "var(--color-accent-red)" },
+                  { label: "Shortfall", value: m.total_implementation_shortfall ?? 0, color: "var(--color-accent-red)" },
                 ].map(({ label, value, color }) => (
                   <div
                     key={label}
@@ -404,6 +408,7 @@ export function TearSheet({ result }: TearSheetProps) {
           </div>
 
           <NotesEditor backtestId={result.id} initialNotes={result.notes ?? ""} />
+          <TransactionCostAnalysis backtestId={result.id} />
           <RegimeAnalysis backtestId={result.id} />
           <CapacityAnalysis backtestId={result.id} />
           <FactorExposure backtestId={result.id} />
@@ -432,6 +437,8 @@ export function TearSheet({ result }: TearSheetProps) {
                   ["Capital",     formatCurrency(result.config.initial_capital)],
                   ["Slippage",    `${result.config.slippage_bps} bps`],
                   ["Commission",  `$${result.config.commission_per_share}/share`],
+                  ["Impact Model", result.config.market_impact_model ?? "almgren_chriss"],
+                  ["Max Volume", `${result.config.max_volume_participation_pct ?? 5}%`],
                   [
                     "Construction",
                     result.config.portfolio_construction_model ??

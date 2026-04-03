@@ -129,8 +129,20 @@ def compute_all_metrics(
         "beta": round(beta, 3),
         "correlation": round(correlation, 3),
         "tracking_error_pct": round(tracking_error * 100, 2),
+        "total_commission": 0,
+        "total_slippage": 0,
+        "total_spread_cost": 0,
+        "total_market_impact_cost": 0,
+        "total_timing_cost": 0,
+        "total_opportunity_cost": 0,
+        "total_implementation_shortfall": 0,
+        "avg_fill_rate_pct": 0,
+        "avg_participation_rate_pct": 0,
         "total_borrow_cost": 0,
         "total_locate_fees": 0,
+        "total_cost": 0,
+        "cost_drag_bps": 0,
+        "cost_drag_pct": 0,
     }
 
 
@@ -249,6 +261,11 @@ def _empty_metrics() -> dict:
             "max_net_exposure_pct", "avg_short_exposure_pct",
             "max_short_exposure_pct", "alpha", "beta", "correlation",
             "tracking_error_pct", "avg_turnover_pct", "max_turnover_pct",
-            "total_borrow_cost", "total_locate_fees",
+            "total_commission", "total_slippage", "total_spread_cost",
+            "total_market_impact_cost", "total_timing_cost",
+            "total_opportunity_cost", "total_implementation_shortfall",
+            "avg_fill_rate_pct", "avg_participation_rate_pct",
+            "total_borrow_cost", "total_locate_fees", "total_cost",
+            "cost_drag_bps", "cost_drag_pct",
         ]
     }

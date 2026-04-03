@@ -11,6 +11,8 @@ class BacktestConfig(BaseModel):
     initial_capital: float = 100_000
     slippage_bps: float = 5.0
     commission_per_share: float = 0.005
+    market_impact_model: str = "almgren_chriss"
+    max_volume_participation_pct: float = 5.0
     position_sizing: str = "equal_weight"
     portfolio_construction_model: str = "equal_weight"
     portfolio_lookback_days: int = 63

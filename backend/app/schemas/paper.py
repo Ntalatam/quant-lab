@@ -20,6 +20,8 @@ class PaperTradingSessionCreate(BaseModel):
     initial_capital: float = Field(default=100_000, gt=0)
     slippage_bps: float = Field(default=5.0, ge=0, le=100)
     commission_per_share: float = Field(default=0.005, ge=0, le=5)
+    market_impact_model: str = Field(default="almgren_chriss")
+    max_volume_participation_pct: float = Field(default=5.0, gt=0, le=100)
     portfolio_construction_model: str = Field(default="equal_weight")
     portfolio_lookback_days: int = Field(default=63, ge=20, le=252)
     max_position_pct: float = Field(default=25.0, gt=0, le=100)
@@ -129,6 +131,8 @@ class PaperTradingSessionDetail(PaperTradingSessionSummary):
     strategy_params: dict
     slippage_bps: float
     commission_per_share: float
+    market_impact_model: str
+    max_volume_participation_pct: float
     portfolio_construction_model: str
     portfolio_lookback_days: int
     max_position_pct: float
