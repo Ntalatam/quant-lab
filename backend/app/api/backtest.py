@@ -9,6 +9,7 @@ POST   /api/backtest/sweep     — Parameter sensitivity sweep
 """
 
 import json
+import time
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, delete
@@ -17,17 +18,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
+from app.observability import elapsed_ms, get_logger
 from app.schemas.backtest import BacktestConfig, BacktestSweepConfig, BacktestSweep2DConfig, BayesOptConfig
 from app.services.backtest_engine import run_backtest
 from app.services.walk_forward import run_walk_forward
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
+logger = get_logger(__name__)
 
 
 @router.post("/run")
 async def execute_backtest(
     config: BacktestConfig, db: AsyncSession = Depends(get_db)
 ):
+    start_time = time.perf_counter()
+    log = logger.bind(
+        strategy_id=config.strategy_id,
+        tickers=config.tickers,
+        benchmark=config.benchmark,
+    )
     try:
         result = await run_backtest(db, config)
 
@@ -103,11 +112,27 @@ async def execute_backtest(
             db.add(tr)
 
         await db.commit()
+        log.info(
+            "backtest.persisted",
+            duration_ms=elapsed_ms(start_time),
+            backtest_id=result["id"],
+            trade_count=len(result["trades"]),
+        )
         return result
 
     except ValueError as e:
+        log.warning(
+            "backtest.rejected",
+            duration_ms=elapsed_ms(start_time),
+            error=str(e),
+        )
         raise HTTPException(400, str(e))
     except Exception as e:
+        log.exception(
+            "backtest.request_failed",
+            duration_ms=elapsed_ms(start_time),
+            error=str(e),
+        )
         raise HTTPException(500, f"Backtest failed: {str(e)}")
 
 

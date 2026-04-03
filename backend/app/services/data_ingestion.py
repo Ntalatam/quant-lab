@@ -5,6 +5,8 @@ Fetches OHLCV data from yfinance, validates it, and stores it in PostgreSQL.
 Implements gap-fill logic to avoid redundant API calls for already-loaded data.
 """
 
+import time
+
 import yfinance as yf
 import pandas as pd
 from datetime import date, timedelta
@@ -14,6 +16,9 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.price_data import PriceData
+from app.observability import elapsed_ms, get_logger
+
+logger = get_logger(__name__)
 
 
 async def ensure_data_loaded(
@@ -27,6 +32,12 @@ async def ensure_data_loaded(
     Fetches from yfinance only for missing ranges.
     Returns True if data is available, False if fetch failed.
     """
+    start_time = time.perf_counter()
+    log = logger.bind(
+        ticker=ticker,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+    )
     existing = await db.execute(
         select(PriceData.date)
         .where(
@@ -45,9 +56,16 @@ async def ensure_data_loaded(
         expected = {d.date() for d in all_days}
         missing = expected - existing_dates
         if len(missing) / max(len(expected), 1) < 0.05:
+            log.debug(
+                "market_data.cache_hit",
+                duration_ms=elapsed_ms(start_time),
+                loaded_days=len(existing_dates),
+                expected_days=len(expected),
+            )
             return True
 
     try:
+        fetch_start = time.perf_counter()
         df = yf.download(
             ticker,
             start=start_date.isoformat(),
@@ -56,6 +74,10 @@ async def ensure_data_loaded(
             progress=False,
         )
         if df.empty:
+            log.warning(
+                "market_data.fetch_empty",
+                duration_ms=elapsed_ms(fetch_start),
+            )
             return False
 
         # Flatten MultiIndex columns (happens with single ticker in newer yfinance)
@@ -64,6 +86,10 @@ async def ensure_data_loaded(
 
         df = df.dropna(subset=["Close"])
         if len(df) == 0:
+            log.warning(
+                "market_data.fetch_empty_after_cleaning",
+                duration_ms=elapsed_ms(fetch_start),
+            )
             return False
 
         records = []
@@ -102,10 +128,20 @@ async def ensure_data_loaded(
                 await db.execute(stmt)
             await db.commit()
 
+        log.info(
+            "market_data.fetch_completed",
+            duration_ms=elapsed_ms(fetch_start),
+            rows=len(records),
+            source="yfinance",
+        )
         return True
 
     except Exception as e:
-        print(f"Failed to fetch data for {ticker}: {e}")
+        log.exception(
+            "market_data.fetch_failed",
+            duration_ms=elapsed_ms(start_time),
+            error=str(e),
+        )
         return False
 
 
@@ -119,6 +155,7 @@ async def get_price_dataframe(
     Retrieve OHLCV data from the database as a pandas DataFrame.
     Indexed by date, sorted ascending.
     """
+    start_time = time.perf_counter()
     result = await db.execute(
         select(PriceData)
         .where(
@@ -149,4 +186,12 @@ async def get_price_dataframe(
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date").sort_index()
+    logger.debug(
+        "market_data.frame_loaded",
+        ticker=ticker,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        rows=len(df),
+        duration_ms=elapsed_ms(start_time),
+    )
     return df

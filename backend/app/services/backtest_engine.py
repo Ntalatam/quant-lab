@@ -7,6 +7,7 @@ the current bar (no lookahead bias).
 """
 
 import uuid
+import time
 
 import numpy as np
 import pandas as pd
@@ -28,11 +29,13 @@ from app.services.portfolio_optimizer import (
 from app.services.strategy_registry import get_strategy_class
 from app.services.trading import execute_target_weights
 from app.schemas.backtest import BacktestConfig
+from app.observability import elapsed_ms, get_logger
 
 
 from typing import Callable, Awaitable
 
 ProgressCallback = Callable[[int, int, str, float], Awaitable[None]]
+logger = get_logger(__name__)
 
 
 async def run_backtest(
@@ -46,10 +49,24 @@ async def run_backtest(
         on_progress: optional async callback(bar_num, total_bars, date_str, equity)
                      called every ~1% of bars processed.
     """
+    start_time = time.perf_counter()
+    log = logger.bind(
+        strategy_id=config.strategy_id,
+        tickers=config.tickers,
+        benchmark=config.benchmark,
+        rebalance_frequency=config.rebalance_frequency,
+        construction_model=config.portfolio_construction_model,
+    )
+    log.info(
+        "backtest.started",
+        initial_capital=config.initial_capital,
+        allow_short_selling=config.allow_short_selling,
+    )
     start = date.fromisoformat(config.start_date)
     end = date.fromisoformat(config.end_date)
 
     # 1. Ensure data is loaded
+    data_load_start = time.perf_counter()
     all_tickers = list(set(config.tickers + [config.benchmark]))
     for ticker in all_tickers:
         loaded = await ensure_data_loaded(db, ticker, start, end)
@@ -84,6 +101,13 @@ async def run_backtest(
     portfolio = Portfolio(initial_capital=config.initial_capital)
 
     rebalance_dates = _get_rebalance_dates(all_dates, config.rebalance_frequency)
+    log.info(
+        "backtest.market_data_ready",
+        duration_ms=elapsed_ms(data_load_start),
+        universe_size=len(config.tickers),
+        total_bars=len(all_dates),
+        rebalance_events=len(rebalance_dates),
+    )
 
     # 5. Main simulation loop
     cumulative_cost = 0.0        # running total of trading + borrow costs paid
@@ -190,7 +214,15 @@ async def run_backtest(
             continue
 
         # 6. Get signals from strategy
-        signals = strategy.generate_signals(data_window, current_date)
+        try:
+            signals = strategy.generate_signals(data_window, current_date)
+        except Exception:
+            log.exception(
+                "backtest.strategy_error",
+                bar=bar_num,
+                date=current_dt.isoformat(),
+            )
+            raise
         for ticker in forced_cover_tickers:
             if ticker in signals:
                 signals[ticker] = 0.0
@@ -384,7 +416,17 @@ async def run_backtest(
         "trades": trades_list,
         "monthly_returns": monthly,
     }
-    return _sanitize(result)
+    sanitized = _sanitize(result)
+    log.info(
+        "backtest.completed",
+        duration_ms=elapsed_ms(start_time),
+        backtest_id=backtest_id,
+        total_trades=len(trades_list),
+        total_return_pct=metrics.get("total_return_pct"),
+        sharpe_ratio=metrics.get("sharpe_ratio"),
+        max_drawdown_pct=metrics.get("max_drawdown_pct"),
+    )
+    return sanitized
 
 
 def _get_rebalance_dates(all_dates, frequency: str) -> set:

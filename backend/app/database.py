@@ -1,11 +1,15 @@
+import time
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
+from app.observability import elapsed_ms, get_logger
 
 engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_size=10)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+logger = get_logger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -62,13 +66,22 @@ _MIGRATIONS = [
 
 
 async def init_db():
+    start_time = time.perf_counter()
+    attempted_migrations = 0
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         for stmt in _MIGRATIONS:
             try:
                 await conn.execute(text(stmt))
+                attempted_migrations += 1
             except Exception:
                 pass  # column already exists or table not yet created
+    logger.info(
+        "database.initialized",
+        duration_ms=elapsed_ms(start_time),
+        migration_statements=len(_MIGRATIONS),
+        attempted_migrations=attempted_migrations,
+    )
 
 
 async def get_db():

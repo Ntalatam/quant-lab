@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -31,8 +32,10 @@ from app.services.portfolio_optimizer import (
 from app.services.portfolio import Portfolio, Position
 from app.services.strategy_registry import get_strategy_class
 from app.services.trading import execute_target_weights
+from app.observability import elapsed_ms, get_logger
 
 NO_MARKET_DATA_ERROR = "No live market data was returned."
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -97,6 +100,7 @@ class PaperTradingManager:
         self._subscribers: dict[str, set[WebSocket]] = {}
 
     async def resume_active_sessions(self):
+        logger.info("paper_trading.resume_active_sessions.started")
         async with self._session_factory() as db:
             result = await db.execute(
                 select(PaperTradingSession).where(PaperTradingSession.status == "active")
@@ -105,12 +109,27 @@ class PaperTradingManager:
 
         for session in sessions:
             await self.start_session(session.id, emit_status=False)
+        logger.info(
+            "paper_trading.resume_active_sessions.completed",
+            resumed_sessions=len(sessions),
+        )
 
     async def shutdown(self):
+        logger.info(
+            "paper_trading.shutdown.started",
+            active_runtimes=len(self._runtimes),
+        )
         for session_id in list(self._runtimes.keys()):
             await self._cancel_task(session_id)
+        logger.info("paper_trading.shutdown.completed")
 
     async def create_session(self, payload: PaperTradingSessionCreate) -> PaperTradingSessionDetail:
+        log = logger.bind(
+            session_name=payload.name,
+            strategy_id=payload.strategy_id,
+            tickers=payload.tickers,
+        )
+        log.info("paper_trading.session_create.started")
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow()
         strategy_cls = get_strategy_class(payload.strategy_id)
@@ -177,6 +196,7 @@ class PaperTradingManager:
         if payload.start_immediately:
             await self.start_session(session_id)
 
+        log.info("paper_trading.session_create.completed", session_id=session_id)
         return await self.get_session_detail(session_id)
 
     async def list_sessions(self) -> list[PaperTradingSessionSummary]:
@@ -192,6 +212,7 @@ class PaperTradingManager:
             return await self._load_detail(db, session_id)
 
     async def start_session(self, session_id: str, emit_status: bool = True):
+        logger.info("paper_trading.session_start.started", session_id=session_id)
         async with self._session_factory() as db:
             session = await db.get(PaperTradingSession, session_id)
             if not session:
@@ -223,8 +244,10 @@ class PaperTradingManager:
 
         await self._ensure_runtime_task(session_id)
         await self.broadcast_snapshot(session_id)
+        logger.info("paper_trading.session_start.completed", session_id=session_id)
 
     async def pause_session(self, session_id: str):
+        logger.info("paper_trading.session_pause.started", session_id=session_id)
         async with self._session_factory() as db:
             session = await db.get(PaperTradingSession, session_id)
             if not session:
@@ -247,8 +270,10 @@ class PaperTradingManager:
 
         await self._cancel_task(session_id)
         await self.broadcast_snapshot(session_id)
+        logger.info("paper_trading.session_pause.completed", session_id=session_id)
 
     async def stop_session(self, session_id: str):
+        logger.info("paper_trading.session_stop.started", session_id=session_id)
         async with self._session_factory() as db:
             session = await db.get(PaperTradingSession, session_id)
             if not session:
@@ -272,6 +297,7 @@ class PaperTradingManager:
 
         await self._cancel_task(session_id)
         await self.broadcast_snapshot(session_id)
+        logger.info("paper_trading.session_stop.completed", session_id=session_id)
 
     async def subscribe(self, session_id: str, websocket: WebSocket):
         self._subscribers.setdefault(session_id, set()).add(websocket)
@@ -363,10 +389,12 @@ class PaperTradingManager:
 
     async def _run_session(self, session_id: str):
         runtime = await self._load_runtime(session_id)
+        log = logger.bind(session_id=session_id)
 
         while True:
             try:
                 async with self._session_factory() as db:
+                    poll_start = time.perf_counter()
                     session = await db.get(PaperTradingSession, session_id)
                     if not session or session.status != "active":
                         return
@@ -394,6 +422,12 @@ class PaperTradingManager:
                             )
                         await db.commit()
                         await self.broadcast_snapshot(session_id)
+                        log.warning(
+                            "paper_trading.poll.no_market_data",
+                            duration_ms=elapsed_ms(poll_start),
+                            tickers=session.tickers,
+                            interval=session.bar_interval,
+                        )
                         await asyncio.sleep(session.polling_interval_seconds)
                         continue
 
@@ -512,7 +546,16 @@ class PaperTradingManager:
                         runtime.last_processed_bar is None
                         or current_ts > runtime.last_processed_bar
                     ):
-                        signals = runtime.strategy.generate_signals(signal_windows, current_ts)
+                        try:
+                            signals = runtime.strategy.generate_signals(
+                                signal_windows, current_ts
+                            )
+                        except Exception:
+                            log.exception(
+                                "paper_trading.strategy_error",
+                                timestamp=current_ts.isoformat(),
+                            )
+                            raise
                         for ticker in forced_cover_tickers:
                             if ticker in signals:
                                 signals[ticker] = 0.0
@@ -584,12 +627,20 @@ class PaperTradingManager:
                     )
                     await db.commit()
 
+                    log.info(
+                        "paper_trading.poll.completed",
+                        duration_ms=elapsed_ms(poll_start),
+                        tickers=len(session.tickers),
+                        positions=len(runtime.portfolio.positions),
+                        total_equity=round(runtime.portfolio.total_equity, 2),
+                    )
                     await self.broadcast_snapshot(session_id)
                     await asyncio.sleep(session.polling_interval_seconds)
 
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                log.exception("paper_trading.runtime_failed", error=str(exc))
                 async with self._session_factory() as db:
                     session = await db.get(PaperTradingSession, session_id)
                     if session:
@@ -614,11 +665,18 @@ class PaperTradingManager:
     async def _fetch_price_frames(
         self, tickers: list[str], interval: str
     ) -> dict[str, pd.DataFrame]:
+        start_time = time.perf_counter()
         results = await asyncio.gather(
             *[
                 asyncio.to_thread(self._download_ticker_history, ticker, interval)
                 for ticker in tickers
             ]
+        )
+        logger.debug(
+            "paper_trading.market_data_loaded",
+            tickers=tickers,
+            interval=interval,
+            duration_ms=elapsed_ms(start_time),
         )
         return dict(zip(tickers, results, strict=True))
 
@@ -632,6 +690,12 @@ class PaperTradingManager:
             prepost=False,
         )
         return _normalize_history(df)
+
+    def health_summary(self) -> dict[str, int]:
+        return {
+            "runtime_sessions": len(self._runtimes),
+            "subscriber_channels": len(self._subscribers),
+        }
 
     async def _sync_session_state(
         self,
