@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Keyboard,
   X,
+  RadioTower,
 } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
@@ -30,6 +31,7 @@ const NAV_SECTIONS = [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/backtest", label: "New Backtest", icon: Play },
       { href: "/results", label: "Results", icon: BarChart3 },
+      { href: "/paper", label: "Paper Trading", icon: RadioTower },
     ],
   },
   {

@@ -12,6 +12,14 @@ export const REBALANCE_OPTIONS = [
   { value: "monthly", label: "Monthly" },
 ] as const;
 
+export const PAPER_INTERVAL_OPTIONS = [
+  { value: "1m", label: "1 Minute" },
+  { value: "5m", label: "5 Minutes" },
+  { value: "15m", label: "15 Minutes" },
+  { value: "1h", label: "1 Hour" },
+  { value: "1d", label: "1 Day" },
+] as const;
+
 export const CATEGORY_LABELS: Record<string, string> = {
   trend_following: "Trend Following",
   mean_reversion: "Mean Reversion",

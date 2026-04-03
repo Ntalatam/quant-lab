@@ -133,6 +133,95 @@ export interface BacktestSummary {
   created_at: string;
 }
 
+// ---- Paper Trading ----
+export type PaperSessionStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "stopped"
+  | "error";
+
+export type PaperBarInterval = "1m" | "5m" | "15m" | "1h" | "1d";
+
+export interface PaperTradingSessionCreate {
+  name: string;
+  strategy_id: string;
+  params: Record<string, number | string | boolean>;
+  tickers: string[];
+  benchmark: string;
+  initial_capital: number;
+  slippage_bps: number;
+  commission_per_share: number;
+  max_position_pct: number;
+  bar_interval: PaperBarInterval;
+  polling_interval_seconds: number;
+  start_immediately: boolean;
+}
+
+export interface PaperTradingSessionSummary {
+  id: string;
+  name: string;
+  status: PaperSessionStatus;
+  strategy_id: string;
+  tickers: string[];
+  bar_interval: PaperBarInterval;
+  polling_interval_seconds: number;
+  initial_capital: number;
+  cash: number;
+  market_value: number;
+  total_equity: number;
+  total_return_pct: number;
+  created_at: string;
+  started_at: string | null;
+  stopped_at: string | null;
+  last_price_at: string | null;
+  last_heartbeat_at: string | null;
+  last_error: string | null;
+}
+
+export interface PaperTradingPosition {
+  ticker: string;
+  shares: number;
+  avg_cost: number;
+  entry_date: string | null;
+  current_price: number;
+  market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  updated_at: string | null;
+}
+
+export interface PaperTradingEvent {
+  id: string;
+  timestamp: string;
+  event_type: "status" | "signal" | "fill" | "error";
+  ticker: string | null;
+  action: string;
+  signal: number | null;
+  shares: number | null;
+  fill_price: number | null;
+  status: string;
+  message: string;
+}
+
+export interface PaperTradingEquityPoint {
+  timestamp: string;
+  equity: number;
+  cash: number;
+  market_value: number;
+}
+
+export interface PaperTradingSessionDetail extends PaperTradingSessionSummary {
+  benchmark: string;
+  strategy_params: Record<string, number | string | boolean>;
+  slippage_bps: number;
+  commission_per_share: number;
+  max_position_pct: number;
+  positions: PaperTradingPosition[];
+  recent_events: PaperTradingEvent[];
+  equity_curve: PaperTradingEquityPoint[];
+}
+
 // ---- Comparison ----
 export interface ComparisonResult {
   backtests: {

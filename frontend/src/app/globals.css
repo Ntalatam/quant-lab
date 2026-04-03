@@ -16,8 +16,8 @@
   --color-accent-blue: #4488ff;
   --color-accent-yellow: #ffbb33;
   --color-accent-purple: #8855ff;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Avenir Next", "Segoe UI", "SF Pro Display", system-ui, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 }
 
 html {

@@ -88,6 +88,9 @@ export function TearSheet({ result }: TearSheetProps) {
       setTimeout(() => setCopied(false), 2000);
     });
   };
+  const paperLaunchHref = `/paper?config=${encodeURIComponent(
+    btoa(JSON.stringify(result.config))
+  )}`;
   const m = result.metrics;
   const bm = result.benchmark_metrics;
   const { data: allBacktests } = useBacktestList();
@@ -172,6 +175,14 @@ export function TearSheet({ result }: TearSheetProps) {
           >
             <SlidersHorizontal size={11} />
             Optimize
+          </Link>
+          <Link
+            href={paperLaunchHref}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-green transition-colors px-3 py-1.5 rounded"
+            style={{ border: "1px solid var(--color-border)" }}
+          >
+            <Link2 size={11} />
+            Go Live Paper
           </Link>
           <Link
             href={`/backtest/${result.id}/walkforward`}

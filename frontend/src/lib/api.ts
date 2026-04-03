@@ -8,6 +8,9 @@ import type {
   ComparisonResult,
   FactorExposureResult,
   MonteCarloResult,
+  PaperTradingSessionCreate,
+  PaperTradingSessionDetail,
+  PaperTradingSessionSummary,
   PortfolioBlendResult,
   RegimeAnalysisResult,
   StrategyInfo,
@@ -97,6 +100,36 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify({ notes }),
     });
+  }
+
+  // Paper trading
+  async listPaperSessions(): Promise<PaperTradingSessionSummary[]> {
+    return this.request("/paper/sessions");
+  }
+
+  async createPaperSession(
+    payload: PaperTradingSessionCreate
+  ): Promise<PaperTradingSessionDetail> {
+    return this.request("/paper/sessions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getPaperSession(id: string): Promise<PaperTradingSessionDetail> {
+    return this.request(`/paper/sessions/${id}`);
+  }
+
+  async startPaperSession(id: string): Promise<PaperTradingSessionDetail> {
+    return this.request(`/paper/sessions/${id}/start`, { method: "POST" });
+  }
+
+  async pausePaperSession(id: string): Promise<PaperTradingSessionDetail> {
+    return this.request(`/paper/sessions/${id}/pause`, { method: "POST" });
+  }
+
+  async stopPaperSession(id: string): Promise<PaperTradingSessionDetail> {
+    return this.request(`/paper/sessions/${id}/stop`, { method: "POST" });
   }
 
   // Strategies

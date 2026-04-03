@@ -14,7 +14,6 @@ from datetime import date, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.portfolio import Portfolio
-from app.services.execution import simulate_fill
 from app.services.analytics import (
     compute_all_metrics,
     compute_monthly_returns,
@@ -22,6 +21,7 @@ from app.services.analytics import (
 )
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 from app.services.strategy_registry import get_strategy_class
+from app.services.trading import execute_signals
 from app.schemas.backtest import BacktestConfig
 
 
@@ -121,82 +121,21 @@ async def run_backtest(
         signals = strategy.generate_signals(data_window, current_date)
 
         # 7. Process signals into orders and execute
-        for ticker, signal in signals.items():
-            if ticker not in current_bars:
+        executions = execute_signals(
+            portfolio=portfolio,
+            signals=signals,
+            current_bars=current_bars,
+            current_prices=current_prices,
+            max_position_pct=config.max_position_pct,
+            slippage_bps=config.slippage_bps,
+            commission_per_share=config.commission_per_share,
+            trade_date=current_dt,
+        )
+        for execution in executions:
+            if execution.status != "filled":
                 continue
-
-            bar = current_bars[ticker]
-
-            if signal > 0:  # BUY
-                target_value = portfolio.total_equity * min(
-                    signal, config.max_position_pct / 100
-                )
-                existing_value = 0
-                if ticker in portfolio.positions:
-                    existing_value = portfolio.positions[ticker].market_value
-                buy_value = target_value - existing_value
-                if buy_value <= 0:
-                    continue
-
-                shares = int(buy_value / current_prices[ticker])
-                if shares <= 0:
-                    continue
-
-                fill = simulate_fill(
-                    side="BUY",
-                    shares=shares,
-                    bar_open=float(bar["open"]),
-                    bar_high=float(bar["high"]),
-                    bar_low=float(bar["low"]),
-                    bar_close=float(bar["close"]),
-                    bar_volume=int(bar["volume"]),
-                    slippage_bps=config.slippage_bps,
-                    commission_per_share=config.commission_per_share,
-                )
-                if fill.filled:
-                    portfolio.execute_buy(
-                        ticker,
-                        fill.shares_filled,
-                        fill.fill_price,
-                        fill.commission,
-                        fill.slippage_cost,
-                        current_dt,
-                    )
-                    cumulative_cost += fill.commission + fill.slippage_cost
-                    cost_by_date[current_dt.isoformat()] = cumulative_cost
-
-            elif signal < 0:  # SELL
-                if ticker not in portfolio.positions:
-                    continue
-                shares = portfolio.positions[ticker].shares
-                if abs(signal) < 1:
-                    shares = int(shares * abs(signal))
-
-                if shares <= 0:
-                    continue
-
-                fill = simulate_fill(
-                    side="SELL",
-                    shares=shares,
-                    bar_open=float(bar["open"]),
-                    bar_high=float(bar["high"]),
-                    bar_low=float(bar["low"]),
-                    bar_close=float(bar["close"]),
-                    bar_volume=int(bar["volume"]),
-                    slippage_bps=config.slippage_bps,
-                    commission_per_share=config.commission_per_share,
-                )
-                if fill.filled:
-                    portfolio.execute_sell(
-                        ticker,
-                        fill.shares_filled,
-                        fill.fill_price,
-                        fill.commission,
-                        fill.slippage_cost,
-                        current_dt,
-                    )
-                    cumulative_cost += fill.commission + fill.slippage_cost
-                    cost_by_date[current_dt.isoformat()] = cumulative_cost
+            cumulative_cost += execution.total_cost
+            cost_by_date[current_dt.isoformat()] = cumulative_cost
 
     # 8. Build equity curve + clean equity (no transaction costs)
     equity_curve = [
