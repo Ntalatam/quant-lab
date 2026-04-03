@@ -344,6 +344,19 @@ export default function PaperTradingSessionPage({
               ["Slippage", `${session.slippage_bps} bps`],
               ["Commission", `$${session.commission_per_share}/share`],
               ["Max Position", `${session.max_position_pct}%`],
+              ["Shorting", session.allow_short_selling ? "Enabled" : "Disabled"],
+              ...(session.allow_short_selling
+                ? [
+                    ["Max Short", `${session.max_short_position_pct}%`],
+                    ["Margin", `${session.short_margin_requirement_pct}%`],
+                    ["Borrow", `${session.short_borrow_rate_bps} bps/year`],
+                    ["Locate", `${session.short_locate_fee_bps} bps/entry`],
+                    [
+                      "Squeeze",
+                      `${session.short_squeeze_threshold_pct}% adverse move`,
+                    ],
+                  ]
+                : []),
               ["Created", formatDate(session.created_at)],
               ["Started", formatTimestamp(session.started_at)],
               ["Heartbeat", formatTimestamp(session.last_heartbeat_at)],
@@ -409,7 +422,7 @@ export default function PaperTradingSessionPage({
               <table className="w-full text-xs font-mono">
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    {["Ticker", "Shares", "Avg", "Last", "Value", "Unrealized"].map(
+                    {["Ticker", "Side", "Shares", "Avg", "Last", "Value", "Unrealized"].map(
                       (header, index) => (
                         <th
                           key={header}
@@ -434,8 +447,17 @@ export default function PaperTradingSessionPage({
                       <td className="py-2 px-2 text-text-secondary">
                         {position.ticker}
                       </td>
+                      <td
+                        className={`py-2 px-2 text-right ${
+                          position.shares < 0
+                            ? "text-accent-yellow"
+                            : "text-accent-green"
+                        }`}
+                      >
+                        {position.shares < 0 ? "SHORT" : "LONG"}
+                      </td>
                       <td className="py-2 px-2 text-right text-text-primary">
-                        {position.shares}
+                        {Math.abs(position.shares)}
                       </td>
                       <td className="py-2 px-2 text-right text-text-primary">
                         ${position.avg_cost.toFixed(2)}
@@ -457,6 +479,16 @@ export default function PaperTradingSessionPage({
                         <div className="text-[10px] opacity-80">
                           {formatPercent(position.unrealized_pnl_pct)}
                         </div>
+                        {(position.accrued_borrow_cost > 0 ||
+                          position.accrued_locate_fee > 0) && (
+                          <div className="text-[10px] opacity-70">
+                            Carry $
+                            {(
+                              position.accrued_borrow_cost +
+                              position.accrued_locate_fee
+                            ).toFixed(2)}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

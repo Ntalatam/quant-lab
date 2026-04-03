@@ -24,6 +24,12 @@ function defaultDraft(): PaperTradingSessionCreate {
     slippage_bps: 5,
     commission_per_share: 0.005,
     max_position_pct: 25,
+    allow_short_selling: false,
+    max_short_position_pct: 25,
+    short_margin_requirement_pct: 50,
+    short_borrow_rate_bps: 200,
+    short_locate_fee_bps: 10,
+    short_squeeze_threshold_pct: 15,
     bar_interval: "1m",
     polling_interval_seconds: 60,
     start_immediately: true,
@@ -79,6 +85,22 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
           prefillConfig.commission_per_share ?? draft.commission_per_share,
         max_position_pct:
           prefillConfig.max_position_pct ?? draft.max_position_pct,
+        allow_short_selling:
+          strategy.requires_short_selling
+            ? true
+            : prefillConfig.allow_short_selling ?? draft.allow_short_selling,
+        max_short_position_pct:
+          prefillConfig.max_short_position_pct ?? draft.max_short_position_pct,
+        short_margin_requirement_pct:
+          prefillConfig.short_margin_requirement_pct ??
+          draft.short_margin_requirement_pct,
+        short_borrow_rate_bps:
+          prefillConfig.short_borrow_rate_bps ?? draft.short_borrow_rate_bps,
+        short_locate_fee_bps:
+          prefillConfig.short_locate_fee_bps ?? draft.short_locate_fee_bps,
+        short_squeeze_threshold_pct:
+          prefillConfig.short_squeeze_threshold_pct ??
+          draft.short_squeeze_threshold_pct,
       };
     }
 
@@ -88,6 +110,7 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
       strategy_id: strategy.id,
       name: `${strategy.name} Live Session`,
       params: buildParamDefaults(strategy),
+      allow_short_selling: strategy.requires_short_selling,
     };
   }, [draft, prefillConfig, strategies]);
 
@@ -109,6 +132,19 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
     isFiniteNumber(effectiveDraft.max_position_pct) &&
     effectiveDraft.max_position_pct > 0 &&
     effectiveDraft.max_position_pct <= 100 &&
+    (!effectiveDraft.allow_short_selling ||
+      (isFiniteNumber(effectiveDraft.max_short_position_pct) &&
+        effectiveDraft.max_short_position_pct > 0 &&
+        effectiveDraft.max_short_position_pct <= 100 &&
+        isFiniteNumber(effectiveDraft.short_margin_requirement_pct) &&
+        effectiveDraft.short_margin_requirement_pct >= 0 &&
+        effectiveDraft.short_margin_requirement_pct <= 100 &&
+        isFiniteNumber(effectiveDraft.short_borrow_rate_bps) &&
+        effectiveDraft.short_borrow_rate_bps >= 0 &&
+        isFiniteNumber(effectiveDraft.short_locate_fee_bps) &&
+        effectiveDraft.short_locate_fee_bps >= 0 &&
+        isFiniteNumber(effectiveDraft.short_squeeze_threshold_pct) &&
+        effectiveDraft.short_squeeze_threshold_pct >= 1)) &&
     Number.isInteger(effectiveDraft.polling_interval_seconds) &&
     effectiveDraft.polling_interval_seconds >= 15;
 
@@ -125,6 +161,9 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
           ? `${strategy.name} Live Session`
           : effectiveDraft.name,
       params: buildParamDefaults(strategy),
+      allow_short_selling: strategy.requires_short_selling
+        ? true
+        : effectiveDraft.allow_short_selling,
     });
   };
 
@@ -202,9 +241,39 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
             ))}
           </select>
           {selectedStrategy && (
-            <p className="text-xs text-text-muted mt-1">
-              {selectedStrategy.description}
-            </p>
+            <div className="mt-1 space-y-1">
+              <p className="text-xs text-text-muted">
+                {selectedStrategy.description}
+              </p>
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider">
+                <span
+                  className="px-2 py-0.5 rounded border"
+                  style={{
+                    borderColor:
+                      selectedStrategy.signal_mode === "long_short"
+                        ? "rgba(255,187,51,0.25)"
+                        : "rgba(68,136,255,0.25)",
+                    color:
+                      selectedStrategy.signal_mode === "long_short"
+                        ? "var(--color-accent-yellow)"
+                        : "var(--color-accent-blue)",
+                    background:
+                      selectedStrategy.signal_mode === "long_short"
+                        ? "rgba(255,187,51,0.08)"
+                        : "rgba(68,136,255,0.08)",
+                  }}
+                >
+                  {selectedStrategy.signal_mode === "long_short"
+                    ? "Long / Short"
+                    : "Long Only"}
+                </span>
+                {selectedStrategy.requires_short_selling && (
+                  <span className="text-accent-yellow">
+                    Requires short selling
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
@@ -479,6 +548,148 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
                 }
                 className="w-full accent-accent-blue"
               />
+            </div>
+
+            <div
+              className="rounded p-3 space-y-3"
+              style={{
+                background: "rgba(255,187,51,0.04)",
+                border: "1px solid rgba(255,187,51,0.14)",
+              }}
+            >
+              <label className="flex items-center justify-between gap-3 text-xs text-text-secondary">
+                <span>Enable Short Selling</span>
+                <input
+                  type="checkbox"
+                  checked={effectiveDraft.allow_short_selling}
+                  disabled={selectedStrategy?.requires_short_selling}
+                  onChange={(event) =>
+                    setDraft({
+                      ...effectiveDraft,
+                      allow_short_selling: event.target.checked,
+                    })
+                  }
+                  className="accent-accent-yellow"
+                />
+              </label>
+              <p className="text-[10px] text-text-muted leading-relaxed">
+                {selectedStrategy?.requires_short_selling
+                  ? "This strategy opens explicit short positions, so paper trading must allow short selling."
+                  : "Enable short entries, borrow carry, locate fees, and squeeze protection for long/short strategies."}
+              </p>
+
+              {effectiveDraft.allow_short_selling && (
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs text-text-secondary">
+                        Max Short Position (%)
+                      </label>
+                      <span className="text-xs font-mono text-text-primary">
+                        {effectiveDraft.max_short_position_pct}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={5}
+                      max={100}
+                      step={5}
+                      value={effectiveDraft.max_short_position_pct}
+                      onChange={(event) =>
+                        setDraft({
+                          ...effectiveDraft,
+                          max_short_position_pct: parseInt(event.target.value, 10),
+                        })
+                      }
+                      className="w-full accent-accent-yellow"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">
+                      Margin Requirement (%)
+                    </label>
+                    <input
+                      type="number"
+                      step={1}
+                      value={effectiveDraft.short_margin_requirement_pct}
+                      onChange={(event) => {
+                        const nextValue = Number(event.target.value);
+                        if (!Number.isNaN(nextValue)) {
+                          setDraft({
+                            ...effectiveDraft,
+                            short_margin_requirement_pct: nextValue,
+                          });
+                        }
+                      }}
+                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">
+                      Borrow Rate (bps / year)
+                    </label>
+                    <input
+                      type="number"
+                      step={5}
+                      value={effectiveDraft.short_borrow_rate_bps}
+                      onChange={(event) => {
+                        const nextValue = Number(event.target.value);
+                        if (!Number.isNaN(nextValue)) {
+                          setDraft({
+                            ...effectiveDraft,
+                            short_borrow_rate_bps: nextValue,
+                          });
+                        }
+                      }}
+                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">
+                      Locate Fee (bps / entry)
+                    </label>
+                    <input
+                      type="number"
+                      step={1}
+                      value={effectiveDraft.short_locate_fee_bps}
+                      onChange={(event) => {
+                        const nextValue = Number(event.target.value);
+                        if (!Number.isNaN(nextValue)) {
+                          setDraft({
+                            ...effectiveDraft,
+                            short_locate_fee_bps: nextValue,
+                          });
+                        }
+                      }}
+                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">
+                      Squeeze Threshold (% adverse move)
+                    </label>
+                    <input
+                      type="number"
+                      step={1}
+                      value={effectiveDraft.short_squeeze_threshold_pct}
+                      onChange={(event) => {
+                        const nextValue = Number(event.target.value);
+                        if (!Number.isNaN(nextValue)) {
+                          setDraft({
+                            ...effectiveDraft,
+                            short_squeeze_threshold_pct: nextValue,
+                          });
+                        }
+                      }}
+                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </details>

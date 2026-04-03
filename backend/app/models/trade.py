@@ -13,6 +13,7 @@ class TradeRecord(Base):
     )
     ticker: Mapped[str] = mapped_column(String(10))
     side: Mapped[str] = mapped_column(String(4))
+    position_direction: Mapped[str] = mapped_column(String(10), default="LONG")
     entry_date: Mapped[str] = mapped_column(String(10))
     entry_price: Mapped[float] = mapped_column(Float)
     exit_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -22,5 +23,8 @@ class TradeRecord(Base):
     pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     commission: Mapped[float] = mapped_column(Float)
     slippage: Mapped[float] = mapped_column(Float)
+    borrow_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    locate_fee: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_event: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     backtest_run: Mapped["BacktestRun"] = relationship(back_populates="trades")

@@ -72,3 +72,40 @@ class TestExecuteSignals:
 
         assert executions[0].status == "skipped"
         assert executions[0].reason.startswith("Signal did not increase exposure")
+
+    def test_long_short_signal_opens_short_position(self):
+        portfolio = Portfolio(initial_capital=100_000)
+        executions = execute_signals(
+            portfolio=portfolio,
+            signals={"AAPL": -0.25},
+            current_bars={"AAPL": _bar(100)},
+            current_prices={"AAPL": 100},
+            max_position_pct=50,
+            slippage_bps=0,
+            commission_per_share=0,
+            trade_date=date(2024, 1, 2),
+            signal_mode="long_short",
+            allow_short_selling=True,
+            max_short_position_pct=30,
+            short_margin_requirement_pct=50,
+            short_locate_fee_bps=0,
+        )
+
+        assert executions[0].status == "filled"
+        assert portfolio.positions["AAPL"].shares < 0
+
+    def test_negative_signal_in_long_only_mode_does_not_open_short(self):
+        portfolio = Portfolio(initial_capital=100_000)
+        executions = execute_signals(
+            portfolio=portfolio,
+            signals={"AAPL": -1.0},
+            current_bars={"AAPL": _bar(100)},
+            current_prices={"AAPL": 100},
+            max_position_pct=50,
+            slippage_bps=0,
+            commission_per_share=0,
+            trade_date=date(2024, 1, 2),
+        )
+
+        assert executions[0].status == "skipped"
+        assert "AAPL" not in portfolio.positions

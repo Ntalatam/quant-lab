@@ -236,6 +236,19 @@ export default function NewBacktestPage() {
                 { label: "Commission", value: `$${config.commission_per_share ?? 0.005}/share` },
                 { label: "Rebalance",  value: config.rebalance_frequency || "daily" },
                 { label: "Max Pos",    value: `${config.max_position_pct ?? 25}%` },
+                { label: "Shorting",   value: config.allow_short_selling ? "Enabled" : "Disabled" },
+                ...(config.allow_short_selling
+                  ? [
+                      {
+                        label: "Max Short",
+                        value: `${config.max_short_position_pct ?? 25}%`,
+                      },
+                      {
+                        label: "Borrow",
+                        value: `${config.short_borrow_rate_bps ?? 200} bps/yr`,
+                      },
+                    ]
+                  : []),
               ].map(({ label, value }) => (
                 <div
                   key={label}

@@ -82,6 +82,80 @@ class TestPortfolio:
         p.update_prices({"AAPL": 150.0}, date(2024, 1, 2))
         assert p.exposure_pct > 0
 
+    def test_short_sale_increases_cash_and_creates_negative_shares(self):
+        p = Portfolio(initial_capital=100_000)
+        result = p.apply_transaction(
+            ticker="AAPL",
+            side="SELL",
+            shares=100,
+            fill_price=100.0,
+            commission=0.0,
+            slippage_cost=0.0,
+            trade_date=date(2024, 1, 2),
+            allow_short_selling=True,
+        )
+        assert result.executed_shares == 100
+        assert p.cash > 100_000
+        assert p.positions["AAPL"].shares == -100
+
+    def test_buy_to_cover_realizes_short_profit(self):
+        p = Portfolio(initial_capital=100_000)
+        p.apply_transaction(
+            ticker="AAPL",
+            side="SELL",
+            shares=100,
+            fill_price=100.0,
+            commission=0.0,
+            slippage_cost=0.0,
+            trade_date=date(2024, 1, 2),
+            allow_short_selling=True,
+        )
+        p.update_prices({"AAPL": 90.0}, date(2024, 1, 3))
+        p.apply_transaction(
+            ticker="AAPL",
+            side="BUY",
+            shares=100,
+            fill_price=90.0,
+            commission=0.0,
+            slippage_cost=0.0,
+            trade_date=date(2024, 1, 3),
+        )
+        assert "AAPL" not in p.positions
+        assert p.trade_log[-1].position_direction == "SHORT"
+        assert p.trade_log[-1].pnl is not None
+        assert p.trade_log[-1].pnl > 0
+
+    def test_short_borrow_cost_accrues_daily(self):
+        p = Portfolio(initial_capital=100_000)
+        p.apply_transaction(
+            ticker="AAPL",
+            side="SELL",
+            shares=100,
+            fill_price=100.0,
+            commission=0.0,
+            slippage_cost=0.0,
+            trade_date=date(2024, 1, 2),
+            allow_short_selling=True,
+        )
+        p.update_prices({"AAPL": 100.0}, date(2024, 1, 2))
+        p.update_prices({"AAPL": 100.0}, date(2024, 1, 5), short_borrow_rate_bps=365)
+        assert p.total_borrow_cost_paid > 0
+        assert p.positions["AAPL"].accrued_borrow_cost > 0
+
+    def test_short_squeeze_candidates_detect_adverse_move(self):
+        p = Portfolio(initial_capital=100_000)
+        p.apply_transaction(
+            ticker="AAPL",
+            side="SELL",
+            shares=100,
+            fill_price=100.0,
+            commission=0.0,
+            slippage_cost=0.0,
+            trade_date=date(2024, 1, 2),
+            allow_short_selling=True,
+        )
+        assert p.get_short_squeeze_candidates({"AAPL": 120.0}, 15) == ["AAPL"]
+
 
 class TestPosition:
     def test_market_value(self):

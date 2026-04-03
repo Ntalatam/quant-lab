@@ -2,9 +2,15 @@
 Abstract base class for all trading strategies.
 
 Signal convention:
-  Positive float (0 to 1): BUY with that fraction as target portfolio weight
-  Negative float (-1 to 0): SELL that fraction of existing position
-  0: HOLD / no action
+  long_only mode:
+    Positive float (0 to 1): BUY with that fraction as target portfolio weight
+    Negative float (-1 to 0): SELL that fraction of existing long position
+    0: HOLD / no action
+
+  long_short mode:
+    Positive float (0 to 1): target long portfolio weight
+    Negative float (-1 to 0): target short portfolio weight
+    0: target flat / no action
 """
 
 from abc import ABC, abstractmethod
@@ -18,6 +24,8 @@ class BaseStrategy(ABC):
     category: str = "other"
     default_params: dict = {}
     param_schema: list[dict] = []
+    signal_mode: str = "long_only"
+    requires_short_selling: bool = False
 
     @abstractmethod
     def generate_signals(

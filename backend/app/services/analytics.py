@@ -119,24 +119,30 @@ def compute_all_metrics(
         "worst_trade_pct": 0,
         "avg_exposure_pct": 0,
         "max_exposure_pct": 0,
+        "avg_net_exposure_pct": 0,
+        "max_net_exposure_pct": 0,
+        "avg_short_exposure_pct": 0,
+        "max_short_exposure_pct": 0,
         "alpha": round(alpha * 100, 3),
         "beta": round(beta, 3),
         "correlation": round(correlation, 3),
         "tracking_error_pct": round(tracking_error * 100, 2),
+        "total_borrow_cost": 0,
+        "total_locate_fees": 0,
     }
 
 
 def compute_trade_statistics(trade_log: list[dict]) -> dict:
     """Compute trade-level statistics from the trade log."""
-    sells = [t for t in trade_log if t.get("side") == "SELL" and t.get("pnl") is not None]
-    if not sells:
+    closed_trades = [t for t in trade_log if t.get("pnl") is not None]
+    if not closed_trades:
         return {"total_trades": 0, "win_rate_pct": 0, "avg_holding_period_days": 0}
 
-    wins = [t for t in sells if t["pnl"] > 0]
-    losses = [t for t in sells if t["pnl"] <= 0]
+    wins = [t for t in closed_trades if t["pnl"] > 0]
+    losses = [t for t in closed_trades if t["pnl"] <= 0]
 
     holding_periods = []
-    for t in sells:
+    for t in closed_trades:
         if t.get("entry_date") and t.get("exit_date"):
             try:
                 entry = pd.Timestamp(t["entry_date"])
@@ -146,16 +152,16 @@ def compute_trade_statistics(trade_log: list[dict]) -> dict:
                 pass
 
     return {
-        "total_trades": len(sells),
-        "win_rate_pct": round(len(wins) / len(sells) * 100, 2),
+        "total_trades": len(closed_trades),
+        "win_rate_pct": round(len(wins) / len(closed_trades) * 100, 2),
         "avg_win_pct": round(
             np.mean([t["pnl_pct"] for t in wins]), 3
         ) if wins else 0,
         "avg_loss_pct": round(
             np.mean([t["pnl_pct"] for t in losses]), 3
         ) if losses else 0,
-        "best_trade_pct": round(max(t["pnl_pct"] for t in sells), 3),
-        "worst_trade_pct": round(min(t["pnl_pct"] for t in sells), 3),
+        "best_trade_pct": round(max(t["pnl_pct"] for t in closed_trades), 3),
+        "worst_trade_pct": round(min(t["pnl_pct"] for t in closed_trades), 3),
         "profit_factor": round(
             sum(t["pnl"] for t in wins) / abs(sum(t["pnl"] for t in losses)), 3
         ) if losses and sum(t["pnl"] for t in losses) != 0 else 9999,
@@ -237,7 +243,9 @@ def _empty_metrics() -> dict:
             "skewness", "kurtosis", "total_trades", "win_rate_pct",
             "avg_win_pct", "avg_loss_pct", "profit_factor",
             "avg_holding_period_days", "best_trade_pct", "worst_trade_pct",
-            "avg_exposure_pct", "max_exposure_pct", "alpha", "beta",
-            "correlation", "tracking_error_pct",
+            "avg_exposure_pct", "max_exposure_pct", "avg_net_exposure_pct",
+            "max_net_exposure_pct", "avg_short_exposure_pct",
+            "max_short_exposure_pct", "alpha", "beta", "correlation",
+            "tracking_error_pct", "total_borrow_cost", "total_locate_fees",
         ]
     }

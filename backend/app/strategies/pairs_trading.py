@@ -20,6 +20,8 @@ class PairsTrading(BaseStrategy):
         "spread diverges beyond a z-score threshold."
     )
     category = "statistical_arbitrage"
+    signal_mode = "long_short"
+    requires_short_selling = True
     default_params = {
         "lookback": 60,
         "entry_z": 2.0,

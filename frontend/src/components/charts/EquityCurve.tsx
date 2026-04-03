@@ -29,6 +29,31 @@ interface LegendData {
   clean: number | null;
 }
 
+function tradeLabel(trade: Trade) {
+  if (trade.position_direction === "SHORT") {
+    return trade.side === "SELL" ? "Short" : "Cover";
+  }
+  return trade.side === "BUY" ? "Buy" : "Sell";
+}
+
+function tradeColor(trade: Trade) {
+  if (trade.position_direction === "SHORT") {
+    return trade.side === "SELL" ? CHART_COLORS.yellow : CHART_COLORS.blue;
+  }
+  return trade.side === "BUY" ? CHART_COLORS.positive : CHART_COLORS.negative;
+}
+
+function tradeBorder(trade: Trade) {
+  if (trade.position_direction === "SHORT") {
+    return trade.side === "SELL"
+      ? "rgba(255,187,51,0.3)"
+      : "rgba(68,136,255,0.3)";
+  }
+  return trade.side === "BUY"
+    ? "rgba(0,212,170,0.3)"
+    : "rgba(255,68,102,0.3)";
+}
+
 function ChartLegend({
   legend,
   initialCapital,
@@ -122,18 +147,12 @@ function TradePanel({ trade, onClose }: TradePanelProps) {
           <span
             className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded"
             style={{
-              background:
-                trade.side === "BUY"
-                  ? "rgba(0,212,170,0.15)"
-                  : "rgba(255,68,102,0.15)",
-              color:
-                trade.side === "BUY"
-                  ? CHART_COLORS.positive
-                  : CHART_COLORS.negative,
-              border: `1px solid ${trade.side === "BUY" ? "rgba(0,212,170,0.3)" : "rgba(255,68,102,0.3)"}`,
+              background: `${tradeColor(trade)}22`,
+              color: tradeColor(trade),
+              border: `1px solid ${tradeBorder(trade)}`,
             }}
           >
-            {trade.side}
+            {tradeLabel(trade)}
           </span>
           <span className="font-mono font-semibold text-text-primary text-sm">
             {trade.ticker}
@@ -173,6 +192,14 @@ function TradePanel({ trade, onClose }: TradePanelProps) {
             label: "Slippage",
             value: `$${(trade.slippage ?? 0).toFixed(2)}`,
           },
+          {
+            label: "Borrow Cost",
+            value: `$${(trade.borrow_cost ?? 0).toFixed(2)}`,
+          },
+          {
+            label: "Locate Fee",
+            value: `$${(trade.locate_fee ?? 0).toFixed(2)}`,
+          },
         ].map(({ label, value }) => (
           <div key={label} className="flex justify-between text-xs">
             <span className="text-text-muted">{label}</span>
@@ -205,6 +232,11 @@ function TradePanel({ trade, onClose }: TradePanelProps) {
                 {formatPercent(trade.pnl_pct, 2)}
               </p>
             )}
+          </div>
+        )}
+        {trade.risk_event && (
+          <div className="rounded p-2 text-[10px] text-accent-yellow bg-accent-yellow/8 border border-accent-yellow/15">
+            {trade.risk_event.replace(/_/g, " ")}
           </div>
         )}
       </div>
@@ -288,7 +320,7 @@ export function EquityCurve({
             markers.push({
               time: toTime(t.entry_date),
               position: "belowBar",
-              color: CHART_COLORS.positive,
+              color: tradeColor(t),
               shape: "arrowUp",
               text: "",
               size: 0.8,
@@ -298,7 +330,7 @@ export function EquityCurve({
             markers.push({
               time: toTime(t.exit_date),
               position: "aboveBar",
-              color: CHART_COLORS.negative,
+              color: tradeColor(t),
               shape: "arrowDown",
               text: "",
               size: 0.8,
@@ -430,7 +462,7 @@ export function EquityCurve({
               ▲
             </span>
             <span className="text-[10px] text-text-muted">
-              Entry (BUY)
+              Long entry
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -438,7 +470,23 @@ export function EquityCurve({
               ▼
             </span>
             <span className="text-[10px] text-text-muted">
-              Exit (SELL)
+              Long exit
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span style={{ color: CHART_COLORS.yellow, fontSize: 14 }}>
+              ▲
+            </span>
+            <span className="text-[10px] text-text-muted">
+              Short entry
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span style={{ color: CHART_COLORS.blue, fontSize: 14 }}>
+              ▼
+            </span>
+            <span className="text-[10px] text-text-muted">
+              Cover
             </span>
           </div>
           <span className="text-[10px] text-text-muted">

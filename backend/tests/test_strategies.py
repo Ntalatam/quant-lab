@@ -7,6 +7,7 @@ import pytest
 from app.strategies.sma_crossover import SMACrossover
 from app.strategies.mean_reversion import MeanReversion
 from app.strategies.momentum import MomentumStrategy
+from app.strategies.market_neutral_momentum import MarketNeutralMomentum
 from app.strategies.pairs_trading import PairsTrading
 
 
@@ -117,3 +118,24 @@ class TestPairsTrading:
         # With correlated prices, z-score should be near 0
         assert signals["AAPL"] == 0.0
         assert signals["MSFT"] == 0.0
+
+
+class TestMarketNeutralMomentum:
+    def test_generates_long_and_short_books(self):
+        data = {
+            "AAPL": _make_df([100.0 + i for i in range(180)]),
+            "MSFT": _make_df([100.0 + i * 0.6 for i in range(180)]),
+            "GLD": _make_df([100.0 - i * 0.2 for i in range(180)]),
+            "TLT": _make_df([100.0 - i * 0.4 for i in range(180)]),
+        }
+
+        strategy = MarketNeutralMomentum(
+            lookback_days=60,
+            long_n=1,
+            short_n=1,
+            gross_exposure=1.0,
+        )
+        signals = strategy.generate_signals(data, data["AAPL"].index[-1])
+
+        assert any(signal > 0 for signal in signals.values())
+        assert any(signal < 0 for signal in signals.values())

@@ -23,6 +23,7 @@ from app.schemas.paper import (
     PaperTradingSessionDetail,
     PaperTradingSessionSummary,
 )
+from app.services.execution import simulate_fill
 from app.services.portfolio import Portfolio, Position
 from app.services.strategy_registry import get_strategy_class
 from app.services.trading import execute_signals
@@ -108,7 +109,9 @@ class PaperTradingManager:
     async def create_session(self, payload: PaperTradingSessionCreate) -> PaperTradingSessionDetail:
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow()
-        get_strategy_class(payload.strategy_id)
+        strategy_cls = get_strategy_class(payload.strategy_id)
+        if strategy_cls.requires_short_selling and not payload.allow_short_selling:
+            raise ValueError(f"{strategy_cls.name} requires short selling to be enabled.")
 
         async with self._session_factory() as db:
             session = PaperTradingSession(
@@ -125,6 +128,12 @@ class PaperTradingManager:
                 slippage_bps=payload.slippage_bps,
                 commission_per_share=payload.commission_per_share,
                 max_position_pct=payload.max_position_pct,
+                allow_short_selling=payload.allow_short_selling,
+                max_short_position_pct=payload.max_short_position_pct,
+                short_margin_requirement_pct=payload.short_margin_requirement_pct,
+                short_borrow_rate_bps=payload.short_borrow_rate_bps,
+                short_locate_fee_bps=payload.short_locate_fee_bps,
+                short_squeeze_threshold_pct=payload.short_squeeze_threshold_pct,
                 cash=payload.initial_capital,
                 market_value=0.0,
                 total_equity=payload.initial_capital,
@@ -176,6 +185,9 @@ class PaperTradingManager:
             session = await db.get(PaperTradingSession, session_id)
             if not session:
                 raise ValueError("Paper trading session not found")
+            strategy_cls = get_strategy_class(session.strategy_id)
+            if strategy_cls.requires_short_selling and not session.allow_short_selling:
+                raise ValueError(f"{strategy_cls.name} requires short selling to be enabled.")
 
             status_changed = session.status != "active"
             session.status = "active"
@@ -330,6 +342,8 @@ class PaperTradingManager:
                     avg_cost=row.avg_cost,
                     entry_date=row.entry_date.date(),
                     current_price=row.current_price,
+                    accrued_borrow_cost=row.accrued_borrow_cost,
+                    accrued_locate_fee=row.accrued_locate_fee,
                 )
             if session.last_price_at is not None:
                 runtime.last_processed_bar = pd.Timestamp(session.last_price_at)
@@ -398,7 +412,18 @@ class PaperTradingManager:
                     if runtime.portfolio is None or runtime.strategy is None:
                         raise RuntimeError("Paper trading runtime was not initialized.")
 
-                    runtime.portfolio.update_prices(current_prices, current_dt.date())
+                    forced_cover_tickers = (
+                        runtime.portfolio.get_short_squeeze_candidates(
+                            current_prices, session.short_squeeze_threshold_pct
+                        )
+                        if session.allow_short_selling
+                        else []
+                    )
+                    runtime.portfolio.update_prices(
+                        current_prices,
+                        current_dt.date(),
+                        short_borrow_rate_bps=session.short_borrow_rate_bps,
+                    )
                     runtime.portfolio.equity_history = runtime.portfolio.equity_history[-500:]
                     if session.last_error == NO_MARKET_DATA_ERROR:
                         session.last_error = None
@@ -414,11 +439,64 @@ class PaperTradingManager:
                             )
                         )
 
+                    if forced_cover_tickers:
+                        for ticker in forced_cover_tickers:
+                            if ticker not in runtime.portfolio.positions:
+                                continue
+                            position = runtime.portfolio.positions[ticker]
+                            if position.shares >= 0 or ticker not in execution_bars:
+                                continue
+
+                            fill = simulate_fill(
+                                side="BUY",
+                                shares=abs(position.shares),
+                                bar_open=float(execution_bars[ticker]["open"]),
+                                bar_high=float(execution_bars[ticker]["high"]),
+                                bar_low=float(execution_bars[ticker]["low"]),
+                                bar_close=float(execution_bars[ticker]["close"]),
+                                bar_volume=int(execution_bars[ticker]["volume"]),
+                                slippage_bps=session.slippage_bps,
+                                commission_per_share=session.commission_per_share,
+                            )
+                            if not fill.filled or fill.shares_filled <= 0:
+                                continue
+
+                            transaction = runtime.portfolio.apply_transaction(
+                                ticker=ticker,
+                                side="BUY",
+                                shares=fill.shares_filled,
+                                fill_price=fill.fill_price,
+                                commission=fill.commission,
+                                slippage_cost=fill.slippage_cost,
+                                trade_date=current_dt.date(),
+                                risk_event="short_squeeze_cover",
+                            )
+                            if transaction.executed_shares <= 0:
+                                continue
+
+                            db.add(
+                                PaperTradingEvent(
+                                    id=str(uuid.uuid4()),
+                                    session_id=session_id,
+                                    timestamp=current_dt,
+                                    event_type="fill",
+                                    ticker=ticker,
+                                    action="buy",
+                                    shares=transaction.executed_shares,
+                                    fill_price=fill.fill_price,
+                                    status="risk",
+                                    message="Forced buy-to-cover after the short squeeze threshold was breached.",
+                                )
+                            )
+
                     if (
                         runtime.last_processed_bar is None
                         or current_ts > runtime.last_processed_bar
                     ):
                         signals = runtime.strategy.generate_signals(signal_windows, current_ts)
+                        for ticker in forced_cover_tickers:
+                            if ticker in signals:
+                                signals[ticker] = 0.0
                         executions = execute_signals(
                             portfolio=runtime.portfolio,
                             signals=signals,
@@ -428,6 +506,11 @@ class PaperTradingManager:
                             slippage_bps=session.slippage_bps,
                             commission_per_share=session.commission_per_share,
                             trade_date=current_dt.date(),
+                            signal_mode=runtime.strategy.signal_mode,
+                            allow_short_selling=session.allow_short_selling,
+                            max_short_position_pct=session.max_short_position_pct,
+                            short_margin_requirement_pct=session.short_margin_requirement_pct,
+                            short_locate_fee_bps=session.short_locate_fee_bps,
                         )
                         runtime.last_processed_bar = current_ts
                         session.last_signal_at = datetime.utcnow()
@@ -574,6 +657,8 @@ class PaperTradingManager:
                     market_value=position.market_value,
                     unrealized_pnl=position.unrealized_pnl,
                     unrealized_pnl_pct=position.unrealized_pnl_pct,
+                    accrued_borrow_cost=position.accrued_borrow_cost,
+                    accrued_locate_fee=position.accrued_locate_fee,
                 )
                 db.add(row)
                 continue
@@ -584,6 +669,8 @@ class PaperTradingManager:
             row.market_value = position.market_value
             row.unrealized_pnl = position.unrealized_pnl
             row.unrealized_pnl_pct = position.unrealized_pnl_pct
+            row.accrued_borrow_cost = position.accrued_borrow_cost
+            row.accrued_locate_fee = position.accrued_locate_fee
             row.updated_at = datetime.utcnow()
 
     async def _load_detail(
@@ -621,6 +708,12 @@ class PaperTradingManager:
             slippage_bps=session.slippage_bps,
             commission_per_share=session.commission_per_share,
             max_position_pct=session.max_position_pct,
+            allow_short_selling=session.allow_short_selling,
+            max_short_position_pct=session.max_short_position_pct,
+            short_margin_requirement_pct=session.short_margin_requirement_pct,
+            short_borrow_rate_bps=session.short_borrow_rate_bps,
+            short_locate_fee_bps=session.short_locate_fee_bps,
+            short_squeeze_threshold_pct=session.short_squeeze_threshold_pct,
             positions=[
                 {
                     "ticker": row.ticker,
@@ -631,6 +724,8 @@ class PaperTradingManager:
                     "market_value": row.market_value,
                     "unrealized_pnl": row.unrealized_pnl,
                     "unrealized_pnl_pct": row.unrealized_pnl_pct,
+                    "accrued_borrow_cost": row.accrued_borrow_cost,
+                    "accrued_locate_fee": row.accrued_locate_fee,
                     "updated_at": row.updated_at,
                 }
                 for row in positions

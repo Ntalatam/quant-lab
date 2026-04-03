@@ -65,6 +65,32 @@ DEMO_BACKTESTS = [
         max_position_pct=80,
         rebalance_frequency="daily",
     ),
+    BacktestConfig(
+        strategy_id="market_neutral_momentum",
+        params={
+            "lookback_days": 120,
+            "skip_days": 5,
+            "long_n": 2,
+            "short_n": 2,
+            "gross_exposure": 1.0,
+        },
+        tickers=["SPY", "AAPL", "MSFT", "GLD"],
+        benchmark="SPY",
+        start_date=DEMO_START,
+        end_date=DEMO_END,
+        initial_capital=100_000,
+        slippage_bps=5,
+        commission_per_share=0.005,
+        position_sizing="equal_weight",
+        max_position_pct=35,
+        allow_short_selling=True,
+        max_short_position_pct=35,
+        short_margin_requirement_pct=50,
+        short_borrow_rate_bps=250,
+        short_locate_fee_bps=12,
+        short_squeeze_threshold_pct=18,
+        rebalance_frequency="monthly",
+    ),
 ]
 
 
@@ -153,6 +179,12 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
                     commission_per_share=run_config.commission_per_share,
                     position_sizing=run_config.position_sizing,
                     max_position_pct=run_config.max_position_pct,
+                    allow_short_selling=run_config.allow_short_selling,
+                    max_short_position_pct=run_config.max_short_position_pct,
+                    short_margin_requirement_pct=run_config.short_margin_requirement_pct,
+                    short_borrow_rate_bps=run_config.short_borrow_rate_bps,
+                    short_locate_fee_bps=run_config.short_locate_fee_bps,
+                    short_squeeze_threshold_pct=run_config.short_squeeze_threshold_pct,
                     rebalance_frequency=run_config.rebalance_frequency,
                     equity_curve=result["equity_curve"],
                     clean_equity_curve=result.get("clean_equity_curve", []),
@@ -171,6 +203,7 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
                         backtest_run_id=result["id"],
                         ticker=trade["ticker"],
                         side=trade["side"],
+                        position_direction=trade["position_direction"],
                         entry_date=trade["entry_date"],
                         entry_price=trade["entry_price"],
                         exit_date=trade["exit_date"],
@@ -180,6 +213,9 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
                         pnl_pct=trade["pnl_pct"],
                         commission=trade["commission"],
                         slippage=trade["slippage"],
+                        borrow_cost=trade["borrow_cost"],
+                        locate_fee=trade["locate_fee"],
+                        risk_event=trade["risk_event"],
                     )
                     db2.add(tr)
                 await db2.commit()

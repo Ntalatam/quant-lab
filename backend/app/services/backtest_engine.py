@@ -20,6 +20,7 @@ from app.services.analytics import (
     compute_trade_statistics,
 )
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+from app.services.execution import simulate_fill
 from app.services.strategy_registry import get_strategy_class
 from app.services.trading import execute_signals
 from app.schemas.backtest import BacktestConfig
@@ -71,13 +72,17 @@ async def run_backtest(
 
     # 4. Initialize strategy and portfolio
     strategy_cls = get_strategy_class(config.strategy_id)
+    if strategy_cls.requires_short_selling and not config.allow_short_selling:
+        raise ValueError(
+            f"{strategy_cls.name} requires short selling to be enabled."
+        )
     strategy = strategy_cls(**config.params)
     portfolio = Portfolio(initial_capital=config.initial_capital)
 
     rebalance_dates = _get_rebalance_dates(all_dates, config.rebalance_frequency)
 
     # 5. Main simulation loop
-    cumulative_cost = 0.0        # running total of commissions + slippage paid
+    cumulative_cost = 0.0        # running total of trading + borrow costs paid
     cost_by_date: dict = {}      # isoformat date → cumulative cost at that point
     total_bars = len(all_dates)
     # emit progress every ~1% of bars (min 1, max 50 to avoid spam)
@@ -107,18 +112,75 @@ async def run_backtest(
             current_prices[ticker] = float(window.iloc[-1]["adj_close"])
             current_bars[ticker] = window.iloc[-1]
 
-        # Mark-to-market
-        portfolio.update_prices(current_prices, current_dt)
+        forced_cover_tickers = (
+            portfolio.get_short_squeeze_candidates(
+                current_prices, config.short_squeeze_threshold_pct
+            )
+            if config.allow_short_selling
+            else []
+        )
+
+        # Mark-to-market and accrue short borrow before new signals.
+        portfolio.update_prices(
+            current_prices,
+            current_dt,
+            short_borrow_rate_bps=config.short_borrow_rate_bps,
+        )
+
+        if forced_cover_tickers:
+            for ticker in forced_cover_tickers:
+                if ticker not in portfolio.positions or ticker not in current_bars:
+                    continue
+                position = portfolio.positions[ticker]
+                if position.shares >= 0:
+                    continue
+
+                bar = current_bars[ticker]
+                fill = simulate_fill(
+                    side="BUY",
+                    shares=abs(position.shares),
+                    bar_open=float(bar["open"]),
+                    bar_high=float(bar["high"]),
+                    bar_low=float(bar["low"]),
+                    bar_close=float(bar["close"]),
+                    bar_volume=int(bar["volume"]),
+                    slippage_bps=config.slippage_bps,
+                    commission_per_share=config.commission_per_share,
+                )
+                if not fill.filled or fill.shares_filled <= 0:
+                    continue
+
+                portfolio.apply_transaction(
+                    ticker=ticker,
+                    side="BUY",
+                    shares=fill.shares_filled,
+                    fill_price=fill.fill_price,
+                    commission=fill.commission,
+                    slippage_cost=fill.slippage_cost,
+                    trade_date=current_dt,
+                    risk_event="short_squeeze_cover",
+                )
 
         # Only generate signals on rebalance dates
         if current_date not in rebalance_dates:
+            current_total_cost = _current_total_cost(portfolio)
+            if current_total_cost != cumulative_cost:
+                cumulative_cost = current_total_cost
+                cost_by_date[current_dt.isoformat()] = cumulative_cost
             continue
 
         if not data_window:
+            current_total_cost = _current_total_cost(portfolio)
+            if current_total_cost != cumulative_cost:
+                cumulative_cost = current_total_cost
+                cost_by_date[current_dt.isoformat()] = cumulative_cost
             continue
 
         # 6. Get signals from strategy
         signals = strategy.generate_signals(data_window, current_date)
+        for ticker in forced_cover_tickers:
+            if ticker in signals:
+                signals[ticker] = 0.0
 
         # 7. Process signals into orders and execute
         executions = execute_signals(
@@ -130,11 +192,15 @@ async def run_backtest(
             slippage_bps=config.slippage_bps,
             commission_per_share=config.commission_per_share,
             trade_date=current_dt,
+            signal_mode=strategy.signal_mode,
+            allow_short_selling=config.allow_short_selling,
+            max_short_position_pct=config.max_short_position_pct,
+            short_margin_requirement_pct=config.short_margin_requirement_pct,
+            short_locate_fee_bps=config.short_locate_fee_bps,
         )
-        for execution in executions:
-            if execution.status != "filled":
-                continue
-            cumulative_cost += execution.total_cost
+        current_total_cost = _current_total_cost(portfolio)
+        if current_total_cost != cumulative_cost:
+            cumulative_cost = current_total_cost
             cost_by_date[current_dt.isoformat()] = cumulative_cost
 
     # 8. Build equity curve + clean equity (no transaction costs)
@@ -198,13 +264,31 @@ async def run_backtest(
     if exposures:
         metrics["avg_exposure_pct"] = round(np.mean(exposures), 2)
         metrics["max_exposure_pct"] = round(max(exposures), 2)
+    net_exposures = [pt.get("net_exposure_pct", 0.0) for pt in portfolio.equity_history]
+    short_exposures = [pt.get("short_market_value", 0.0) for pt in portfolio.equity_history]
+    if net_exposures:
+        metrics["avg_net_exposure_pct"] = round(np.mean(net_exposures), 2)
+        metrics["max_net_exposure_pct"] = round(
+            max(abs(value) for value in net_exposures), 2
+        )
+    if short_exposures:
+        short_exposure_pct = [
+            (short_mv / max(abs(pt["equity"]), 1e-10)) * 100
+            for pt, short_mv in zip(portfolio.equity_history, short_exposures)
+        ]
+        metrics["avg_short_exposure_pct"] = round(np.mean(short_exposure_pct), 2)
+        metrics["max_short_exposure_pct"] = round(max(short_exposure_pct), 2)
 
     # Transaction cost stats
     total_commission = sum(t.commission for t in portfolio.trade_log if t.commission)
     total_slippage   = sum(t.slippage   for t in portfolio.trade_log if t.slippage)
-    total_cost = total_commission + total_slippage
+    total_borrow_cost = portfolio.total_borrow_cost_paid
+    total_locate_fees = portfolio.total_locate_fees_paid
+    total_cost = total_commission + total_slippage + total_borrow_cost + total_locate_fees
     metrics["total_commission"] = round(total_commission, 2)
     metrics["total_slippage"]   = round(total_slippage,   2)
+    metrics["total_borrow_cost"] = round(total_borrow_cost, 2)
+    metrics["total_locate_fees"] = round(total_locate_fees, 2)
     metrics["total_cost"]       = round(total_cost,       2)
     metrics["cost_drag_bps"]    = round(total_cost / config.initial_capital * 10_000, 1) if config.initial_capital else 0
     metrics["cost_drag_pct"]    = round(total_cost / config.initial_capital * 100,     3) if config.initial_capital else 0
@@ -292,6 +376,7 @@ def _trade_to_dict(trade) -> dict:
         "id": str(uuid.uuid4()),
         "ticker": trade.ticker,
         "side": trade.side,
+        "position_direction": trade.position_direction,
         "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
         "entry_price": trade.entry_price,
         "exit_date": trade.exit_date.isoformat() if trade.exit_date else None,
@@ -301,7 +386,19 @@ def _trade_to_dict(trade) -> dict:
         "pnl_pct": trade.pnl_pct,
         "commission": trade.commission,
         "slippage": trade.slippage,
+        "borrow_cost": trade.borrow_cost,
+        "locate_fee": trade.locate_fee,
+        "risk_event": trade.risk_event,
     }
+
+
+def _current_total_cost(portfolio: Portfolio) -> float:
+    return round(
+        sum(trade.commission + trade.slippage for trade in portfolio.trade_log)
+        + portfolio.total_borrow_cost_paid
+        + portfolio.total_locate_fees_paid,
+        6,
+    )
 
 
 def _sanitize(obj):

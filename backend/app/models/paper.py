@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -34,6 +35,12 @@ class PaperTradingSession(Base):
     slippage_bps: Mapped[float] = mapped_column(Float)
     commission_per_share: Mapped[float] = mapped_column(Float)
     max_position_pct: Mapped[float] = mapped_column(Float)
+    allow_short_selling: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_short_position_pct: Mapped[float] = mapped_column(Float, default=25.0)
+    short_margin_requirement_pct: Mapped[float] = mapped_column(Float, default=50.0)
+    short_borrow_rate_bps: Mapped[float] = mapped_column(Float, default=200.0)
+    short_locate_fee_bps: Mapped[float] = mapped_column(Float, default=10.0)
+    short_squeeze_threshold_pct: Mapped[float] = mapped_column(Float, default=15.0)
 
     cash: Mapped[float] = mapped_column(Float)
     market_value: Mapped[float] = mapped_column(Float, default=0.0)
@@ -79,6 +86,8 @@ class PaperTradingPosition(Base):
     market_value: Mapped[float] = mapped_column(Float, default=0.0)
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
     unrealized_pnl_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    accrued_borrow_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    accrued_locate_fee: Mapped[float] = mapped_column(Float, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )

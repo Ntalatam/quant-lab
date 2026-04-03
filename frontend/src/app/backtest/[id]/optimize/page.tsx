@@ -140,18 +140,8 @@ export default function OptimizePage({
   const applyBestParams = () => {
     if (!optResult || !result) return;
     setConfig({
-      strategy_id: result.config.strategy_id,
+      ...result.config,
       params: optResult.best_params as Record<string, number>,
-      tickers: result.config.tickers,
-      benchmark: result.config.benchmark,
-      start_date: result.config.start_date,
-      end_date: result.config.end_date,
-      initial_capital: result.config.initial_capital,
-      slippage_bps: result.config.slippage_bps,
-      commission_per_share: result.config.commission_per_share,
-      position_sizing: result.config.position_sizing,
-      max_position_pct: result.config.max_position_pct,
-      rebalance_frequency: result.config.rebalance_frequency,
     });
     setAppliedParams(true);
     setTimeout(() => router.push("/backtest"), 800);

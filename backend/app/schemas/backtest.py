@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class BacktestConfig(BaseModel):
     strategy_id: str
-    params: dict = {}
+    params: dict = Field(default_factory=dict)
     tickers: list[str] = Field(min_length=1)
     benchmark: str = "SPY"
     start_date: str
@@ -13,6 +13,12 @@ class BacktestConfig(BaseModel):
     commission_per_share: float = 0.005
     position_sizing: str = "equal_weight"
     max_position_pct: float = 25.0
+    allow_short_selling: bool = False
+    max_short_position_pct: float = 25.0
+    short_margin_requirement_pct: float = 50.0
+    short_borrow_rate_bps: float = 200.0
+    short_locate_fee_bps: float = 10.0
+    short_squeeze_threshold_pct: float = 15.0
     rebalance_frequency: str = "daily"
 
 

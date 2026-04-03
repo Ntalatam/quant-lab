@@ -7,6 +7,7 @@ from app.strategies.sma_crossover import SMACrossover
 from app.strategies.mean_reversion import MeanReversion
 from app.strategies.momentum import MomentumStrategy
 from app.strategies.pairs_trading import PairsTrading
+from app.strategies.market_neutral_momentum import MarketNeutralMomentum
 from app.strategies.ml_classifier import MLClassifier
 from app.strategies.rsi_mean_reversion import RSIMeanReversion
 from app.strategies.macd_crossover import MACDCrossover
@@ -18,6 +19,7 @@ STRATEGIES: dict[str, type[BaseStrategy]] = {
     "mean_reversion": MeanReversion,
     "momentum": MomentumStrategy,
     "pairs_trading": PairsTrading,
+    "market_neutral_momentum": MarketNeutralMomentum,
     "ml_classifier": MLClassifier,
     "rsi_mean_reversion": RSIMeanReversion,
     "macd_crossover": MACDCrossover,
@@ -43,6 +45,8 @@ def list_strategies() -> list[dict]:
                 "name": cls.name,
                 "description": cls.description,
                 "category": cls.category,
+                "signal_mode": cls.signal_mode,
+                "requires_short_selling": cls.requires_short_selling,
                 "params": cls.param_schema,
             }
         )

@@ -15,6 +15,8 @@ export interface StrategyInfo {
   id: string;
   name: string;
   description: string;
+  signal_mode: "long_only" | "long_short";
+  requires_short_selling: boolean;
   category:
     | "trend_following"
     | "mean_reversion"
@@ -36,6 +38,12 @@ export interface BacktestConfig {
   commission_per_share: number;
   position_sizing: "equal_weight" | "risk_parity" | "kelly";
   max_position_pct: number;
+  allow_short_selling: boolean;
+  max_short_position_pct: number;
+  short_margin_requirement_pct: number;
+  short_borrow_rate_bps: number;
+  short_locate_fee_bps: number;
+  short_squeeze_threshold_pct: number;
   rebalance_frequency: "daily" | "weekly" | "monthly";
 }
 
@@ -88,6 +96,10 @@ export interface PerformanceMetrics {
   worst_trade_pct: number;
   avg_exposure_pct: number;
   max_exposure_pct: number;
+  avg_net_exposure_pct: number;
+  max_net_exposure_pct: number;
+  avg_short_exposure_pct: number;
+  max_short_exposure_pct: number;
   alpha: number;
   beta: number;
   correlation: number;
@@ -95,6 +107,8 @@ export interface PerformanceMetrics {
   // Transaction cost metrics
   total_commission: number;
   total_slippage: number;
+  total_borrow_cost: number;
+  total_locate_fees: number;
   total_cost: number;
   cost_drag_bps: number;
   cost_drag_pct: number;
@@ -104,6 +118,7 @@ export interface Trade {
   id: string;
   ticker: string;
   side: "BUY" | "SELL";
+  position_direction: "LONG" | "SHORT";
   entry_date: string;
   entry_price: number;
   exit_date: string | null;
@@ -113,6 +128,9 @@ export interface Trade {
   pnl_pct: number | null;
   commission: number;
   slippage: number;
+  borrow_cost: number;
+  locate_fee: number;
+  risk_event: string | null;
 }
 
 export interface MonthlyReturn {
@@ -153,6 +171,12 @@ export interface PaperTradingSessionCreate {
   slippage_bps: number;
   commission_per_share: number;
   max_position_pct: number;
+  allow_short_selling: boolean;
+  max_short_position_pct: number;
+  short_margin_requirement_pct: number;
+  short_borrow_rate_bps: number;
+  short_locate_fee_bps: number;
+  short_squeeze_threshold_pct: number;
   bar_interval: PaperBarInterval;
   polling_interval_seconds: number;
   start_immediately: boolean;
@@ -188,6 +212,8 @@ export interface PaperTradingPosition {
   market_value: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
+  accrued_borrow_cost: number;
+  accrued_locate_fee: number;
   updated_at: string | null;
 }
 
@@ -217,6 +243,12 @@ export interface PaperTradingSessionDetail extends PaperTradingSessionSummary {
   slippage_bps: number;
   commission_per_share: number;
   max_position_pct: number;
+  allow_short_selling: boolean;
+  max_short_position_pct: number;
+  short_margin_requirement_pct: number;
+  short_borrow_rate_bps: number;
+  short_locate_fee_bps: number;
+  short_squeeze_threshold_pct: number;
   positions: PaperTradingPosition[];
   recent_events: PaperTradingEvent[];
   equity_curve: PaperTradingEquityPoint[];

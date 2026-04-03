@@ -11,6 +11,20 @@ interface TradeLogProps {
 type SortField = "entry_date" | "pnl" | "pnl_pct" | "ticker";
 type SortDir = "asc" | "desc";
 
+function tradeLabel(trade: Trade) {
+  if (trade.position_direction === "SHORT") {
+    return trade.side === "SELL" ? "SHORT" : "COVER";
+  }
+  return trade.side;
+}
+
+function tradeTone(trade: Trade) {
+  if (trade.position_direction === "SHORT") {
+    return trade.side === "SELL" ? "text-accent-yellow" : "text-accent-blue";
+  }
+  return trade.side === "BUY" ? "text-accent-green" : "text-accent-red";
+}
+
 export function TradeLog({ trades }: TradeLogProps) {
   const [sortField, setSortField] = useState<SortField>("entry_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -74,15 +88,12 @@ export function TradeLog({ trades }: TradeLogProps) {
             >
               <td className="py-1.5 px-2 text-text-primary">{trade.ticker}</td>
               <td className="py-1.5 px-2">
-                <span
-                  className={
-                    trade.side === "BUY"
-                      ? "text-accent-green"
-                      : "text-accent-red"
-                  }
-                >
-                  {trade.side}
-                </span>
+                <span className={tradeTone(trade)}>{tradeLabel(trade)}</span>
+                {trade.risk_event && (
+                  <div className="text-[10px] text-accent-yellow mt-0.5">
+                    {trade.risk_event.replace(/_/g, " ")}
+                  </div>
+                )}
               </td>
               <td className="py-1.5 px-2 text-text-secondary">
                 {trade.entry_date ? formatDate(trade.entry_date) : "-"}
@@ -122,7 +133,13 @@ export function TradeLog({ trades }: TradeLogProps) {
                   : "-"}
               </td>
               <td className="py-1.5 px-2 text-text-muted">
-                ${(trade.commission + trade.slippage).toFixed(2)}
+                $
+                {(
+                  trade.commission +
+                  trade.slippage +
+                  trade.borrow_cost +
+                  trade.locate_fee
+                ).toFixed(2)}
               </td>
             </tr>
           ))}

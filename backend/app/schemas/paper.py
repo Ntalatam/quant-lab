@@ -21,6 +21,12 @@ class PaperTradingSessionCreate(BaseModel):
     slippage_bps: float = Field(default=5.0, ge=0, le=100)
     commission_per_share: float = Field(default=0.005, ge=0, le=5)
     max_position_pct: float = Field(default=25.0, gt=0, le=100)
+    allow_short_selling: bool = False
+    max_short_position_pct: float = Field(default=25.0, gt=0, le=100)
+    short_margin_requirement_pct: float = Field(default=50.0, ge=0, le=100)
+    short_borrow_rate_bps: float = Field(default=200.0, ge=0, le=10_000)
+    short_locate_fee_bps: float = Field(default=10.0, ge=0, le=1_000)
+    short_squeeze_threshold_pct: float = Field(default=15.0, ge=1, le=100)
     bar_interval: BarInterval = "1m"
     polling_interval_seconds: int = Field(default=60, ge=15, le=3600)
     start_immediately: bool = True
@@ -88,6 +94,8 @@ class PaperTradingPositionView(BaseModel):
     market_value: float
     unrealized_pnl: float
     unrealized_pnl_pct: float
+    accrued_borrow_cost: float = 0.0
+    accrued_locate_fee: float = 0.0
     updated_at: datetime | None = None
 
 
@@ -117,6 +125,12 @@ class PaperTradingSessionDetail(PaperTradingSessionSummary):
     slippage_bps: float
     commission_per_share: float
     max_position_pct: float
+    allow_short_selling: bool
+    max_short_position_pct: float
+    short_margin_requirement_pct: float
+    short_borrow_rate_bps: float
+    short_locate_fee_bps: float
+    short_squeeze_threshold_pct: float
     positions: list[PaperTradingPositionView]
     recent_events: list[PaperTradingEventView]
     equity_curve: list[PaperTradingEquityPointView]

@@ -17,12 +17,15 @@ class SignalExecution:
     fill_price: float | None = None
     commission: float = 0.0
     slippage_cost: float = 0.0
+    locate_fee: float = 0.0
+    borrow_cost: float = 0.0
     status: str = "skipped"
     reason: str = ""
+    risk_event: str | None = None
 
     @property
     def total_cost(self) -> float:
-        return self.commission + self.slippage_cost
+        return self.commission + self.slippage_cost + self.locate_fee + self.borrow_cost
 
 
 def execute_signals(
@@ -34,15 +37,20 @@ def execute_signals(
     slippage_bps: float,
     commission_per_share: float,
     trade_date: date,
+    signal_mode: str = "long_only",
+    allow_short_selling: bool = False,
+    max_short_position_pct: float | None = None,
+    short_margin_requirement_pct: float = 50.0,
+    short_locate_fee_bps: float = 0.0,
 ) -> list[SignalExecution]:
     """
-    Execute a batch of strategy signals against the provided market bars.
+    Execute strategy signals against the provided market bars.
 
-    The caller controls which bar is used for execution. Backtests pass the
-    current historical bar, while paper trading can pass a synthetic "market"
-    bar built from the latest live price.
+    In long-only mode, negative signals reduce existing long exposure.
+    In long/short mode, signals represent signed target portfolio weights.
     """
     executions: list[SignalExecution] = []
+    short_limit = max_short_position_pct if max_short_position_pct is not None else max_position_pct
 
     for ticker, signal in signals.items():
         if signal == 0:
@@ -60,112 +68,115 @@ def execute_signals(
             )
             continue
 
-        bar = current_bars[ticker]
-
-        if signal > 0:
-            target_weight = min(signal, max_position_pct / 100)
-            target_value = portfolio.total_equity * target_weight
-            existing_value = (
-                portfolio.positions[ticker].market_value
-                if ticker in portfolio.positions
-                else 0.0
+        current_price = current_prices[ticker]
+        if current_price <= 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=signal,
+                    action="BUY" if signal > 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="Invalid execution price",
+                )
             )
-            buy_value = target_value - existing_value
-            requested_shares = int(buy_value / current_prices[ticker]) if buy_value > 0 else 0
+            continue
 
-            if buy_value <= 0 or requested_shares <= 0:
+        current_shares = portfolio.positions[ticker].shares if ticker in portfolio.positions else 0
+        action: str
+        requested_shares: int
+
+        if signal_mode == "long_short":
+            if signal < 0 and not allow_short_selling:
                 executions.append(
                     SignalExecution(
                         ticker=ticker,
                         signal=signal,
-                        action="BUY",
-                        requested_shares=max(requested_shares, 0),
+                        action="SELL",
+                        requested_shares=0,
                         status="skipped",
-                        reason="Signal did not increase exposure beyond the current position",
+                        reason="Short selling is disabled for this run",
                     )
                 )
                 continue
 
-            fill = simulate_fill(
-                side="BUY",
-                shares=requested_shares,
-                bar_open=float(bar["open"]),
-                bar_high=float(bar["high"]),
-                bar_low=float(bar["low"]),
-                bar_close=float(bar["close"]),
-                bar_volume=int(bar["volume"]),
-                slippage_bps=slippage_bps,
-                commission_per_share=commission_per_share,
-            )
-            if not fill.filled or fill.shares_filled <= 0:
+            target_weight = signal
+            if signal > 0:
+                target_weight = min(signal, max_position_pct / 100)
+            elif signal < 0:
+                target_weight = max(signal, -(short_limit / 100))
+
+            target_value = portfolio.total_equity * target_weight
+            target_shares = int(target_value / current_price)
+            share_delta = target_shares - current_shares
+            if share_delta == 0:
                 executions.append(
                     SignalExecution(
                         ticker=ticker,
                         signal=signal,
-                        action="BUY",
-                        requested_shares=requested_shares,
-                        status="rejected",
-                        reason=fill.reason or "Order could not be filled",
+                        action="BUY" if signal > 0 else "SELL",
+                        requested_shares=0,
+                        status="skipped",
+                        reason="Signal was already reflected in the current position",
                     )
                 )
                 continue
 
-            portfolio.execute_buy(
-                ticker,
-                fill.shares_filled,
-                fill.fill_price,
-                fill.commission,
-                fill.slippage_cost,
-                trade_date,
-            )
-            executions.append(
-                SignalExecution(
-                    ticker=ticker,
-                    signal=signal,
-                    action="BUY",
-                    requested_shares=requested_shares,
-                    filled_shares=fill.shares_filled,
-                    fill_price=fill.fill_price,
-                    commission=fill.commission,
-                    slippage_cost=fill.slippage_cost,
-                    status="filled",
-                    reason="Executed successfully",
-                )
-            )
-            continue
+            action = "BUY" if share_delta > 0 else "SELL"
+            requested_shares = abs(share_delta)
+        else:
+            if signal > 0:
+                target_weight = min(signal, max_position_pct / 100)
+                target_value = portfolio.total_equity * target_weight
+                target_shares = int(target_value / current_price)
+                share_delta = target_shares - current_shares
+                if share_delta <= 0:
+                    executions.append(
+                        SignalExecution(
+                            ticker=ticker,
+                            signal=signal,
+                            action="BUY",
+                            requested_shares=max(share_delta, 0),
+                            status="skipped",
+                            reason="Signal did not increase exposure beyond the current position",
+                        )
+                    )
+                    continue
+                action = "BUY"
+                requested_shares = share_delta
+            else:
+                if current_shares <= 0:
+                    executions.append(
+                        SignalExecution(
+                            ticker=ticker,
+                            signal=signal,
+                            action="SELL",
+                            requested_shares=0,
+                            status="skipped",
+                            reason="No existing position to reduce",
+                        )
+                    )
+                    continue
+                requested_shares = current_shares
+                if abs(signal) < 1:
+                    requested_shares = int(current_shares * abs(signal))
+                if requested_shares <= 0:
+                    executions.append(
+                        SignalExecution(
+                            ticker=ticker,
+                            signal=signal,
+                            action="SELL",
+                            requested_shares=0,
+                            status="skipped",
+                            reason="Requested reduction rounded to zero shares",
+                        )
+                    )
+                    continue
+                action = "SELL"
 
-        if ticker not in portfolio.positions:
-            executions.append(
-                SignalExecution(
-                    ticker=ticker,
-                    signal=signal,
-                    action="SELL",
-                    requested_shares=0,
-                    status="skipped",
-                    reason="No existing position to reduce",
-                )
-            )
-            continue
-
-        requested_shares = portfolio.positions[ticker].shares
-        if abs(signal) < 1:
-            requested_shares = int(requested_shares * abs(signal))
-
-        if requested_shares <= 0:
-            executions.append(
-                SignalExecution(
-                    ticker=ticker,
-                    signal=signal,
-                    action="SELL",
-                    requested_shares=0,
-                    status="skipped",
-                    reason="Requested reduction rounded to zero shares",
-                )
-            )
-            continue
-
+        bar = current_bars[ticker]
         fill = simulate_fill(
-            side="SELL",
+            side=action,
             shares=requested_shares,
             bar_open=float(bar["open"]),
             bar_high=float(bar["high"]),
@@ -180,7 +191,7 @@ def execute_signals(
                 SignalExecution(
                     ticker=ticker,
                     signal=signal,
-                    action="SELL",
+                    action=action,
                     requested_shares=requested_shares,
                     status="rejected",
                     reason=fill.reason or "Order could not be filled",
@@ -188,26 +199,49 @@ def execute_signals(
             )
             continue
 
-        portfolio.execute_sell(
-            ticker,
-            fill.shares_filled,
-            fill.fill_price,
-            fill.commission,
-            fill.slippage_cost,
-            trade_date,
+        transaction = portfolio.apply_transaction(
+            ticker=ticker,
+            side=action,
+            shares=fill.shares_filled,
+            fill_price=fill.fill_price,
+            commission=fill.commission,
+            slippage_cost=fill.slippage_cost,
+            trade_date=trade_date,
+            allow_short_selling=allow_short_selling and signal_mode == "long_short",
+            short_margin_requirement_pct=short_margin_requirement_pct,
+            short_locate_fee_bps=short_locate_fee_bps,
         )
+        if transaction.executed_shares <= 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=signal,
+                    action=action,
+                    requested_shares=requested_shares,
+                    status="rejected",
+                    reason="Order failed cash or margin checks",
+                )
+            )
+            continue
+
         executions.append(
             SignalExecution(
                 ticker=ticker,
                 signal=signal,
-                action="SELL",
+                action=action,
                 requested_shares=requested_shares,
-                filled_shares=fill.shares_filled,
+                filled_shares=transaction.executed_shares,
                 fill_price=fill.fill_price,
-                commission=fill.commission,
-                slippage_cost=fill.slippage_cost,
-                status="filled",
-                reason="Executed successfully",
+                commission=transaction.commission,
+                slippage_cost=transaction.slippage,
+                locate_fee=transaction.locate_fee,
+                borrow_cost=transaction.borrow_cost,
+                status="filled"
+                if transaction.executed_shares == fill.shares_filled
+                else "partial",
+                reason="Executed successfully"
+                if transaction.executed_shares == fill.shares_filled
+                else "Executed partially due to cash or margin constraints",
             )
         )
 

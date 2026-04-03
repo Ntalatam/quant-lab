@@ -394,8 +394,10 @@ export function TearSheet({ result }: TearSheetProps) {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <MetricsCard label="Alpha"        value={formatPercent(m.alpha)}             positive={m.alpha > 0}   description="Excess return vs benchmark" />
             <MetricsCard label="Beta"         value={formatRatio(m.beta)}                                          description="Sensitivity to benchmark moves" />
-            <MetricsCard label="Avg Exposure" value={formatPercent(m.avg_exposure_pct, 1)}                         description="Average capital invested" />
-            <MetricsCard label="Max Exposure" value={formatPercent(m.max_exposure_pct, 1)} />
+            <MetricsCard label="Avg Gross"    value={formatPercent(m.avg_exposure_pct, 1)}                         description="Average gross exposure" />
+            <MetricsCard label="Avg Net"      value={formatPercent(m.avg_net_exposure_pct ?? 0, 1)}               description="Directional net exposure" />
+            <MetricsCard label="Max Short"    value={formatPercent(m.max_short_exposure_pct ?? 0, 1)}             description="Largest short book" />
+            <MetricsCard label="Borrow Cost"  value={formatCurrency(m.total_borrow_cost ?? 0)}                    description="Carry paid on shorts" />
             <MetricsCard label="DD Duration"  value={`${m.max_drawdown_duration_days}d`}                           description="Longest drawdown period" />
             <MetricsCard label="Current DD"   value={formatPercent(m.current_drawdown_pct)} positive={m.current_drawdown_pct === 0} />
           </div>
@@ -431,6 +433,16 @@ export function TearSheet({ result }: TearSheetProps) {
                   ["Commission",  `$${result.config.commission_per_share}/share`],
                   ["Rebalance",   result.config.rebalance_frequency],
                   ["Max Position",`${result.config.max_position_pct}%`],
+                  ["Shorting",    result.config.allow_short_selling ? "Enabled" : "Disabled"],
+                  ...(result.config.allow_short_selling
+                    ? [
+                        ["Max Short", `${result.config.max_short_position_pct}%`],
+                        ["Margin", `${result.config.short_margin_requirement_pct}%`],
+                        ["Borrow", `${result.config.short_borrow_rate_bps} bps/year`],
+                        ["Locate", `${result.config.short_locate_fee_bps} bps/entry`],
+                        ["Squeeze", `${result.config.short_squeeze_threshold_pct}% adverse move`],
+                      ]
+                    : []),
                 ].map(([label, value]) => (
                   <div
                     key={label}

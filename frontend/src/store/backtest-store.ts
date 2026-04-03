@@ -26,6 +26,12 @@ const DEFAULT_CONFIG: Partial<BacktestConfig> = {
   commission_per_share: 0.005,
   position_sizing: "equal_weight",
   max_position_pct: 25,
+  allow_short_selling: false,
+  max_short_position_pct: 25,
+  short_margin_requirement_pct: 50,
+  short_borrow_rate_bps: 200,
+  short_locate_fee_bps: 10,
+  short_squeeze_threshold_pct: 15,
   rebalance_frequency: "daily",
 };
 
