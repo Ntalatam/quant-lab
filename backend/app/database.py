@@ -62,6 +62,9 @@ _MIGRATIONS = [
     "ALTER TABLE paper_trading_sessions ADD COLUMN IF NOT EXISTS short_squeeze_threshold_pct FLOAT DEFAULT 15",
     "ALTER TABLE paper_trading_positions ADD COLUMN IF NOT EXISTS accrued_borrow_cost FLOAT DEFAULT 0",
     "ALTER TABLE paper_trading_positions ADD COLUMN IF NOT EXISTS accrued_locate_fee FLOAT DEFAULT 0",
+    "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS lineage_tag VARCHAR(100)",
+    "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS version INTEGER",
+    "ALTER TABLE backtest_runs ADD COLUMN IF NOT EXISTS parent_id VARCHAR(36)",
 ]
 
 

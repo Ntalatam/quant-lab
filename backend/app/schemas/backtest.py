@@ -188,6 +188,9 @@ class BacktestResultResponse(BaseModel):
     config: BacktestConfig
     created_at: str | None = None
     notes: str = ""
+    lineage_tag: str | None = None
+    version: int | None = None
+    parent_id: str | None = None
     equity_curve: list[TimeSeriesPoint]
     clean_equity_curve: list[TimeSeriesPoint] = Field(default_factory=list)
     benchmark_curve: list[TimeSeriesPoint]
@@ -210,6 +213,8 @@ class BacktestSummaryResponse(BaseModel):
     sharpe_ratio: float
     max_drawdown_pct: float
     created_at: str | None = None
+    lineage_tag: str | None = None
+    version: int | None = None
 
 
 class BacktestListResponse(BaseModel):
@@ -415,3 +420,42 @@ class BayesOptResponse(BaseModel):
     n_trials: int
     trials: list[BayesOptTrial]
     param_specs: list[BayesOptParamSpec]
+
+
+# ── Versioning / lineage ──────────────────────────────────────────────────
+
+class LineageTagRequest(BaseModel):
+    lineage_tag: str = Field(max_length=100)
+    parent_id: str | None = None
+
+
+class LineageTagResponse(BaseModel):
+    id: str
+    lineage_tag: str | None
+    version: int | None
+    parent_id: str | None
+
+
+class ParamDiff(BaseModel):
+    key: str
+    old_value: ParamValue | None = None
+    new_value: ParamValue | None = None
+
+
+class LineageEntry(BaseModel):
+    id: str
+    version: int | None
+    created_at: str | None
+    notes: str = ""
+    strategy_id: str
+    tickers: list[str]
+    params: dict[str, ParamValue]
+    sharpe_ratio: float
+    total_return_pct: float
+    max_drawdown_pct: float
+    param_diffs: list[ParamDiff] = Field(default_factory=list)
+
+
+class LineageResponse(BaseModel):
+    lineage_tag: str
+    entries: list[LineageEntry]

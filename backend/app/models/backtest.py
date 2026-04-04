@@ -49,6 +49,11 @@ class BacktestRun(Base):
 
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True, default=None)
 
+    # Versioning / lineage
+    lineage_tag: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None, index=True)
+    version: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     trades: Mapped[list["TradeRecord"]] = relationship(

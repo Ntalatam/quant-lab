@@ -70,6 +70,9 @@ export interface BacktestResult {
   config: BacktestConfig;
   created_at: string;
   notes?: string;
+  lineage_tag?: string | null;
+  version?: number | null;
+  parent_id?: string | null;
   equity_curve: TimeSeriesPoint[];
   clean_equity_curve: TimeSeriesPoint[];
   benchmark_curve: TimeSeriesPoint[];
@@ -183,6 +186,40 @@ export interface BacktestSummary {
   sharpe_ratio: number;
   max_drawdown_pct: number;
   created_at: string;
+  lineage_tag?: string | null;
+  version?: number | null;
+}
+
+// ---- Versioning / Lineage ----
+export interface ParamDiff {
+  key: string;
+  old_value: number | string | boolean | null;
+  new_value: number | string | boolean | null;
+}
+
+export interface LineageEntry {
+  id: string;
+  version: number | null;
+  created_at: string | null;
+  notes: string;
+  strategy_id: string;
+  tickers: string[];
+  params: Record<string, number | string | boolean>;
+  sharpe_ratio: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  param_diffs: ParamDiff[];
+}
+
+export interface LineageResult {
+  lineage_tag: string;
+  entries: LineageEntry[];
+}
+
+export interface LineageSummary {
+  tag: string;
+  count: number;
+  max_version: number;
 }
 
 // ---- Paper Trading ----

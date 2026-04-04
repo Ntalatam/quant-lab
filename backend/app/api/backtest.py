@@ -28,6 +28,9 @@ from app.schemas.backtest import (
     BacktestSweepConfig,
     BayesOptConfig,
     BayesOptResponse,
+    LineageResponse,
+    LineageTagRequest,
+    LineageTagResponse,
     NotesUpdateRequest,
     NotesUpdateResponse,
     Sweep2DResponse,
@@ -76,6 +79,9 @@ def serialize_backtest_run(run: BacktestRun, trades: list[TradeRecord]) -> dict:
         },
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "notes": run.notes or "",
+        "lineage_tag": run.lineage_tag,
+        "version": run.version,
+        "parent_id": run.parent_id,
         "equity_curve": run.equity_curve,
         "clean_equity_curve": run.clean_equity_curve or [],
         "benchmark_curve": run.benchmark_curve,
@@ -274,6 +280,8 @@ async def list_backtests(
                 "sharpe_ratio": r.metrics.get("sharpe_ratio", 0),
                 "max_drawdown_pct": r.metrics.get("max_drawdown_pct", 0),
                 "created_at": r.created_at.isoformat() if r.created_at else None,
+                "lineage_tag": r.lineage_tag,
+                "version": r.version,
             }
             for r in runs
         ],
@@ -637,6 +645,135 @@ async def bayesian_optimize(
         "n_trials": len(trials_sorted),
         "trials": trials_sorted,
         "param_specs": [s.model_dump() for s in config.param_specs],
+    }
+
+
+# ── Versioning / lineage ──────────────────────────────────────────────────
+
+
+@router.patch(
+    "/{backtest_id}/lineage",
+    response_model=LineageTagResponse,
+    summary="Tag a backtest with a lineage identifier",
+    description=(
+        "Assigns a lineage tag and optional parent link. "
+        "The version number is auto-incremented within the lineage."
+    ),
+    responses={404: {"model": ErrorResponse}},
+)
+async def set_lineage(
+    backtest_id: str,
+    payload: LineageTagRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = r.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    # Compute next version in this lineage
+    existing = await db.execute(
+        select(BacktestRun.version)
+        .where(BacktestRun.lineage_tag == payload.lineage_tag)
+        .order_by(BacktestRun.version.desc())
+    )
+    max_ver = existing.scalar()
+    next_ver = (max_ver or 0) + 1
+
+    run.lineage_tag = payload.lineage_tag
+    run.version = next_ver
+    run.parent_id = payload.parent_id
+    await db.commit()
+
+    return {
+        "id": run.id,
+        "lineage_tag": run.lineage_tag,
+        "version": run.version,
+        "parent_id": run.parent_id,
+    }
+
+
+@router.get(
+    "/lineage/{tag}",
+    response_model=LineageResponse,
+    summary="Get full lineage for a tag",
+    description=(
+        "Returns all backtests tagged with the given lineage, ordered by version, "
+        "with parameter diffs showing what changed between iterations."
+    ),
+    responses={404: {"model": ErrorResponse}},
+)
+async def get_lineage(
+    tag: str,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(BacktestRun)
+        .where(BacktestRun.lineage_tag == tag)
+        .order_by(BacktestRun.version.asc())
+    )
+    runs = result.scalars().all()
+
+    if not runs:
+        raise HTTPException(404, f"No backtests found for lineage '{tag}'")
+
+    entries = []
+    prev_params: dict | None = None
+    for run in runs:
+        params = run.strategy_params or {}
+        diffs = []
+        if prev_params is not None:
+            all_keys = set(list(prev_params.keys()) + list(params.keys()))
+            for k in sorted(all_keys):
+                old = prev_params.get(k)
+                new = params.get(k)
+                if old != new:
+                    diffs.append({"key": k, "old_value": old, "new_value": new})
+
+        entries.append({
+            "id": run.id,
+            "version": run.version,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "notes": run.notes or "",
+            "strategy_id": run.strategy_id,
+            "tickers": run.tickers,
+            "params": params,
+            "sharpe_ratio": run.metrics.get("sharpe_ratio", 0),
+            "total_return_pct": run.metrics.get("total_return_pct", 0),
+            "max_drawdown_pct": run.metrics.get("max_drawdown_pct", 0),
+            "param_diffs": diffs,
+        })
+        prev_params = params
+
+    return {"lineage_tag": tag, "entries": entries}
+
+
+@router.get(
+    "/lineages",
+    summary="List all lineage tags",
+    description="Returns all distinct lineage tags and how many versions each has.",
+)
+async def list_lineages(
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import func
+
+    result = await db.execute(
+        select(
+            BacktestRun.lineage_tag,
+            func.count(BacktestRun.id).label("count"),
+            func.max(BacktestRun.version).label("max_version"),
+        )
+        .where(BacktestRun.lineage_tag.isnot(None))
+        .group_by(BacktestRun.lineage_tag)
+        .order_by(func.max(BacktestRun.created_at).desc())
+    )
+    rows = result.all()
+    return {
+        "lineages": [
+            {"tag": row.lineage_tag, "count": row.count, "max_version": row.max_version}
+            for row in rows
+        ]
     }
 
 

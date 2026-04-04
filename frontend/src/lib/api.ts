@@ -9,6 +9,8 @@ import type {
   CorrelationResult,
   FactorExposureResult,
   ImpliedVolResult,
+  LineageResult,
+  LineageSummary,
   MonteCarloResult,
   OptionPriceResult,
   OptionsChainEntry,
@@ -122,6 +124,26 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify({ notes }),
     });
+  }
+
+  // Versioning / lineage
+  async setLineageTag(
+    backtestId: string,
+    lineageTag: string,
+    parentId?: string
+  ): Promise<{ id: string; lineage_tag: string; version: number; parent_id: string | null }> {
+    return this.request(`/backtest/${backtestId}/lineage`, {
+      method: "PATCH",
+      body: JSON.stringify({ lineage_tag: lineageTag, parent_id: parentId || null }),
+    });
+  }
+
+  async getLineage(tag: string): Promise<LineageResult> {
+    return this.request(`/backtest/lineage/${encodeURIComponent(tag)}`);
+  }
+
+  async listLineages(): Promise<{ lineages: LineageSummary[] }> {
+    return this.request("/backtest/lineages");
   }
 
   // Paper trading
