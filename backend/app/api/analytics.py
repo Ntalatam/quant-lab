@@ -3,6 +3,8 @@ POST /api/analytics/compare              — Compare multiple backtest results
 POST /api/analytics/monte-carlo/{id}     — Run Monte Carlo simulation
 GET  /api/analytics/export/{id}          — Export results as CSV
 POST /api/analytics/portfolio-blend      — Blend multiple backtests with weights
+POST /api/analytics/correlation          — Correlation matrix & cointegration analysis
+POST /api/analytics/spread              — Spread & z-score for a specific pair
 """
 
 import csv
@@ -19,11 +21,15 @@ from app.schemas.analytics import (
     CapacityResponse,
     CompareRequest,
     ComparisonResponse,
+    CorrelationRequest,
+    CorrelationResponse,
     FactorExposureResponse,
     MonteCarloResult,
     PortfolioBlendRequest,
     PortfolioBlendResponse,
     RegimeAnalysisResponse,
+    SpreadRequest,
+    SpreadResponse,
     TransactionCostAnalysisResponse,
 )
 from app.schemas.common import ErrorResponse
@@ -933,3 +939,140 @@ def _min_dd_weights(returns: pd.DataFrame, df: pd.DataFrame) -> np.ndarray:
     result = minimize(max_dd, x0, method="SLSQP", bounds=bounds, constraints=constraints)
     w = result.x
     return w / w.sum()
+
+
+# ---------------------------------------------------------------------------
+# Correlation & cointegration
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/correlation",
+    response_model=CorrelationResponse,
+    summary="Correlation matrix & cointegration analysis",
+    description=(
+        "Loads OHLCV data for the requested tickers, computes a static "
+        "correlation matrix, rolling pairwise correlations, and runs "
+        "Engle-Granger cointegration tests to discover tradeable pairs."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid request parameters."},
+        422: {"model": ErrorResponse, "description": "Could not load data for one or more tickers."},
+    },
+)
+async def correlation_analysis(
+    payload: CorrelationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import date as date_cls
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+    from app.services.cointegration import (
+        compute_correlation_matrix,
+        discover_pairs,
+    )
+
+    start = date_cls.fromisoformat(payload.start_date)
+    end = date_cls.fromisoformat(payload.end_date)
+
+    # Load price data for all tickers
+    prices: dict[str, pd.Series] = {}
+    failed: list[str] = []
+    for ticker in payload.tickers:
+        loaded = await ensure_data_loaded(db, ticker, start, end)
+        if not loaded:
+            failed.append(ticker)
+            continue
+        df = await get_price_dataframe(db, ticker, start, end)
+        if df.empty:
+            failed.append(ticker)
+            continue
+        prices[ticker] = df["close"]
+
+    if failed:
+        raise HTTPException(422, f"Could not load data for: {', '.join(failed)}")
+    if len(prices) < 2:
+        raise HTTPException(400, "Need at least 2 tickers with available data")
+
+    try:
+        corr = compute_correlation_matrix(prices, payload.rolling_window)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    pairs = discover_pairs(prices, payload.max_pairs)
+
+    return {
+        "tickers": corr["tickers"],
+        "static_matrix": corr["static_matrix"],
+        "rolling_correlations": corr["rolling_correlations"],
+        "discovered_pairs": pairs,
+    }
+
+
+@router.post(
+    "/spread",
+    response_model=SpreadResponse,
+    summary="Spread analysis for a ticker pair",
+    description=(
+        "Computes the log-price-ratio spread, rolling z-score, half-life of "
+        "mean reversion, and Engle-Granger cointegration test for a specific pair."
+    ),
+    responses={
+        422: {"model": ErrorResponse, "description": "Could not load data for one or both tickers."},
+    },
+)
+async def spread_analysis(
+    payload: SpreadRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import date as date_cls
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+    from app.services.cointegration import compute_spread, engle_granger_test
+
+    start = date_cls.fromisoformat(payload.start_date)
+    end = date_cls.fromisoformat(payload.end_date)
+
+    for ticker in [payload.ticker_a, payload.ticker_b]:
+        loaded = await ensure_data_loaded(db, ticker, start, end)
+        if not loaded:
+            raise HTTPException(422, f"Could not load data for {ticker}")
+
+    df_a = await get_price_dataframe(db, payload.ticker_a, start, end)
+    df_b = await get_price_dataframe(db, payload.ticker_b, start, end)
+
+    if df_a.empty or df_b.empty:
+        raise HTTPException(422, "Insufficient price data for one or both tickers")
+
+    # Align on common dates
+    combined = pd.DataFrame({
+        payload.ticker_a: df_a["close"],
+        payload.ticker_b: df_b["close"],
+    }).dropna()
+
+    if len(combined) < payload.lookback:
+        raise HTTPException(
+            400,
+            f"Only {len(combined)} overlapping days — need at least {payload.lookback}",
+        )
+
+    sa = combined[payload.ticker_a]
+    sb = combined[payload.ticker_b]
+
+    spread = compute_spread(sa, sb, payload.lookback)
+    coint = engle_granger_test(sa, sb)
+
+    return {
+        "ticker_a": payload.ticker_a,
+        "ticker_b": payload.ticker_b,
+        **spread,
+        "cointegration": {
+            "ticker_a": payload.ticker_a,
+            "ticker_b": payload.ticker_b,
+            "adf_statistic": coint["adf_statistic"],
+            "adf_pvalue": coint["adf_pvalue"],
+            "cointegrated": coint["cointegrated"],
+            "beta": coint["beta"],
+            "half_life_days": spread["half_life_days"],
+            "current_zscore": spread["current_zscore"],
+            "spread_std": spread["spread_std"],
+        },
+    }

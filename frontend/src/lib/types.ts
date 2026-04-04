@@ -461,6 +461,45 @@ export interface PortfolioBlendResult {
   }[];
 }
 
+// ---- Correlation & Cointegration ----
+export interface RollingCorrelationSeries {
+  pair: string;
+  ticker_a: string;
+  ticker_b: string;
+  series: TimeSeriesPoint[];
+}
+
+export interface PairTestResult {
+  ticker_a: string;
+  ticker_b: string;
+  adf_statistic: number;
+  adf_pvalue: number;
+  cointegrated: boolean;
+  beta: number;
+  half_life_days: number | null;
+  current_zscore: number | null;
+  spread_std: number;
+}
+
+export interface CorrelationResult {
+  tickers: string[];
+  static_matrix: number[][];
+  rolling_correlations: RollingCorrelationSeries[];
+  discovered_pairs: PairTestResult[];
+}
+
+export interface SpreadResult {
+  ticker_a: string;
+  ticker_b: string;
+  spread_series: TimeSeriesPoint[];
+  zscore_series: TimeSeriesPoint[];
+  half_life_days: number | null;
+  current_zscore: number | null;
+  spread_mean: number;
+  spread_std: number;
+  cointegration: PairTestResult;
+}
+
 // ---- Bayesian Optimization ----
 export interface BayesOptParamSpec {
   name: string;

@@ -14,6 +14,7 @@ import {
   Keyboard,
   X,
   RadioTower,
+  GitCompareArrows,
 } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
@@ -38,6 +39,7 @@ const NAV_SECTIONS = [
     label: "Analysis",
     items: [
       { href: "/compare", label: "Compare", icon: Columns3 },
+      { href: "/correlation", label: "Correlation", icon: GitCompareArrows },
       { href: "/strategies", label: "Strategy Library", icon: Code2 },
     ],
   },

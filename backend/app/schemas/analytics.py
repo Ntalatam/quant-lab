@@ -186,6 +186,92 @@ class PortfolioBlendRequest(BaseModel):
     optimize: Literal["custom", "equal", "max_sharpe", "min_dd"] = "custom"
 
 
+class CorrelationRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "tickers": ["AAPL", "MSFT", "GOOGL", "SPY"],
+                "start_date": "2020-01-01",
+                "end_date": "2024-01-01",
+                "rolling_window": 63,
+            }
+        }
+    )
+
+    tickers: list[str] = Field(min_length=2, description="Tickers to analyse")
+    start_date: str = Field(description="ISO start date")
+    end_date: str = Field(description="ISO end date")
+    rolling_window: int = Field(default=63, ge=10, le=504, description="Rolling window in trading days")
+    max_pairs: int = Field(default=10, ge=1, le=50, description="Max pairs for auto-discovery")
+
+
+class RollingCorrelationSeries(BaseModel):
+    pair: str
+    ticker_a: str
+    ticker_b: str
+    series: list[TimeSeriesPoint]
+
+
+class PairTestResult(BaseModel):
+    ticker_a: str
+    ticker_b: str
+    adf_statistic: float
+    adf_pvalue: float
+    cointegrated: bool
+    beta: float
+    half_life_days: float | None = None
+    current_zscore: float | None = None
+    spread_std: float
+
+
+class SpreadAnalysis(BaseModel):
+    spread_series: list[TimeSeriesPoint]
+    zscore_series: list[TimeSeriesPoint]
+    half_life_days: float | None = None
+    current_zscore: float | None = None
+    spread_mean: float
+    spread_std: float
+
+
+class CorrelationResponse(BaseModel):
+    tickers: list[str]
+    static_matrix: list[list[float]]
+    rolling_correlations: list[RollingCorrelationSeries]
+    discovered_pairs: list[PairTestResult]
+
+
+class SpreadRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "ticker_a": "AAPL",
+                "ticker_b": "MSFT",
+                "start_date": "2020-01-01",
+                "end_date": "2024-01-01",
+                "lookback": 63,
+            }
+        }
+    )
+
+    ticker_a: str
+    ticker_b: str
+    start_date: str
+    end_date: str
+    lookback: int = Field(default=63, ge=10, le=504)
+
+
+class SpreadResponse(BaseModel):
+    ticker_a: str
+    ticker_b: str
+    spread_series: list[TimeSeriesPoint]
+    zscore_series: list[TimeSeriesPoint]
+    half_life_days: float | None = None
+    current_zscore: float | None = None
+    spread_mean: float
+    spread_std: float
+    cointegration: PairTestResult
+
+
 class PortfolioContribution(BaseModel):
     id: str
     strategy_id: str

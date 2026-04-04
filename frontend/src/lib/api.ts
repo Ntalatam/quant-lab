@@ -6,6 +6,7 @@ import type {
   BayesOptResult,
   CapacityResult,
   ComparisonResult,
+  CorrelationResult,
   FactorExposureResult,
   MonteCarloResult,
   PaperTradingSessionCreate,
@@ -13,6 +14,7 @@ import type {
   PaperTradingSessionSummary,
   PortfolioBlendResult,
   RegimeAnalysisResult,
+  SpreadResult,
   StrategyInfo,
   SweepResult,
   Sweep2DResult,
@@ -274,6 +276,45 @@ class ApiClient {
         metric,
         n_trials: nTrials,
         maximize: !["max_drawdown_pct", "annualized_volatility_pct", "var_95_pct", "cvar_95_pct"].includes(metric),
+      }),
+    });
+  }
+
+  // Correlation & cointegration
+  async getCorrelationAnalysis(
+    tickers: string[],
+    startDate: string,
+    endDate: string,
+    rollingWindow: number = 63,
+    maxPairs: number = 10
+  ): Promise<CorrelationResult> {
+    return this.request("/analytics/correlation", {
+      method: "POST",
+      body: JSON.stringify({
+        tickers,
+        start_date: startDate,
+        end_date: endDate,
+        rolling_window: rollingWindow,
+        max_pairs: maxPairs,
+      }),
+    });
+  }
+
+  async getSpreadAnalysis(
+    tickerA: string,
+    tickerB: string,
+    startDate: string,
+    endDate: string,
+    lookback: number = 63
+  ): Promise<SpreadResult> {
+    return this.request("/analytics/spread", {
+      method: "POST",
+      body: JSON.stringify({
+        ticker_a: tickerA,
+        ticker_b: tickerB,
+        start_date: startDate,
+        end_date: endDate,
+        lookback,
       }),
     });
   }
