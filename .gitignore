@@ -21,6 +21,7 @@ out/
 .env
 .env.local
 .env.production.local
+!.env.example
 
 # IDE
 .vscode/
@@ -33,8 +34,12 @@ out/
 .DS_Store
 Thumbs.db
 
+# Secrets
+secrets/
+
 # Database
 pgdata/
+*.db
 
 # Test / Coverage
 .coverage
