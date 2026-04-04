@@ -190,6 +190,87 @@ export interface BacktestSummary {
   version?: number | null;
 }
 
+// ---- Alternative Data ----
+export interface EconomicIndicatorCatalogEntry {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  frequency: string;
+  description: string;
+}
+
+export interface EconomicIndicatorPoint {
+  date: string;
+  value: number;
+}
+
+export interface EconomicIndicatorSeries {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  frequency: string;
+  description: string;
+  latest_date: string | null;
+  latest_value: number | null;
+  change_pct: number | null;
+  change_direction: "up" | "down" | "flat" | null;
+  points: EconomicIndicatorPoint[];
+}
+
+export interface EconomicIndicatorsResponse {
+  series: EconomicIndicatorSeries[];
+}
+
+export interface EarningsEvent {
+  date: string;
+  event_type: "scheduled" | "reported";
+  title: string;
+  quarter_label: string | null;
+  eps_actual: number | null;
+  eps_estimate: number | null;
+  eps_surprise_pct: number | null;
+  revenue_estimate: number | null;
+}
+
+export interface EarningsOverview {
+  ticker: string;
+  next_earnings_date: string | null;
+  events: EarningsEvent[];
+}
+
+export interface SentimentPoint {
+  date: string;
+  average_score: number;
+  article_count: number;
+}
+
+export interface SentimentArticle {
+  id: string;
+  published_at: string;
+  publisher: string;
+  title: string;
+  summary: string;
+  url: string | null;
+  content_type: string | null;
+  sentiment_score: number;
+  sentiment_label: "bullish" | "neutral" | "bearish";
+}
+
+export interface NewsSentimentResult {
+  ticker: string;
+  lookback_days: number;
+  article_count: number;
+  average_score: number;
+  signal: "bullish" | "neutral" | "bearish";
+  bullish_articles: number;
+  neutral_articles: number;
+  bearish_articles: number;
+  rolling_series: SentimentPoint[];
+  articles: SentimentArticle[];
+}
+
 // ---- Versioning / Lineage ----
 export interface ParamDiff {
   key: string;

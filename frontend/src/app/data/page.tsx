@@ -1,25 +1,40 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useAvailableTickers, useLoadTicker, useOHLCV } from "@/hooks/useMarketData";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { useCallback, useMemo, useState } from "react";
+
 import {
-  LightweightChart,
   CandlestickSeries,
   HistogramSeries,
+  LightweightChart,
+  createSeriesMarkers,
   toTime,
   type IChartApi,
   type MouseEventParams,
+  type SeriesMarker,
   type Time,
 } from "@/components/charts/LightweightChartWrapper";
+import { EarningsPanel } from "@/components/data/EarningsPanel";
+import { MacroPanel } from "@/components/data/MacroPanel";
+import { SentimentPanel } from "@/components/data/SentimentPanel";
+import {
+  LoadingSpinner,
+  PageLoading,
+} from "@/components/shared/LoadingSpinner";
+import {
+  useEconomicIndicatorCatalog,
+  useEconomicIndicators,
+  useEarningsOverview,
+  useNewsSentiment,
+} from "@/hooks/useAlternativeData";
+import {
+  useAvailableTickers,
+  useLoadTicker,
+  useOHLCV,
+} from "@/hooks/useMarketData";
 import { CHART_COLORS } from "@/lib/constants";
-import type {
-  CandlestickData,
-  HistogramData,
-} from "lightweight-charts";
+import type { CandlestickData, HistogramData } from "lightweight-charts";
 
-// ── OHLCV legend overlay ────────────────────────────────────────────────
+const DEFAULT_MACRO_SERIES = ["FEDFUNDS", "CPIAUCSL", "UNRATE", "DGS10"];
 
 interface OHLCVLegend {
   o: number;
@@ -40,15 +55,15 @@ function OHLCVOverlay({
   if (!legend) return null;
   const up = legend.change >= 0;
   const color = up ? CHART_COLORS.positive : CHART_COLORS.negative;
-  const fmt = (v: number) => v.toFixed(2);
-  const fmtVol = (v: number) =>
-    v >= 1e9
-      ? `${(v / 1e9).toFixed(2)}B`
-      : v >= 1e6
-        ? `${(v / 1e6).toFixed(2)}M`
-        : v >= 1e3
-          ? `${(v / 1e3).toFixed(1)}K`
-          : String(v);
+  const fmt = (value: number) => value.toFixed(2);
+  const fmtVol = (value: number) =>
+    value >= 1e9
+      ? `${(value / 1e9).toFixed(2)}B`
+      : value >= 1e6
+        ? `${(value / 1e6).toFixed(2)}M`
+        : value >= 1e3
+          ? `${(value / 1e3).toFixed(1)}K`
+          : String(value);
 
   return (
     <div
@@ -84,8 +99,6 @@ function OHLCVOverlay({
   );
 }
 
-// ── Page ────────────────────────────────────────────────────────────────
-
 export default function DataExplorerPage() {
   const { data: tickers, isLoading: tickersLoading } = useAvailableTickers();
   const loadMutation = useLoadTicker();
@@ -95,11 +108,25 @@ export default function DataExplorerPage() {
   const [endDate, setEndDate] = useState("2024-01-01");
   const [viewTicker, setViewTicker] = useState("");
   const [legend, setLegend] = useState<OHLCVLegend | null>(null);
+  const [macroSeriesIds, setMacroSeriesIds] = useState(DEFAULT_MACRO_SERIES);
 
-  const {
-    data: ohlcv,
-    isLoading: ohlcvLoading,
-  } = useOHLCV(viewTicker, startDate, endDate, !!viewTicker);
+  const { data: ohlcv, isLoading: ohlcvLoading } = useOHLCV(
+    viewTicker,
+    startDate,
+    endDate,
+    !!viewTicker,
+  );
+  const { data: macroCatalog } = useEconomicIndicatorCatalog();
+  const { data: macroIndicators, isLoading: macroLoading } =
+    useEconomicIndicators(macroSeriesIds, startDate, endDate);
+  const { data: earningsOverview, isLoading: earningsLoading } =
+    useEarningsOverview(viewTicker, !!viewTicker);
+  const { data: newsSentiment, isLoading: sentimentLoading } = useNewsSentiment(
+    viewTicker,
+    30,
+    8,
+    !!viewTicker,
+  );
 
   const handleLoad = async () => {
     if (!newTicker) return;
@@ -112,25 +139,77 @@ export default function DataExplorerPage() {
     setNewTicker("");
   };
 
-  // Build lightweight-charts data arrays
-  const candleData: CandlestickData<Time>[] = (ohlcv?.data ?? []).map((d) => ({
-    time: toTime(d.date),
-    open: d.open,
-    high: d.high,
-    low: d.low,
-    close: d.close,
-  }));
+  const candleData: CandlestickData<Time>[] = (ohlcv?.data ?? []).map(
+    (row) => ({
+      time: toTime(row.date),
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+    }),
+  );
 
-  const volumeData: HistogramData<Time>[] = (ohlcv?.data ?? []).map((d) => ({
-    time: toTime(d.date),
-    value: d.volume,
+  const volumeData: HistogramData<Time>[] = (ohlcv?.data ?? []).map((row) => ({
+    time: toTime(row.date),
+    value: row.volume,
     color:
-      d.close >= d.open
-        ? "rgba(0,212,170,0.18)"
-        : "rgba(255,68,102,0.18)",
+      row.close >= row.open ? "rgba(0,212,170,0.18)" : "rgba(255,68,102,0.18)",
   }));
 
-  // Chart init callback
+  const earningsMarkers = useMemo(() => {
+    if (!earningsOverview || !ohlcv?.data?.length) return [];
+
+    const tradingDates = ohlcv.data.map((row) => row.date);
+    const snapToTradingDate = (eventDate: string) => {
+      const exactMatch = tradingDates.find((date) => date === eventDate);
+      if (exactMatch) return exactMatch;
+      const nextTradingDate = tradingDates.find((date) => date > eventDate);
+      return nextTradingDate ?? tradingDates[tradingDates.length - 1];
+    };
+
+    const markers: SeriesMarker<Time>[] = [];
+    const seen = new Set<string>();
+
+    for (const event of earningsOverview.events) {
+      const markerDate = snapToTradingDate(event.date);
+      if (!markerDate) continue;
+
+      const key = `${markerDate}:${event.event_type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      let color: string = CHART_COLORS.purple;
+      if (event.event_type === "scheduled") {
+        color = CHART_COLORS.yellow;
+      } else if ((event.eps_surprise_pct ?? 0) >= 0) {
+        color = CHART_COLORS.positive;
+      } else if ((event.eps_surprise_pct ?? 0) < 0) {
+        color = CHART_COLORS.negative;
+      }
+
+      markers.push({
+        time: toTime(markerDate),
+        position: event.event_type === "scheduled" ? "aboveBar" : "belowBar",
+        color,
+        shape: "circle",
+        text: "E",
+        size: 0.7,
+      });
+    }
+
+    return markers.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+  }, [earningsOverview, ohlcv]);
+
+  const toggleMacroSeries = useCallback((seriesId: string) => {
+    setMacroSeriesIds((current) => {
+      if (current.includes(seriesId)) {
+        if (current.length === 1) return current;
+        return current.filter((id) => id !== seriesId);
+      }
+      return [...current, seriesId];
+    });
+  }, []);
+
   const handleChartInit = useCallback(
     (chart: IChartApi) => {
       if (!candleData.length) return;
@@ -144,6 +223,9 @@ export default function DataExplorerPage() {
         wickDownColor: CHART_COLORS.negative,
       });
       candleSeries.setData(candleData);
+      if (earningsMarkers.length > 0) {
+        createSeriesMarkers(candleSeries, earningsMarkers);
+      }
 
       const volumeSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: "volume" },
@@ -154,7 +236,6 @@ export default function DataExplorerPage() {
         scaleMargins: { top: 0.82, bottom: 0 },
       });
 
-      // Set initial legend from last bar
       const last = ohlcv?.data?.[ohlcv.data.length - 1];
       const prev = ohlcv?.data?.[ohlcv.data.length - 2];
       if (last) {
@@ -164,48 +245,47 @@ export default function DataExplorerPage() {
           l: last.low,
           c: last.close,
           v: last.volume,
-          change: prev
-            ? ((last.close - prev.close) / prev.close) * 100
-            : 0,
+          change: prev ? ((last.close - prev.close) / prev.close) * 100 : 0,
         });
       }
 
-      // Crosshair → update legend
       chart.subscribeCrosshairMove((param: MouseEventParams<Time>) => {
         const candle = param.seriesData?.get(candleSeries) as
           | CandlestickData<Time>
           | undefined;
-        const vol = param.seriesData?.get(volumeSeries) as
+        const volume = param.seriesData?.get(volumeSeries) as
           | HistogramData<Time>
           | undefined;
-        if (candle) {
-          const idx = candleData.findIndex(
-            (d) => d.time === candle.time
-          );
-          const prevBar = idx > 0 ? candleData[idx - 1] : null;
-          setLegend({
-            o: candle.open,
-            h: candle.high,
-            l: candle.low,
-            c: candle.close,
-            v: vol?.value ?? 0,
-            change: prevBar
-              ? ((candle.close - prevBar.close) / prevBar.close) * 100
-              : 0,
-          });
-        }
+        if (!candle) return;
+
+        const index = candleData.findIndex((row) => row.time === candle.time);
+        const previousBar = index > 0 ? candleData[index - 1] : null;
+        setLegend({
+          o: candle.open,
+          h: candle.high,
+          l: candle.low,
+          c: candle.close,
+          v: volume?.value ?? 0,
+          change: previousBar
+            ? ((candle.close - previousBar.close) / previousBar.close) * 100
+            : 0,
+        });
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ohlcv]
+    [candleData, earningsMarkers, ohlcv, volumeData],
   );
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-6">Data Explorer</h1>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold">Data Explorer</h1>
+        <p className="text-sm text-text-muted mt-1">
+          Load price history, overlay earnings events, score recent news
+          sentiment, and compare a ticker against macro regime signals.
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Load + Ticker List */}
         <div className="space-y-4">
           <div className="bg-bg-card border border-border rounded p-4">
             <h2 className="text-sm font-medium text-text-secondary mb-3">
@@ -215,7 +295,9 @@ export default function DataExplorerPage() {
               <input
                 type="text"
                 value={newTicker}
-                onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                onChange={(event) =>
+                  setNewTicker(event.target.value.toUpperCase())
+                }
                 placeholder="e.g. AAPL"
                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-blue"
               />
@@ -223,13 +305,13 @@ export default function DataExplorerPage() {
                 <input
                   type="date"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(event) => setStartDate(event.target.value)}
                   className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
                 />
                 <input
                   type="date"
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(event) => setEndDate(event.target.value)}
                   className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
                 />
               </div>
@@ -260,17 +342,17 @@ export default function DataExplorerPage() {
               <LoadingSpinner />
             ) : tickers && tickers.length > 0 ? (
               <div className="space-y-1">
-                {tickers.map((t) => (
+                {tickers.map((ticker) => (
                   <button
-                    key={t}
-                    onClick={() => setViewTicker(t)}
+                    key={ticker}
+                    onClick={() => setViewTicker(ticker)}
                     className={`block w-full text-left px-2 py-1 rounded text-sm ${
-                      viewTicker === t
+                      viewTicker === ticker
                         ? "bg-bg-hover text-accent-blue"
                         : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
                     } transition-colors`}
                   >
-                    {t}
+                    {ticker}
                   </button>
                 ))}
               </div>
@@ -280,17 +362,70 @@ export default function DataExplorerPage() {
           </div>
         </div>
 
-        {/* Right: Chart */}
         <div className="lg:col-span-2">
-          {viewTicker && (
+          {viewTicker ? (
             <div className="bg-bg-card border border-border rounded p-4">
+              <div className="flex flex-col gap-2 mb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-text-primary">
+                    {viewTicker} Price & Event Overlay
+                  </h2>
+                  <p className="text-xs text-text-muted mt-1">
+                    Yellow markers show scheduled earnings; purple and surprise-
+                    colored markers show reported quarters.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {earningsOverview?.next_earnings_date && (
+                    <span
+                      className="px-2.5 py-1 rounded text-[11px] font-medium"
+                      style={{
+                        background: "rgba(255,187,51,0.12)",
+                        border: "1px solid rgba(255,187,51,0.22)",
+                        color: "var(--color-accent-yellow)",
+                      }}
+                    >
+                      Next earnings {earningsOverview.next_earnings_date}
+                    </span>
+                  )}
+                  {newsSentiment && (
+                    <span
+                      className="px-2.5 py-1 rounded text-[11px] font-medium capitalize"
+                      style={{
+                        background:
+                          newsSentiment.signal === "bullish"
+                            ? "rgba(0,212,170,0.12)"
+                            : newsSentiment.signal === "bearish"
+                              ? "rgba(255,68,102,0.12)"
+                              : "rgba(68,136,255,0.12)",
+                        border:
+                          newsSentiment.signal === "bullish"
+                            ? "1px solid rgba(0,212,170,0.22)"
+                            : newsSentiment.signal === "bearish"
+                              ? "1px solid rgba(255,68,102,0.22)"
+                              : "1px solid rgba(68,136,255,0.22)",
+                        color:
+                          newsSentiment.signal === "bullish"
+                            ? "var(--color-accent-green)"
+                            : newsSentiment.signal === "bearish"
+                              ? "var(--color-accent-red)"
+                              : "var(--color-accent-blue)",
+                      }}
+                    >
+                      Sentiment {newsSentiment.signal} (
+                      {newsSentiment.average_score.toFixed(2)})
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="relative">
                 <OHLCVOverlay ticker={viewTicker} legend={legend} />
                 {ohlcvLoading ? (
                   <PageLoading />
                 ) : ohlcv && ohlcv.data.length > 0 ? (
                   <LightweightChart
-                    key={`${viewTicker}-${ohlcv.data.length}`}
+                    key={`${viewTicker}-${ohlcv.data.length}-${earningsMarkers.length}`}
                     height={480}
                     onInit={handleChartInit}
                     options={{
@@ -305,6 +440,7 @@ export default function DataExplorerPage() {
                   </p>
                 )}
               </div>
+
               {ohlcv && ohlcv.original_rows > ohlcv.returned_rows && (
                 <p className="text-xs text-text-muted mt-2">
                   {ohlcv.original_rows} trading days — displaying{" "}
@@ -312,14 +448,33 @@ export default function DataExplorerPage() {
                 </p>
               )}
             </div>
-          )}
-
-          {!viewTicker && (
+          ) : (
             <div className="bg-bg-card border border-border rounded flex items-center justify-center h-64 text-text-muted text-sm">
               Select a ticker to view its price chart
             </div>
           )}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-6 mt-6">
+        <SentimentPanel
+          sentiment={newsSentiment}
+          isLoading={sentimentLoading}
+        />
+        <EarningsPanel
+          overview={earningsOverview}
+          isLoading={earningsLoading}
+        />
+      </div>
+
+      <div className="mt-6">
+        <MacroPanel
+          catalog={macroCatalog}
+          selectedIds={macroSeriesIds}
+          onToggleIndicator={toggleMacroSeries}
+          series={macroIndicators?.series}
+          isLoading={macroLoading}
+        />
       </div>
     </div>
   );

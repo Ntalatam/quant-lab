@@ -6,6 +6,9 @@ import type {
   BayesOptResult,
   CapacityResult,
   ComparisonResult,
+  EconomicIndicatorCatalogEntry,
+  EconomicIndicatorsResponse,
+  EarningsOverview,
   CorrelationResult,
   FactorExposureResult,
   ImpliedVolResult,
@@ -17,6 +20,7 @@ import type {
   PaperTradingSessionCreate,
   PaperTradingSessionDetail,
   PaperTradingSessionSummary,
+  NewsSentimentResult,
   PnlScenarioResult,
   PortfolioBlendResult,
   RegimeAnalysisResult,
@@ -29,8 +33,7 @@ import type {
   WalkForwardResult,
 } from "./types";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 class ApiClient {
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -91,8 +94,44 @@ class ApiClient {
         volume: number;
       }[];
     }>(
-      `/data/ohlcv?ticker=${ticker}&start_date=${startDate}&end_date=${endDate}`
+      `/data/ohlcv?ticker=${ticker}&start_date=${startDate}&end_date=${endDate}`,
     );
+  }
+
+  async getEconomicIndicatorCatalog(): Promise<
+    EconomicIndicatorCatalogEntry[]
+  > {
+    return this.request("/data/economic-indicators/catalog");
+  }
+
+  async getEconomicIndicators(
+    seriesIds: string[],
+    startDate: string,
+    endDate: string,
+  ): Promise<EconomicIndicatorsResponse> {
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+    });
+    seriesIds.forEach((seriesId) => params.append("series_ids", seriesId));
+    return this.request(`/data/economic-indicators?${params.toString()}`);
+  }
+
+  async getEarningsOverview(ticker: string): Promise<EarningsOverview> {
+    return this.request(`/data/earnings?ticker=${encodeURIComponent(ticker)}`);
+  }
+
+  async getNewsSentiment(
+    ticker: string,
+    lookbackDays: number = 30,
+    limit: number = 10,
+  ): Promise<NewsSentimentResult> {
+    const params = new URLSearchParams({
+      ticker,
+      lookback_days: String(lookbackDays),
+      limit: String(limit),
+    });
+    return this.request(`/data/news-sentiment?${params.toString()}`);
   }
 
   // Backtest
@@ -108,9 +147,9 @@ class ApiClient {
   }
 
   async listBacktests(): Promise<BacktestSummary[]> {
-    const res = await this.request<{ items: BacktestSummary[]; total: number } | BacktestSummary[]>(
-      "/backtest/list?limit=500"
-    );
+    const res = await this.request<
+      { items: BacktestSummary[]; total: number } | BacktestSummary[]
+    >("/backtest/list?limit=500");
     // Handle both new paginated and old flat array responses
     return Array.isArray(res) ? res : res.items;
   }
@@ -119,7 +158,10 @@ class ApiClient {
     return this.request(`/backtest/${id}`, { method: "DELETE" });
   }
 
-  async updateNotes(id: string, notes: string): Promise<{ id: string; notes: string }> {
+  async updateNotes(
+    id: string,
+    notes: string,
+  ): Promise<{ id: string; notes: string }> {
     return this.request(`/backtest/${id}/notes`, {
       method: "PATCH",
       body: JSON.stringify({ notes }),
@@ -130,11 +172,19 @@ class ApiClient {
   async setLineageTag(
     backtestId: string,
     lineageTag: string,
-    parentId?: string
-  ): Promise<{ id: string; lineage_tag: string; version: number; parent_id: string | null }> {
+    parentId?: string,
+  ): Promise<{
+    id: string;
+    lineage_tag: string;
+    version: number;
+    parent_id: string | null;
+  }> {
     return this.request(`/backtest/${backtestId}/lineage`, {
       method: "PATCH",
-      body: JSON.stringify({ lineage_tag: lineageTag, parent_id: parentId || null }),
+      body: JSON.stringify({
+        lineage_tag: lineageTag,
+        parent_id: parentId || null,
+      }),
     });
   }
 
@@ -152,7 +202,7 @@ class ApiClient {
   }
 
   async createPaperSession(
-    payload: PaperTradingSessionCreate
+    payload: PaperTradingSessionCreate,
   ): Promise<PaperTradingSessionDetail> {
     return this.request("/paper/sessions", {
       method: "POST",
@@ -181,9 +231,7 @@ class ApiClient {
     return this.request("/strategies/list");
   }
 
-  async getStrategyParams(
-    strategyId: string
-  ): Promise<{
+  async getStrategyParams(strategyId: string): Promise<{
     id: string;
     name: string;
     params: StrategyInfo["params"];
@@ -203,18 +251,18 @@ class ApiClient {
   async runMonteCarlo(
     backtestId: string,
     nSimulations: number = 1000,
-    nDays: number = 252
+    nDays: number = 252,
   ): Promise<MonteCarloResult> {
     return this.request(
       `/analytics/monte-carlo/${backtestId}?n_simulations=${nSimulations}&n_days=${nDays}`,
-      { method: "POST" }
+      { method: "POST" },
     );
   }
 
   async runSweep(
     baseConfig: BacktestConfig,
     sweepParam: string,
-    sweepValues: (number | string)[]
+    sweepValues: (number | string)[],
   ): Promise<SweepResult> {
     return this.request("/backtest/sweep", {
       method: "POST",
@@ -229,7 +277,7 @@ class ApiClient {
   async runWalkForward(
     config: BacktestConfig,
     nFolds: number,
-    trainPct: number
+    trainPct: number,
   ): Promise<WalkForwardResult> {
     return this.request("/backtest/walk-forward", {
       method: "POST",
@@ -243,7 +291,7 @@ class ApiClient {
     valuesX: number[],
     paramY: string,
     valuesY: number[],
-    metric: string = "sharpe_ratio"
+    metric: string = "sharpe_ratio",
   ): Promise<Sweep2DResult> {
     return this.request("/backtest/sweep2d", {
       method: "POST",
@@ -259,19 +307,25 @@ class ApiClient {
   }
 
   async getFactorExposure(backtestId: string): Promise<FactorExposureResult> {
-    return this.request(`/analytics/factor-exposure/${backtestId}`, { method: "POST" });
+    return this.request(`/analytics/factor-exposure/${backtestId}`, {
+      method: "POST",
+    });
   }
 
   async getRegimeAnalysis(backtestId: string): Promise<RegimeAnalysisResult> {
-    return this.request(`/analytics/regime-analysis/${backtestId}`, { method: "POST" });
+    return this.request(`/analytics/regime-analysis/${backtestId}`, {
+      method: "POST",
+    });
   }
 
   async getCapacityAnalysis(backtestId: string): Promise<CapacityResult> {
-    return this.request(`/analytics/capacity/${backtestId}`, { method: "POST" });
+    return this.request(`/analytics/capacity/${backtestId}`, {
+      method: "POST",
+    });
   }
 
   async getTransactionCostAnalysis(
-    backtestId: string
+    backtestId: string,
   ): Promise<TransactionCostAnalysisResult> {
     return this.request(`/analytics/tca/${backtestId}`, { method: "POST" });
   }
@@ -279,7 +333,7 @@ class ApiClient {
   async portfolioBlend(
     backtestIds: string[],
     weights: number[],
-    optimize: "custom" | "equal" | "max_sharpe" | "min_dd" = "custom"
+    optimize: "custom" | "equal" | "max_sharpe" | "min_dd" = "custom",
   ): Promise<PortfolioBlendResult> {
     return this.request("/analytics/portfolio-blend", {
       method: "POST",
@@ -291,7 +345,7 @@ class ApiClient {
     backtestId: string,
     paramSpecs: BayesOptParamSpec[],
     metric: string,
-    nTrials: number
+    nTrials: number,
   ): Promise<BayesOptResult> {
     // Fetch the original backtest to get base_config
     const result = await this.getBacktestResult(backtestId);
@@ -302,7 +356,12 @@ class ApiClient {
         param_specs: paramSpecs,
         metric,
         n_trials: nTrials,
-        maximize: !["max_drawdown_pct", "annualized_volatility_pct", "var_95_pct", "cvar_95_pct"].includes(metric),
+        maximize: ![
+          "max_drawdown_pct",
+          "annualized_volatility_pct",
+          "var_95_pct",
+          "cvar_95_pct",
+        ].includes(metric),
       }),
     });
   }
@@ -313,7 +372,7 @@ class ApiClient {
     startDate: string,
     endDate: string,
     rollingWindow: number = 63,
-    maxPairs: number = 10
+    maxPairs: number = 10,
   ): Promise<CorrelationResult> {
     return this.request("/analytics/correlation", {
       method: "POST",
@@ -332,7 +391,7 @@ class ApiClient {
     tickerB: string,
     startDate: string,
     endDate: string,
-    lookback: number = 63
+    lookback: number = 63,
   ): Promise<SpreadResult> {
     return this.request("/analytics/spread", {
       method: "POST",
@@ -348,8 +407,12 @@ class ApiClient {
 
   // Options analytics
   async priceOption(params: {
-    spot: number; strike: number; days_to_expiry: number;
-    risk_free_rate: number; volatility: number; option_type: "call" | "put";
+    spot: number;
+    strike: number;
+    days_to_expiry: number;
+    risk_free_rate: number;
+    volatility: number;
+    option_type: "call" | "put";
   }): Promise<OptionPriceResult> {
     return this.request("/options/price", {
       method: "POST",
@@ -358,8 +421,12 @@ class ApiClient {
   }
 
   async solveImpliedVol(params: {
-    market_price: number; spot: number; strike: number;
-    days_to_expiry: number; risk_free_rate: number; option_type: "call" | "put";
+    market_price: number;
+    spot: number;
+    strike: number;
+    days_to_expiry: number;
+    risk_free_rate: number;
+    option_type: "call" | "put";
   }): Promise<ImpliedVolResult> {
     return this.request("/options/implied-vol", {
       method: "POST",
@@ -368,8 +435,11 @@ class ApiClient {
   }
 
   async getOptionsChain(params: {
-    spot: number; risk_free_rate?: number; volatility?: number;
-    days_to_expiry?: number[]; n_strikes?: number;
+    spot: number;
+    risk_free_rate?: number;
+    volatility?: number;
+    days_to_expiry?: number[];
+    n_strikes?: number;
   }): Promise<{ spot: number; chain: OptionsChainEntry[] }> {
     return this.request("/options/chain", {
       method: "POST",
@@ -378,8 +448,11 @@ class ApiClient {
   }
 
   async getVolSurface(params: {
-    spot: number; risk_free_rate?: number; base_volatility?: number;
-    days_to_expiry?: number[]; n_strikes?: number;
+    spot: number;
+    risk_free_rate?: number;
+    base_volatility?: number;
+    days_to_expiry?: number[];
+    n_strikes?: number;
   }): Promise<VolSurfaceResult> {
     return this.request("/options/vol-surface", {
       method: "POST",
@@ -388,9 +461,13 @@ class ApiClient {
   }
 
   async getPnlScenario(params: {
-    spot: number; strike: number; days_to_expiry: number;
-    risk_free_rate?: number; volatility?: number;
-    option_type: "call" | "put"; position: 1 | -1;
+    spot: number;
+    strike: number;
+    days_to_expiry: number;
+    risk_free_rate?: number;
+    volatility?: number;
+    option_type: "call" | "put";
+    position: 1 | -1;
   }): Promise<PnlScenarioResult> {
     return this.request("/options/pnl-scenario", {
       method: "POST",

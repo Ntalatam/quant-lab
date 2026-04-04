@@ -14,8 +14,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.price_data import PriceData
+from app.schemas.alternative_data import (
+    EarningsOverviewResponse,
+    EconomicIndicatorCatalogEntry,
+    EconomicIndicatorsResponse,
+    NewsSentimentResponse,
+)
 from app.schemas.common import ErrorResponse
 from app.schemas.price_data import LoadDataRequest, LoadDataResponse, OHLCVResponse
+from app.services.alternative_data import (
+    get_earnings_overview,
+    get_economic_indicators,
+    get_news_sentiment,
+    list_economic_indicator_catalog,
+)
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
 router = APIRouter(prefix="/data", tags=["data"])
@@ -107,3 +119,72 @@ async def get_ohlcv(
             for idx, row in df.iterrows()
         ],
     }
+
+
+@router.get(
+    "/economic-indicators/catalog",
+    response_model=list[EconomicIndicatorCatalogEntry],
+    summary="List supported macro indicators",
+    description=(
+        "Returns the curated catalog of FRED series that QuantLab exposes in the "
+        "alternative-data workspace."
+    ),
+)
+async def get_indicator_catalog():
+    return list_economic_indicator_catalog()
+
+
+@router.get(
+    "/economic-indicators",
+    response_model=EconomicIndicatorsResponse,
+    summary="Read macro indicators from FRED",
+    description=(
+        "Loads chart-ready macro time series from FRED, with latest-value "
+        "summaries and recent directional changes."
+    ),
+)
+async def read_economic_indicators(
+    series_ids: list[str] | None = Query(default=None),
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+):
+    series = await get_economic_indicators(
+        series_ids=series_ids,
+        start_date=date.fromisoformat(start_date),
+        end_date=date.fromisoformat(end_date),
+    )
+    return {"series": series}
+
+
+@router.get(
+    "/earnings",
+    response_model=EarningsOverviewResponse,
+    summary="Read earnings events for a ticker",
+    description=(
+        "Returns recent reported earnings plus the next scheduled earnings date "
+        "for the requested ticker."
+    ),
+)
+async def read_earnings_overview(ticker: str = Query(...)):
+    return await get_earnings_overview(ticker.upper())
+
+
+@router.get(
+    "/news-sentiment",
+    response_model=NewsSentimentResponse,
+    summary="Read news sentiment for a ticker",
+    description=(
+        "Scores recent ticker-linked news with a finance-aware lexical model, "
+        "then aggregates the articles into a rolling sentiment signal."
+    ),
+)
+async def read_news_sentiment(
+    ticker: str = Query(...),
+    lookback_days: int = Query(default=30, ge=3, le=180),
+    limit: int = Query(default=10, ge=3, le=25),
+):
+    return await get_news_sentiment(
+        ticker.upper(),
+        lookback_days=lookback_days,
+        limit=limit,
+    )
