@@ -18,7 +18,9 @@ export default function RootLayout({
       <body className="min-h-screen flex bg-[var(--color-bg-primary)]">
         <Providers>
           <Sidebar />
-          <main className="flex-1 ml-60 p-7 overflow-auto min-h-screen">{children}</main>
+          <main className="flex-1 lg:ml-60 p-4 pt-14 lg:p-7 lg:pt-7 overflow-auto min-h-screen">
+            {children}
+          </main>
         </Providers>
       </body>
     </html>

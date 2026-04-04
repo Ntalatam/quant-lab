@@ -16,8 +16,10 @@
   --color-accent-blue: #4488ff;
   --color-accent-yellow: #ffbb33;
   --color-accent-purple: #8855ff;
-  --font-sans: "Avenir Next", "Segoe UI", "SF Pro Display", system-ui, sans-serif;
-  --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  --font-sans:
+    "Avenir Next", "Segoe UI", "SF Pro Display", system-ui, sans-serif;
+  --font-mono:
+    "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 }
 
 html {
@@ -30,8 +32,16 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
   /* Subtle ambient glow in top corners — makes the dark bg feel intentional */
   background-image:
-    radial-gradient(ellipse at 15% 0%, rgba(68, 136, 255, 0.04) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 5%, rgba(0, 212, 170, 0.025) 0%, transparent 50%);
+    radial-gradient(
+      ellipse at 15% 0%,
+      rgba(68, 136, 255, 0.04) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse at 85% 5%,
+      rgba(0, 212, 170, 0.025) 0%,
+      transparent 50%
+    );
 }
 
 .tabular-nums {
@@ -45,7 +55,9 @@ body {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
 /* Elevated card: stronger shadow for panels that should "float" */
@@ -53,15 +65,22 @@ body {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.6),
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 /* Card with gradient surface — slightly lighter at top, more premium feel */
 .card-surface {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 60%), var(--color-bg-card);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 60%),
+    var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 /* ── Strategy category badges ─────────────────────────────────────── */
@@ -120,7 +139,9 @@ body {
 input:not([type="range"]):not([type="checkbox"]),
 select,
 textarea {
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 input:not([type="range"]):not([type="checkbox"]):focus,
@@ -165,9 +186,32 @@ textarea:focus {
   filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.7));
 }
 
+/* ── Responsive helpers ──────────────────────────────────────────── */
+
+/* Horizontal scrollable container for tables on mobile */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Stack grids vertically on small screens */
+@media (max-width: 1023px) {
+  .card {
+    overflow-x: auto;
+  }
+}
+
 /* ── Stat accent bars (used in MetricsCard top border) ───────────── */
 
-.accent-bar-green  { background: var(--color-accent-green);  }
-.accent-bar-red    { background: var(--color-accent-red);    }
-.accent-bar-blue   { background: var(--color-accent-blue);   }
-.accent-bar-yellow { background: var(--color-accent-yellow); }
+.accent-bar-green {
+  background: var(--color-accent-green);
+}
+.accent-bar-red {
+  background: var(--color-accent-red);
+}
+.accent-bar-blue {
+  background: var(--color-accent-blue);
+}
+.accent-bar-yellow {
+  background: var(--color-accent-yellow);
+}

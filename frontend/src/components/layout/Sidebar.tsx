@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ import {
   GitCompareArrows,
   CircleDollarSign,
   GitBranch,
+  Menu,
 } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
@@ -49,29 +50,32 @@ const NAV_SECTIONS = [
   },
   {
     label: "Data",
-    items: [
-      { href: "/data", label: "Data Explorer", icon: Database },
-    ],
+    items: [{ href: "/data", label: "Data Explorer", icon: Database }],
   },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   useKeyboardShortcuts();
+
+  const closeMobile = useCallback(() => setMobileOpen(false), []);
+
+  // Close on escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  return (
-    <aside
-      className="fixed left-0 top-0 h-screen w-60 flex flex-col z-50"
-      style={{
-        background: "var(--color-bg-secondary)",
-        borderRight: "1px solid var(--color-border)",
-        boxShadow: "1px 0 0 rgba(255,255,255,0.02)",
-      }}
-    >
+  const sidebarContent = (
+    <>
       {/* Logo */}
       <div
         className="h-14 flex items-center px-5 shrink-0"
@@ -93,14 +97,18 @@ export function Sidebar() {
             <span className="font-bold text-[13px] text-text-primary tracking-tight">
               Quant<span className="text-accent-green">Lab</span>
             </span>
-            <span
-              className="section-label"
-              style={{ letterSpacing: "0.15em" }}
-            >
+            <span className="section-label" style={{ letterSpacing: "0.15em" }}>
               Research Platform
             </span>
           </div>
         </Link>
+        {/* Close button — mobile only */}
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="ml-auto lg:hidden text-text-muted hover:text-text-primary transition-colors"
+        >
+          <X size={16} />
+        </button>
       </div>
 
       {/* Nav */}
@@ -115,6 +123,7 @@ export function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={closeMobile}
                     className={`relative flex items-center gap-3 px-3 py-2 rounded text-[13px] transition-all duration-150 ${
                       active
                         ? "text-text-primary font-medium"
@@ -166,10 +175,16 @@ export function Sidebar() {
             <Keyboard size={12} />
           </button>
         </div>
-        <p className="text-[10px]" style={{ color: "var(--color-text-muted)", opacity: 0.55 }}>
+        <p
+          className="text-[10px]"
+          style={{ color: "var(--color-text-muted)", opacity: 0.55 }}
+        >
           QuantLab v1.0 — Local
         </p>
-        <p className="text-[10px]" style={{ color: "var(--color-text-muted)", opacity: 0.4 }}>
+        <p
+          className="text-[10px]"
+          style={{ color: "var(--color-text-muted)", opacity: 0.4 }}
+        >
           Charts by{" "}
           <a
             href="https://www.tradingview.com/"
@@ -181,6 +196,48 @@ export function Sidebar() {
           </a>
         </p>
       </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed top-3 left-3 z-50 lg:hidden p-2 rounded-lg"
+        style={{
+          background: "var(--color-bg-card)",
+          border: "1px solid var(--color-border)",
+        }}
+        aria-label="Open navigation"
+      >
+        <Menu size={18} className="text-text-primary" />
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-[90] lg:hidden"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — always visible on lg+, slide-in drawer on mobile */}
+      <aside
+        className={`fixed left-0 top-0 h-screen w-60 flex flex-col z-[95] transition-transform duration-200 ease-out lg:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{
+          background: "var(--color-bg-secondary)",
+          borderRight: "1px solid var(--color-border)",
+          boxShadow: mobileOpen
+            ? "4px 0 24px rgba(0,0,0,0.5)"
+            : "1px 0 0 rgba(255,255,255,0.02)",
+        }}
+      >
+        {sidebarContent}
+      </aside>
 
       {/* Shortcuts modal */}
       {showShortcuts && (
@@ -199,9 +256,14 @@ export function Sidebar() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold text-text-primary">Keyboard Shortcuts</h3>
+              <h3 className="text-sm font-semibold text-text-primary">
+                Keyboard Shortcuts
+              </h3>
               <button onClick={() => setShowShortcuts(false)}>
-                <X size={14} className="text-text-muted hover:text-text-primary transition-colors" />
+                <X
+                  size={14}
+                  className="text-text-muted hover:text-text-primary transition-colors"
+                />
               </button>
             </div>
             <div className="space-y-3">
@@ -227,6 +289,6 @@ export function Sidebar() {
           </div>
         </div>
       )}
-    </aside>
+    </>
   );
 }
