@@ -500,6 +500,79 @@ export interface SpreadResult {
   cointegration: PairTestResult;
 }
 
+// ---- Options Analytics ----
+export interface OptionPriceResult {
+  price: number;
+  delta: number;
+  gamma: number;
+  theta: number;
+  vega: number;
+  rho: number;
+  intrinsic: number;
+  time_value: number;
+  option_type: string;
+  moneyness: number;
+  moneyness_label: string;
+}
+
+export interface ImpliedVolResult {
+  implied_volatility: number | null;
+  implied_volatility_pct: number | null;
+  market_price: number;
+  theoretical_price: number | null;
+  message: string;
+}
+
+export interface OptionsChainEntry {
+  dte: number;
+  strike: number;
+  call_price: number;
+  call_delta: number;
+  call_gamma: number;
+  call_theta: number;
+  call_vega: number;
+  put_price: number;
+  put_delta: number;
+  put_gamma: number;
+  put_theta: number;
+  put_vega: number;
+  moneyness: number;
+}
+
+export interface VolSurfacePoint {
+  dte: number;
+  strike: number;
+  moneyness: number;
+  implied_vol: number;
+}
+
+export interface VolSurfaceResult {
+  spot: number;
+  base_vol: number;
+  strikes: number[];
+  expiries: number[];
+  surface: VolSurfacePoint[];
+}
+
+export interface PnlPoint {
+  spot: number;
+  pnl: number;
+}
+
+export interface PnlCurve {
+  dte: number;
+  label: string;
+  points: PnlPoint[];
+}
+
+export interface PnlScenarioResult {
+  strike: number;
+  entry_price: number;
+  position: string;
+  option_type: string;
+  curves: PnlCurve[];
+}
+
 // ---- Bayesian Optimization ----
 export interface BayesOptParamSpec {
   name: string;

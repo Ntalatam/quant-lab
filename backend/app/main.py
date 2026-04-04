@@ -53,6 +53,10 @@ OPENAPI_TAGS = [
         "description": "Persistent live paper-trading sessions and real-time monitoring.",
     },
     {
+        "name": "options",
+        "description": "Black-Scholes pricing, Greeks, implied volatility, and volatility surface analytics.",
+    },
+    {
         "name": "strategies",
         "description": "Strategy metadata, parameter schemas, and discoverability helpers.",
     },

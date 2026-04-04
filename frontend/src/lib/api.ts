@@ -8,10 +8,14 @@ import type {
   ComparisonResult,
   CorrelationResult,
   FactorExposureResult,
+  ImpliedVolResult,
   MonteCarloResult,
+  OptionPriceResult,
+  OptionsChainEntry,
   PaperTradingSessionCreate,
   PaperTradingSessionDetail,
   PaperTradingSessionSummary,
+  PnlScenarioResult,
   PortfolioBlendResult,
   RegimeAnalysisResult,
   SpreadResult,
@@ -19,6 +23,7 @@ import type {
   SweepResult,
   Sweep2DResult,
   TransactionCostAnalysisResult,
+  VolSurfaceResult,
   WalkForwardResult,
 } from "./types";
 
@@ -316,6 +321,58 @@ class ApiClient {
         end_date: endDate,
         lookback,
       }),
+    });
+  }
+
+  // Options analytics
+  async priceOption(params: {
+    spot: number; strike: number; days_to_expiry: number;
+    risk_free_rate: number; volatility: number; option_type: "call" | "put";
+  }): Promise<OptionPriceResult> {
+    return this.request("/options/price", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async solveImpliedVol(params: {
+    market_price: number; spot: number; strike: number;
+    days_to_expiry: number; risk_free_rate: number; option_type: "call" | "put";
+  }): Promise<ImpliedVolResult> {
+    return this.request("/options/implied-vol", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getOptionsChain(params: {
+    spot: number; risk_free_rate?: number; volatility?: number;
+    days_to_expiry?: number[]; n_strikes?: number;
+  }): Promise<{ spot: number; chain: OptionsChainEntry[] }> {
+    return this.request("/options/chain", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getVolSurface(params: {
+    spot: number; risk_free_rate?: number; base_volatility?: number;
+    days_to_expiry?: number[]; n_strikes?: number;
+  }): Promise<VolSurfaceResult> {
+    return this.request("/options/vol-surface", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getPnlScenario(params: {
+    spot: number; strike: number; days_to_expiry: number;
+    risk_free_rate?: number; volatility?: number;
+    option_type: "call" | "put"; position: 1 | -1;
+  }): Promise<PnlScenarioResult> {
+    return this.request("/options/pnl-scenario", {
+      method: "POST",
+      body: JSON.stringify(params),
     });
   }
 

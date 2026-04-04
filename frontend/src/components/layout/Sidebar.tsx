@@ -15,6 +15,7 @@ import {
   X,
   RadioTower,
   GitCompareArrows,
+  CircleDollarSign,
 } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
@@ -40,6 +41,7 @@ const NAV_SECTIONS = [
     items: [
       { href: "/compare", label: "Compare", icon: Columns3 },
       { href: "/correlation", label: "Correlation", icon: GitCompareArrows },
+      { href: "/options", label: "Options Lab", icon: CircleDollarSign },
       { href: "/strategies", label: "Strategy Library", icon: Code2 },
     ],
   },

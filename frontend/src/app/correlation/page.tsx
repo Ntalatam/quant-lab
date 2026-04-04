@@ -502,8 +502,6 @@ function CorrelationHeatmap({
   tickers: string[];
   matrix: number[][];
 }) {
-  const n = tickers.length;
-
   const getColor = (v: number): string => {
     // -1 → red, 0 → neutral, +1 → blue
     if (v >= 0) {
