@@ -1,7 +1,7 @@
 """
 Data ingestion service.
 
-Fetches OHLCV data from yfinance, validates it, and stores it in PostgreSQL.
+Fetches OHLCV data from yfinance, validates it, and stores it in the database.
 Implements gap-fill logic to avoid redundant API calls for already-loaded data.
 """
 
@@ -11,13 +11,51 @@ from datetime import date, timedelta
 import pandas as pd
 import yfinance as yf
 from sqlalchemy import and_, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.dml import Insert
 
 from app.models.price_data import PriceData
 from app.observability import elapsed_ms, get_logger
 
 logger = get_logger(__name__)
+
+
+def _build_price_data_upsert_statement(db: AsyncSession, records: list[dict]) -> Insert:
+    dialect_name = db.bind.dialect.name if db.bind is not None else ""
+
+    if dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        stmt = sqlite_insert(PriceData).values(records)
+        return stmt.on_conflict_do_update(
+            index_elements=["ticker", "date"],
+            set_={
+                "open": stmt.excluded.open,
+                "high": stmt.excluded.high,
+                "low": stmt.excluded.low,
+                "close": stmt.excluded.close,
+                "adj_close": stmt.excluded.adj_close,
+                "volume": stmt.excluded.volume,
+            },
+        )
+
+    if dialect_name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+
+        stmt = postgresql_insert(PriceData).values(records)
+        return stmt.on_conflict_do_update(
+            constraint="uq_ticker_date",
+            set_={
+                "open": stmt.excluded.open,
+                "high": stmt.excluded.high,
+                "low": stmt.excluded.low,
+                "close": stmt.excluded.close,
+                "adj_close": stmt.excluded.adj_close,
+                "volume": stmt.excluded.volume,
+            },
+        )
+
+    raise RuntimeError(f"Unsupported database dialect for price-data upserts: {dialect_name}")
 
 
 async def ensure_data_loaded(
@@ -112,18 +150,7 @@ async def ensure_data_loaded(
             chunk_size = 500
             for i in range(0, len(records), chunk_size):
                 chunk = records[i : i + chunk_size]
-                stmt = insert(PriceData).values(chunk)
-                stmt = stmt.on_conflict_do_update(
-                    constraint="uq_ticker_date",
-                    set_={
-                        "open": stmt.excluded.open,
-                        "high": stmt.excluded.high,
-                        "low": stmt.excluded.low,
-                        "close": stmt.excluded.close,
-                        "adj_close": stmt.excluded.adj_close,
-                        "volume": stmt.excluded.volume,
-                    },
-                )
+                stmt = _build_price_data_upsert_statement(db, chunk)
                 await db.execute(stmt)
             await db.commit()
 
