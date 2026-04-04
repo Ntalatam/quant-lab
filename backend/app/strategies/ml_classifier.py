@@ -26,10 +26,12 @@ from __future__ import annotations
 
 import functools
 import hashlib
+
 import numpy as np
 import pandas as pd
 
 from app.strategies.base import BaseStrategy
+
 
 # Module-level model cache.  Key = (ticker, train_pct, n_estimators, max_depth,
 # min_train_rows, data_fingerprint).  Avoids retraining identical models when

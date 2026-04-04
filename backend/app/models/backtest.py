@@ -1,9 +1,15 @@
-from datetime import datetime
+from __future__ import annotations
 
-from sqlalchemy import Boolean, String, Float, DateTime, JSON, Integer
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.trade import TradeRecord
 
 
 class BacktestRun(Base):
@@ -50,12 +56,14 @@ class BacktestRun(Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True, default=None)
 
     # Versioning / lineage
-    lineage_tag: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None, index=True)
+    lineage_tag: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, default=None, index=True
+    )
     version: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    trades: Mapped[list["TradeRecord"]] = relationship(
+    trades: Mapped[list[TradeRecord]] = relationship(
         back_populates="backtest_run", cascade="all, delete-orphan"
     )

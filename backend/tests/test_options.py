@@ -2,8 +2,6 @@
 
 import math
 
-import pytest
-
 from app.services.options import (
     black_scholes,
     compute_pnl_grid,
@@ -146,8 +144,12 @@ class TestVolSurface:
         long_dated = [p for p in result["surface"] if p["dte"] == 365]
 
         # Compare the IV range (max - min) for each term
-        short_range = max(p["implied_vol"] for p in short_dated) - min(p["implied_vol"] for p in short_dated)
-        long_range = max(p["implied_vol"] for p in long_dated) - min(p["implied_vol"] for p in long_dated)
+        short_range = max(p["implied_vol"] for p in short_dated) - min(
+            p["implied_vol"] for p in short_dated
+        )
+        long_range = max(p["implied_vol"] for p in long_dated) - min(
+            p["implied_vol"] for p in long_dated
+        )
         assert short_range > long_range
 
 

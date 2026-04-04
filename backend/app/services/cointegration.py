@@ -12,7 +12,6 @@ from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 
 def compute_correlation_matrix(
@@ -34,9 +33,7 @@ def compute_correlation_matrix(
     """
     df = pd.DataFrame(prices).sort_index().dropna()
     if df.shape[1] < 2 or len(df) < rolling_window:
-        raise ValueError(
-            f"Need at least 2 tickers with ≥{rolling_window} overlapping days"
-        )
+        raise ValueError(f"Need at least 2 tickers with ≥{rolling_window} overlapping days")
 
     returns = df.pct_change().dropna()
     tickers = list(df.columns)
@@ -49,15 +46,17 @@ def compute_correlation_matrix(
     pairs = list(combinations(range(len(tickers)), 2))
     for i, j in pairs:
         rc = returns.iloc[:, i].rolling(rolling_window).corr(returns.iloc[:, j]).dropna()
-        rolling.append({
-            "pair": f"{tickers[i]}/{tickers[j]}",
-            "ticker_a": tickers[i],
-            "ticker_b": tickers[j],
-            "series": [
-                {"date": idx.date().isoformat(), "value": round(float(v), 4)}
-                for idx, v in rc.items()
-            ],
-        })
+        rolling.append(
+            {
+                "pair": f"{tickers[i]}/{tickers[j]}",
+                "ticker_a": tickers[i],
+                "ticker_b": tickers[j],
+                "series": [
+                    {"date": idx.date().isoformat(), "value": round(float(v), 4)}
+                    for idx, v in rc.items()
+                ],
+            }
+        )
 
     return {
         "tickers": tickers,
@@ -66,9 +65,7 @@ def compute_correlation_matrix(
     }
 
 
-def engle_granger_test(
-    series_a: pd.Series, series_b: pd.Series
-) -> dict:
+def engle_granger_test(series_a: pd.Series, series_b: pd.Series) -> dict:
     """
     Two-step Engle-Granger cointegration test.
 
@@ -123,7 +120,7 @@ def _adf_test(x: np.ndarray, max_lags: int = 1) -> tuple[float, float]:
 
     n_obs = len(dx_dep)
     k = X.shape[1]
-    sigma2 = np.sum(resid ** 2) / max(n_obs - k, 1)
+    sigma2 = np.sum(resid**2) / max(n_obs - k, 1)
     xtx_inv = np.linalg.inv(X.T @ X)
     se = np.sqrt(np.diag(xtx_inv) * sigma2)
 
@@ -230,17 +227,19 @@ def discover_pairs(
         try:
             eg = engle_granger_test(df[ta], df[tb])
             spread_info = compute_spread(df[ta], df[tb])
-            results.append({
-                "ticker_a": ta,
-                "ticker_b": tb,
-                "adf_statistic": eg["adf_statistic"],
-                "adf_pvalue": eg["adf_pvalue"],
-                "cointegrated": eg["cointegrated"],
-                "beta": eg["beta"],
-                "half_life_days": spread_info["half_life_days"],
-                "current_zscore": spread_info["current_zscore"],
-                "spread_std": spread_info["spread_std"],
-            })
+            results.append(
+                {
+                    "ticker_a": ta,
+                    "ticker_b": tb,
+                    "adf_statistic": eg["adf_statistic"],
+                    "adf_pvalue": eg["adf_pvalue"],
+                    "cointegrated": eg["cointegrated"],
+                    "beta": eg["beta"],
+                    "half_life_days": spread_info["half_life_days"],
+                    "current_zscore": spread_info["current_zscore"],
+                    "spread_std": spread_info["spread_std"],
+                }
+            )
         except Exception:
             continue
 

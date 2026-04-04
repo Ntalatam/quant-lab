@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.schemas.common import ErrorResponse
 from app.schemas.strategy import StrategyInfoResponse, StrategyParamsResponse
-from app.services.strategy_registry import list_strategies, get_strategy_class
+from app.services.strategy_registry import get_strategy_class, list_strategies
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 

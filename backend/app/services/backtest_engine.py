@@ -6,15 +6,17 @@ realistic portfolio state. The strategy ONLY sees data up to and including
 the current bar (no lookahead bias).
 """
 
-import uuid
 import time
+import uuid
+from collections.abc import Awaitable, Callable
+from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
-from datetime import date, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.portfolio import Portfolio
+from app.observability import elapsed_ms, get_logger
+from app.schemas.backtest import BacktestConfig
 from app.services.analytics import (
     compute_all_metrics,
     compute_monthly_returns,
@@ -22,17 +24,13 @@ from app.services.analytics import (
 )
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 from app.services.execution import simulate_fill
+from app.services.portfolio import Portfolio
 from app.services.portfolio_optimizer import (
     PortfolioConstructionRequest,
     construct_target_weights,
 )
 from app.services.strategy_registry import get_strategy_class
 from app.services.trading import execute_target_weights
-from app.schemas.backtest import BacktestConfig
-from app.observability import elapsed_ms, get_logger
-
-
-from typing import Callable, Awaitable
 
 ProgressCallback = Callable[[int, int, str, float], Awaitable[None]]
 logger = get_logger(__name__)
@@ -94,9 +92,7 @@ async def run_backtest(
     # 4. Initialize strategy and portfolio
     strategy_cls = get_strategy_class(config.strategy_id)
     if strategy_cls.requires_short_selling and not config.allow_short_selling:
-        raise ValueError(
-            f"{strategy_cls.name} requires short selling to be enabled."
-        )
+        raise ValueError(f"{strategy_cls.name} requires short selling to be enabled.")
     strategy = strategy_cls(**config.params)
     portfolio = Portfolio(initial_capital=config.initial_capital)
 
@@ -110,17 +106,15 @@ async def run_backtest(
     )
 
     # 5. Main simulation loop
-    cumulative_cost = 0.0        # running total of trading + borrow costs paid
-    cost_by_date: dict = {}      # isoformat date → cumulative cost at that point
+    cumulative_cost = 0.0  # running total of trading + borrow costs paid
+    cost_by_date: dict = {}  # isoformat date → cumulative cost at that point
     turnover_history: list[float] = []
     total_bars = len(all_dates)
     # emit progress every ~1% of bars (min 1, max 50 to avoid spam)
     progress_every = max(1, min(50, total_bars // 100))
 
     for bar_num, current_date in enumerate(all_dates):
-        current_dt = (
-            current_date.date() if hasattr(current_date, "date") else current_date
-        )
+        current_dt = current_date.date() if hasattr(current_date, "date") else current_date
 
         # Emit progress callback periodically
         if on_progress is not None and bar_num % progress_every == 0:
@@ -247,7 +241,7 @@ async def run_backtest(
         turnover_history.append(construction.turnover_pct)
 
         # 7. Process target weights into orders and execute
-        executions = execute_target_weights(
+        execute_target_weights(
             portfolio=portfolio,
             target_weights=construction.target_weights,
             current_bars=current_bars,
@@ -267,10 +261,7 @@ async def run_backtest(
             cost_by_date[current_dt.isoformat()] = cumulative_cost
 
     # 8. Build equity curve + clean equity (no transaction costs)
-    equity_curve = [
-        {"date": pt["date"], "value": pt["equity"]}
-        for pt in portfolio.equity_history
-    ]
+    equity_curve = [{"date": pt["date"], "value": pt["equity"]} for pt in portfolio.equity_history]
 
     # Build clean equity by forward-filling cumulative costs and adding them back
     clean_equity_curve = []
@@ -280,21 +271,17 @@ async def run_backtest(
         date_key = d.isoformat() if hasattr(d, "isoformat") else str(d)
         if date_key in cost_by_date:
             running_cost = cost_by_date[date_key]
-        clean_equity_curve.append({"date": pt["date"], "value": round(pt["value"] + running_cost, 2)})
+        clean_equity_curve.append(
+            {"date": pt["date"], "value": round(pt["value"] + running_cost, 2)}
+        )
 
     # 9. Benchmark curve (normalized to same starting capital)
     if not benchmark_df.empty:
         bench_start = float(benchmark_df.iloc[0]["adj_close"])
         benchmark_curve = [
             {
-                "date": (
-                    idx.date().isoformat()
-                    if hasattr(idx, "date")
-                    else str(idx)
-                ),
-                "value": float(row["adj_close"])
-                / bench_start
-                * config.initial_capital,
+                "date": (idx.date().isoformat() if hasattr(idx, "date") else str(idx)),
+                "value": float(row["adj_close"]) / bench_start * config.initial_capital,
             }
             for idx, row in benchmark_df.iterrows()
         ]
@@ -312,9 +299,7 @@ async def run_backtest(
     )
 
     metrics = compute_all_metrics(equity_series, bench_series, config.initial_capital)
-    bench_metrics = compute_all_metrics(
-        bench_series, bench_series, config.initial_capital
-    )
+    bench_metrics = compute_all_metrics(bench_series, bench_series, config.initial_capital)
     monthly = compute_monthly_returns(equity_series)
 
     # Trade-level stats
@@ -331,9 +316,7 @@ async def run_backtest(
     short_exposures = [pt.get("short_market_value", 0.0) for pt in portfolio.equity_history]
     if net_exposures:
         metrics["avg_net_exposure_pct"] = round(np.mean(net_exposures), 2)
-        metrics["max_net_exposure_pct"] = round(
-            max(abs(value) for value in net_exposures), 2
-        )
+        metrics["max_net_exposure_pct"] = round(max(abs(value) for value in net_exposures), 2)
     if short_exposures:
         short_exposure_pct = [
             (short_mv / max(abs(pt["equity"]), 1e-10)) * 100
@@ -347,7 +330,7 @@ async def run_backtest(
 
     # Transaction cost stats
     total_commission = sum(t.commission for t in portfolio.trade_log if t.commission)
-    total_slippage   = sum(t.slippage   for t in portfolio.trade_log if t.slippage)
+    total_slippage = sum(t.slippage for t in portfolio.trade_log if t.slippage)
     total_borrow_cost = portfolio.total_borrow_cost_paid
     total_locate_fees = portfolio.total_locate_fees_paid
     total_spread_cost = sum(t.spread_cost for t in portfolio.trade_log if t.spread_cost)
@@ -377,7 +360,7 @@ async def run_backtest(
         if trade.participation_rate_pct > 0
     ]
     metrics["total_commission"] = round(total_commission, 2)
-    metrics["total_slippage"]   = round(total_slippage,   2)
+    metrics["total_slippage"] = round(total_slippage, 2)
     metrics["total_borrow_cost"] = round(total_borrow_cost, 2)
     metrics["total_locate_fees"] = round(total_locate_fees, 2)
     metrics["total_spread_cost"] = round(total_spread_cost, 2)
@@ -389,9 +372,13 @@ async def run_backtest(
     metrics["avg_participation_rate_pct"] = (
         round(float(np.mean(participation_rates)), 3) if participation_rates else 0.0
     )
-    metrics["total_cost"]       = round(total_cost,       2)
-    metrics["cost_drag_bps"]    = round(total_cost / config.initial_capital * 10_000, 1) if config.initial_capital else 0
-    metrics["cost_drag_pct"]    = round(total_cost / config.initial_capital * 100,     3) if config.initial_capital else 0
+    metrics["total_cost"] = round(total_cost, 2)
+    metrics["cost_drag_bps"] = (
+        round(total_cost / config.initial_capital * 10_000, 1) if config.initial_capital else 0
+    )
+    metrics["cost_drag_pct"] = (
+        round(total_cost / config.initial_capital * 100, 3) if config.initial_capital else 0
+    )
 
     # 11. Rolling metrics
     returns = equity_series.pct_change().dropna()
@@ -458,26 +445,21 @@ def _rolling_sharpe(returns: pd.Series, window: int = 63) -> list[dict]:
     sharpe = (rolling_mean / rolling_std) * np.sqrt(252)
     sharpe = sharpe.dropna()
     return [
-        {"date": idx.date().isoformat(), "value": round(float(v), 3)}
-        for idx, v in sharpe.items()
+        {"date": idx.date().isoformat(), "value": round(float(v), 3)} for idx, v in sharpe.items()
     ]
 
 
 def _rolling_volatility(returns: pd.Series, window: int = 63) -> list[dict]:
     vol = returns.rolling(window).std() * np.sqrt(252) * 100
     vol = vol.dropna()
-    return [
-        {"date": idx.date().isoformat(), "value": round(float(v), 3)}
-        for idx, v in vol.items()
-    ]
+    return [{"date": idx.date().isoformat(), "value": round(float(v), 3)} for idx, v in vol.items()]
 
 
 def _drawdown_series(equity: pd.Series) -> list[dict]:
     rolling_max = equity.expanding().max()
     drawdown = ((equity - rolling_max) / rolling_max) * 100
     return [
-        {"date": idx.date().isoformat(), "value": round(float(v), 3)}
-        for idx, v in drawdown.items()
+        {"date": idx.date().isoformat(), "value": round(float(v), 3)} for idx, v in drawdown.items()
     ]
 
 
@@ -522,6 +504,7 @@ def _current_total_cost(portfolio: Portfolio) -> float:
 def _sanitize(obj):
     """Recursively replace float NaN/Inf with None so PostgreSQL JSON accepts it."""
     import math
+
     if isinstance(obj, dict):
         return {k: _sanitize(v) for k, v in obj.items()}
     if isinstance(obj, list):

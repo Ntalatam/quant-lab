@@ -1,16 +1,21 @@
-from sqlalchemy import String, Float, Integer, ForeignKey
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.backtest import BacktestRun
 
 
 class TradeRecord(Base):
     __tablename__ = "trade_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    backtest_run_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("backtest_runs.id")
-    )
+    backtest_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("backtest_runs.id"))
     ticker: Mapped[str] = mapped_column(String(10))
     side: Mapped[str] = mapped_column(String(4))
     position_direction: Mapped[str] = mapped_column(String(10), default="LONG")
@@ -35,4 +40,4 @@ class TradeRecord(Base):
     locate_fee: Mapped[float] = mapped_column(Float, default=0.0)
     risk_event: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    backtest_run: Mapped["BacktestRun"] = relationship(back_populates="trades")
+    backtest_run: Mapped[BacktestRun] = relationship(back_populates="trades")

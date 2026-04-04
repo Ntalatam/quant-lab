@@ -11,21 +11,22 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.stats import norm
 from scipy.optimize import brentq
-
+from scipy.stats import norm
 
 # ── Core pricing ──────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class OptionResult:
     """Full result from Black-Scholes pricing."""
+
     price: float
     delta: float
     gamma: float
-    theta: float   # per calendar day
-    vega: float    # per 1% vol move
-    rho: float     # per 1% rate move
+    theta: float  # per calendar day
+    vega: float  # per 1% vol move
+    rho: float  # per 1% rate move
     intrinsic: float
     time_value: float
 
@@ -57,9 +58,14 @@ def black_scholes(
         else:
             intrinsic = max(K - S, 0)
         return OptionResult(
-            price=intrinsic, delta=1.0 if intrinsic > 0 else 0.0,
-            gamma=0, theta=0, vega=0, rho=0,
-            intrinsic=intrinsic, time_value=0,
+            price=intrinsic,
+            delta=1.0 if intrinsic > 0 else 0.0,
+            gamma=0,
+            theta=0,
+            vega=0,
+            rho=0,
+            intrinsic=intrinsic,
+            time_value=0,
         )
 
     if sigma <= 0:
@@ -105,6 +111,7 @@ def black_scholes(
 
 # ── Implied volatility ───────────────────────────────────────────────────
 
+
 def implied_volatility(
     market_price: float,
     S: float,
@@ -137,6 +144,7 @@ def implied_volatility(
 
 # ── Options chain (synthetic) ─────────────────────────────────────────────
 
+
 def generate_options_chain(
     S: float,
     r: float,
@@ -159,25 +167,28 @@ def generate_options_chain(
             K = float(K_val)
             call = black_scholes(S, K, T, r, sigma, "call")
             put = black_scholes(S, K, T, r, sigma, "put")
-            chain.append({
-                "dte": dte,
-                "strike": K,
-                "call_price": call.price,
-                "call_delta": call.delta,
-                "call_gamma": call.gamma,
-                "call_theta": call.theta,
-                "call_vega": call.vega,
-                "put_price": put.price,
-                "put_delta": put.delta,
-                "put_gamma": put.gamma,
-                "put_theta": put.theta,
-                "put_vega": put.vega,
-                "moneyness": round(K / S, 4),
-            })
+            chain.append(
+                {
+                    "dte": dte,
+                    "strike": K,
+                    "call_price": call.price,
+                    "call_delta": call.delta,
+                    "call_gamma": call.gamma,
+                    "call_theta": call.theta,
+                    "call_vega": call.vega,
+                    "put_price": put.price,
+                    "put_delta": put.delta,
+                    "put_gamma": put.gamma,
+                    "put_theta": put.theta,
+                    "put_vega": put.vega,
+                    "moneyness": round(K / S, 4),
+                }
+            )
     return chain
 
 
 # ── Volatility surface ───────────────────────────────────────────────────
+
 
 def generate_vol_surface(
     S: float,
@@ -201,9 +212,7 @@ def generate_vol_surface(
     if days_to_expiry is None:
         days_to_expiry = [7, 14, 30, 60, 90, 120, 180, 365]
 
-    strikes = np.linspace(
-        S * (1 - strike_range_pct), S * (1 + strike_range_pct), n_strikes
-    )
+    strikes = np.linspace(S * (1 - strike_range_pct), S * (1 + strike_range_pct), n_strikes)
     strikes = np.round(strikes, 2)
     moneyness = strikes / S
 
@@ -218,18 +227,16 @@ def generate_vol_surface(
         for i, K_val in enumerate(strikes):
             m = float(moneyness[i])
             # Quadratic smile + linear put skew (negative for OTM puts)
-            iv = base_sigma * (
-                1
-                + smile_factor * (m - 1) ** 2
-                - put_skew * min(m - 1, 0)
-            )
+            iv = base_sigma * (1 + smile_factor * (m - 1) ** 2 - put_skew * min(m - 1, 0))
             iv = max(iv, 0.01)  # floor at 1%
-            surface.append({
-                "dte": dte,
-                "strike": float(K_val),
-                "moneyness": round(m, 4),
-                "implied_vol": round(iv, 4),
-            })
+            surface.append(
+                {
+                    "dte": dte,
+                    "strike": float(K_val),
+                    "moneyness": round(m, 4),
+                    "implied_vol": round(iv, 4),
+                }
+            )
 
     return {
         "spot": S,
@@ -241,6 +248,7 @@ def generate_vol_surface(
 
 
 # ── P&L scenarios ────────────────────────────────────────────────────────
+
 
 def compute_pnl_grid(
     S: float,
@@ -274,15 +282,19 @@ def compute_pnl_grid(
         for spot in spot_range:
             result = black_scholes(float(spot), K, t, r, sigma, option_type)
             pnl = (result.price - entry_price) * position * 100  # per contract
-            points.append({
-                "spot": round(float(spot), 2),
-                "pnl": round(pnl, 2),
-            })
-        curves.append({
-            "dte": dte,
-            "label": f"{dte}d" if dte > 0 else "Expiry",
-            "points": points,
-        })
+            points.append(
+                {
+                    "spot": round(float(spot), 2),
+                    "pnl": round(pnl, 2),
+                }
+            )
+        curves.append(
+            {
+                "dte": dte,
+                "label": f"{dte}d" if dte > 0 else "Expiry",
+                "points": points,
+            }
+        )
 
     return {
         "strike": K,

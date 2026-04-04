@@ -4,7 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 ParamValue = int | float | str | bool
 
 
@@ -423,6 +422,7 @@ class BayesOptResponse(BaseModel):
 
 
 # ── Versioning / lineage ──────────────────────────────────────────────────
+
 
 class LineageTagRequest(BaseModel):
     lineage_tag: str = Field(max_length=100)

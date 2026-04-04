@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,11 +145,7 @@ def create_app() -> FastAPI:
             raise
 
         duration_ms = elapsed_ms(start_time)
-        level = (
-            "warning"
-            if duration_ms >= settings.SLOW_REQUEST_THRESHOLD_MS
-            else "info"
-        )
+        level = "warning" if duration_ms >= settings.SLOW_REQUEST_THRESHOLD_MS else "info"
         getattr(log, level)(
             "http.request.completed",
             duration_ms=duration_ms,
@@ -211,7 +207,7 @@ def create_app() -> FastAPI:
             service=settings.APP_NAME,
             environment=settings.APP_ENV,
             version=app.version,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             uptime_seconds=round(
                 time.monotonic() - request.app.state.started_at,
                 2,

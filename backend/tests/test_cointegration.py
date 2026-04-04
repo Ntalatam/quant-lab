@@ -17,16 +17,19 @@ def _make_prices(n: int = 500, seed: int = 42) -> dict[str, pd.Series]:
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2020-01-01", periods=n)
 
-    # Random walk A
-    a = 100 + np.cumsum(rng.normal(0.0005, 0.01, n))
-    # B is cointegrated with A (A + small stationary noise)
-    b = a * 1.05 + rng.normal(0, 0.3, n)
-    # C is independent
-    c = 50 + np.cumsum(rng.normal(0.0003, 0.015, n))
+    # Generate random walk series (a, b, c used implicitly via exponential construction below)
+    _a = 100 + np.cumsum(rng.normal(0.0005, 0.01, n))  # noqa: F841
+    _b = _a * 1.05 + rng.normal(0, 0.3, n)  # noqa: F841
+    _c = 50 + np.cumsum(rng.normal(0.0003, 0.015, n))  # noqa: F841
 
     return {
-        "TICK_A": pd.Series(np.exp(np.log(100) + np.cumsum(rng.normal(0.0005, 0.01, n))), index=dates),
-        "TICK_B": pd.Series(np.exp(np.log(105) + np.cumsum(rng.normal(0.0005, 0.01, n)) + rng.normal(0, 0.002, n)), index=dates),
+        "TICK_A": pd.Series(
+            np.exp(np.log(100) + np.cumsum(rng.normal(0.0005, 0.01, n))), index=dates
+        ),
+        "TICK_B": pd.Series(
+            np.exp(np.log(105) + np.cumsum(rng.normal(0.0005, 0.01, n)) + rng.normal(0, 0.002, n)),
+            index=dates,
+        ),
         "TICK_C": pd.Series(np.exp(np.log(50) + np.cumsum(rng.normal(0.0, 0.02, n))), index=dates),
     }
 

@@ -17,6 +17,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
+from app.models.backtest import BacktestRun
+from app.models.trade import TradeRecord
 from app.schemas.analytics import (
     CapacityResponse,
     CompareRequest,
@@ -33,10 +36,7 @@ from app.schemas.analytics import (
     TransactionCostAnalysisResponse,
 )
 from app.schemas.common import ErrorResponse
-from app.database import get_db
-from app.models.backtest import BacktestRun
-from app.models.trade import TradeRecord
-from app.services.analytics import compute_monte_carlo, compute_all_metrics
+from app.services.analytics import compute_all_metrics, compute_monte_carlo
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -50,8 +50,14 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
         "a comparison bundle including the return-correlation matrix."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "At least two backtests are required."},
-        404: {"model": ErrorResponse, "description": "One of the requested backtests was not found."},
+        400: {
+            "model": ErrorResponse,
+            "description": "At least two backtests are required.",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "One of the requested backtests was not found.",
+        },
     },
 )
 async def compare_backtests(
@@ -117,9 +123,7 @@ async def monte_carlo(
     n_days: int = Query(252, ge=30, le=1260),
     db: AsyncSession = Depends(get_db),
 ):
-    r = await db.execute(
-        select(BacktestRun).where(BacktestRun.id == backtest_id)
-    )
+    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = r.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
@@ -164,9 +168,7 @@ async def export_results(
     format: str = Query("csv"),
     db: AsyncSession = Depends(get_db),
 ):
-    r = await db.execute(
-        select(BacktestRun).where(BacktestRun.id == backtest_id)
-    )
+    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = r.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
@@ -203,9 +205,7 @@ async def export_results(
             iter([output.getvalue()]),
             media_type="text/csv",
             headers={
-                "Content-Disposition": (
-                    f"attachment; filename=backtest_{backtest_id[:8]}.csv"
-                )
+                "Content-Disposition": (f"attachment; filename=backtest_{backtest_id[:8]}.csv")
             },
         )
 
@@ -232,9 +232,10 @@ async def capacity_analysis(
     For each trade, compute shares_traded / ADV. Scale to find AUM thresholds
     where the strategy would consume 1%, 5%, and 10% of average daily volume.
     """
-    from app.services.data_ingestion import get_price_dataframe
-    from app.models.trade import TradeRecord
     from datetime import date as date_cls
+
+    from app.models.trade import TradeRecord
+    from app.services.data_ingestion import get_price_dataframe
 
     r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = r.scalar_one_or_none()
@@ -248,7 +249,11 @@ async def capacity_analysis(
     trades = trades_r.scalars().all()
 
     if not trades:
-        return {"message": "No trades in this backtest", "capacity_estimates": [], "trade_adv_stats": []}
+        return {
+            "message": "No trades in this backtest",
+            "capacity_estimates": [],
+            "trade_adv_stats": [],
+        }
 
     start = date_cls.fromisoformat(run.start_date)
     end = date_cls.fromisoformat(run.end_date)
@@ -280,18 +285,24 @@ async def capacity_analysis(
         if adv <= 0 or notional <= 0:
             continue
         adv_participation_pct = notional / adv * 100  # % of ADV at current capital
-        trade_stats.append({
-            "ticker": t.ticker,
-            "side": t.side,
-            "date": t.entry_date,
-            "shares": t.shares,
-            "notional": round(notional, 0),
-            "adv": round(adv, 0),
-            "adv_participation_pct": round(adv_participation_pct, 4),
-        })
+        trade_stats.append(
+            {
+                "ticker": t.ticker,
+                "side": t.side,
+                "date": t.entry_date,
+                "shares": t.shares,
+                "notional": round(notional, 0),
+                "adv": round(adv, 0),
+                "adv_participation_pct": round(adv_participation_pct, 4),
+            }
+        )
 
     if not trade_stats:
-        return {"message": "Could not compute ADV stats", "capacity_estimates": [], "trade_adv_stats": []}
+        return {
+            "message": "Could not compute ADV stats",
+            "capacity_estimates": [],
+            "trade_adv_stats": [],
+        }
 
     # Sort by ADV participation (most impactful first)
     trade_stats.sort(key=lambda x: x["adv_participation_pct"], reverse=True)
@@ -307,12 +318,16 @@ async def capacity_analysis(
     thresholds = [1.0, 5.0, 10.0]
     capacity_estimates = []
     for thresh in thresholds:
-        capacity_aum = thresh / max_participation * initial_capital if max_participation > 0 else None
-        capacity_estimates.append({
-            "adv_threshold_pct": thresh,
-            "capacity_aum": round(capacity_aum) if capacity_aum else None,
-            "label": f"Max trade uses ≤{thresh}% of ADV",
-        })
+        capacity_aum = (
+            thresh / max_participation * initial_capital if max_participation > 0 else None
+        )
+        capacity_estimates.append(
+            {
+                "adv_threshold_pct": thresh,
+                "capacity_aum": round(capacity_aum) if capacity_aum else None,
+                "label": f"Max trade uses ≤{thresh}% of ADV",
+            }
+        )
 
     return {
         "initial_capital": initial_capital,
@@ -387,26 +402,21 @@ async def transaction_cost_analysis(
         "total_trades": len(trades),
         "total_commission": round(sum(trade.commission for trade in trades), 2),
         "total_spread_cost": round(sum(trade.spread_cost for trade in trades), 2),
-        "total_market_impact_cost": round(
-            sum(trade.market_impact_cost for trade in trades), 2
-        ),
+        "total_market_impact_cost": round(sum(trade.market_impact_cost for trade in trades), 2),
         "total_timing_cost": round(sum(trade.timing_cost for trade in trades), 2),
-        "total_opportunity_cost": round(
-            sum(trade.opportunity_cost for trade in trades), 2
-        ),
+        "total_opportunity_cost": round(sum(trade.opportunity_cost for trade in trades), 2),
         "total_borrow_cost": round(sum(trade.borrow_cost for trade in trades), 2),
         "total_locate_fees": round(sum(trade.locate_fee for trade in trades), 2),
         "total_implementation_shortfall": round(
             sum(trade.implementation_shortfall for trade in trades), 2
         ),
-        "avg_fill_rate_pct": round(
-            float(np.mean([_fill_rate(trade) for trade in trades])), 2
-        ),
+        "avg_fill_rate_pct": round(float(np.mean([_fill_rate(trade) for trade in trades])), 2),
         "avg_participation_rate_pct": round(
             float(np.mean([trade.participation_rate_pct for trade in trades])), 3
         ),
         "p90_participation_rate_pct": round(
-            float(np.percentile([trade.participation_rate_pct for trade in trades], 90)), 3
+            float(np.percentile([trade.participation_rate_pct for trade in trades], 90)),
+            3,
         ),
         "cost_as_pct_of_initial_capital": round(
             (
@@ -456,19 +466,13 @@ async def transaction_cost_analysis(
                 "total_market_impact_cost": round(row["total_market_impact_cost"], 2),
                 "total_timing_cost": round(row["total_timing_cost"], 2),
                 "total_opportunity_cost": round(row["total_opportunity_cost"], 2),
-                "total_implementation_shortfall": round(
-                    row["total_implementation_shortfall"], 2
-                ),
+                "total_implementation_shortfall": round(row["total_implementation_shortfall"], 2),
                 "avg_fill_rate_pct": round(float(np.mean(row["fill_rates"])), 2),
-                "avg_participation_rate_pct": round(
-                    float(np.mean(row["participation_rates"])), 3
-                ),
+                "avg_participation_rate_pct": round(float(np.mean(row["participation_rates"])), 3),
             }
         )
 
-    ticker_breakdown.sort(
-        key=lambda row: row["total_implementation_shortfall"], reverse=True
-    )
+    ticker_breakdown.sort(key=lambda row: row["total_implementation_shortfall"], reverse=True)
 
     top_cost_trades = [
         {
@@ -490,9 +494,9 @@ async def transaction_cost_analysis(
             "participation_rate_pct": round(trade.participation_rate_pct, 3),
             "risk_event": trade.risk_event,
         }
-        for trade in sorted(
-            trades, key=lambda trade: trade.implementation_shortfall, reverse=True
-        )[:15]
+        for trade in sorted(trades, key=lambda trade: trade.implementation_shortfall, reverse=True)[
+            :15
+        ]
     ]
 
     return {
@@ -513,7 +517,10 @@ async def transaction_cost_analysis(
     ),
     responses={
         404: {"model": ErrorResponse, "description": "Backtest was not found."},
-        422: {"model": ErrorResponse, "description": "Required market data could not be loaded."},
+        422: {
+            "model": ErrorResponse,
+            "description": "Required market data could not be loaded.",
+        },
     },
 )
 async def regime_analysis(
@@ -531,8 +538,9 @@ async def regime_analysis(
 
     Returns per-date regime labels and per-regime performance stats.
     """
-    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
     from datetime import date as date_cls
+
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
     r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = r.scalar_one_or_none()
@@ -563,11 +571,14 @@ async def regime_analysis(
     close = bench_df["close"]
 
     # True Range
-    tr = pd.concat([
-        high - low,
-        (high - close.shift(1)).abs(),
-        (low - close.shift(1)).abs(),
-    ], axis=1).max(axis=1)
+    tr = pd.concat(
+        [
+            high - low,
+            (high - close.shift(1)).abs(),
+            (low - close.shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
 
     # Directional movements
     up_move = high - high.shift(1)
@@ -579,7 +590,9 @@ async def regime_analysis(
     period = 14
     atr = tr.ewm(span=period, adjust=False).mean()
     di_plus = 100 * pd.Series(dm_plus, index=high.index).ewm(span=period, adjust=False).mean() / atr
-    di_minus = 100 * pd.Series(dm_minus, index=high.index).ewm(span=period, adjust=False).mean() / atr
+    di_minus = (
+        100 * pd.Series(dm_minus, index=high.index).ewm(span=period, adjust=False).mean() / atr
+    )
 
     dx = 100 * (di_plus - di_minus).abs() / (di_plus + di_minus).replace(0, np.nan)
     adx = dx.ewm(span=period, adjust=False).mean()
@@ -631,15 +644,17 @@ async def regime_analysis(
         ann_ret = float(np.mean(arr)) * 252 * 100
         ann_vol = float(np.std(arr, ddof=1)) * np.sqrt(252) * 100 if len(arr) > 1 else 0
         sharpe = ann_ret / ann_vol if ann_vol > 0 else 0
-        stats.append({
-            "regime": regime,
-            "color": regime_colors[regime],
-            "days": len(rets),
-            "pct_of_period": round(len(rets) / len(timeline) * 100, 1) if timeline else 0,
-            "ann_return_pct": round(ann_ret, 2),
-            "ann_volatility_pct": round(ann_vol, 2),
-            "sharpe": round(sharpe, 3),
-        })
+        stats.append(
+            {
+                "regime": regime,
+                "color": regime_colors[regime],
+                "days": len(rets),
+                "pct_of_period": round(len(rets) / len(timeline) * 100, 1) if timeline else 0,
+                "ann_return_pct": round(ann_ret, 2),
+                "ann_volatility_pct": round(ann_vol, 2),
+                "sharpe": round(sharpe, 3),
+            }
+        )
 
     # ADX description
     desc = ""
@@ -668,8 +683,14 @@ async def regime_analysis(
     ),
     responses={
         404: {"model": ErrorResponse, "description": "Backtest was not found."},
-        422: {"model": ErrorResponse, "description": "Insufficient or missing factor data."},
-        500: {"model": ErrorResponse, "description": "Regression could not be completed."},
+        422: {
+            "model": ErrorResponse,
+            "description": "Insufficient or missing factor data.",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "Regression could not be completed.",
+        },
     },
 )
 async def factor_exposure(
@@ -687,8 +708,9 @@ async def factor_exposure(
 
     Returns alpha, factor betas, t-stats, p-values, R-squared.
     """
-    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
     from datetime import date as date_cls
+
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
     r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = r.scalar_one_or_none()
@@ -706,7 +728,12 @@ async def factor_exposure(
     strategy_returns = strategy_series.pct_change().dropna()
 
     # Fetch factor proxies (best-effort; skip if yfinance fails)
-    factor_tickers = {"Market": "SPY", "Size": "IWM", "Value": "VTV", "Momentum": "MTUM"}
+    factor_tickers = {
+        "Market": "SPY",
+        "Size": "IWM",
+        "Value": "VTV",
+        "Momentum": "MTUM",
+    }
     factor_prices: dict[str, pd.Series] = {}
     spy_prices: pd.Series | None = None
 
@@ -744,7 +771,9 @@ async def factor_exposure(
     aligned = pd.concat([strategy_returns.rename("Strategy"), factor_df], axis=1).dropna()
 
     if len(aligned) < 30:
-        raise HTTPException(422, "Insufficient overlapping data for factor regression (need ≥30 days)")
+        raise HTTPException(
+            422, "Insufficient overlapping data for factor regression (need ≥30 days)"
+        )
 
     from scipy.stats import t as t_dist
 
@@ -758,12 +787,12 @@ async def factor_exposure(
         y_hat = X @ betas
         resid = y - y_hat
         n, k = X.shape
-        sigma2 = np.sum(resid ** 2) / max(n - k, 1)
+        sigma2 = np.sum(resid**2) / max(n - k, 1)
         xtx_inv = np.linalg.inv(X.T @ X)
         se = np.sqrt(np.diag(xtx_inv) * sigma2)
         t_stats = betas / np.where(se > 0, se, np.nan)
         p_values = 2 * (1 - t_dist.cdf(np.abs(t_stats), df=max(n - k, 1)))
-        ss_res = np.sum(resid ** 2)
+        ss_res = np.sum(resid**2)
         ss_tot = np.sum((y - np.mean(y)) ** 2)
         r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
     except Exception as e:
@@ -777,13 +806,15 @@ async def factor_exposure(
     }
 
     for i, factor in enumerate(factor_cols):
-        result["factors"].append({
-            "name": factor,
-            "beta": round(float(betas[i + 1]), 4),
-            "t_stat": round(float(t_stats[i + 1]), 3),
-            "p_value": round(float(p_values[i + 1]), 4),
-            "significant": bool(p_values[i + 1] < 0.05),
-        })
+        result["factors"].append(
+            {
+                "name": factor,
+                "beta": round(float(betas[i + 1]), 4),
+                "t_stat": round(float(t_stats[i + 1]), 3),
+                "p_value": round(float(p_values[i + 1]), 4),
+                "significant": bool(p_values[i + 1] < 0.05),
+            }
+        )
 
     return result
 
@@ -797,8 +828,14 @@ async def factor_exposure(
         "returns a portfolio-level equity curve, metrics, and contribution breakdown."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "At least two backtests are required."},
-        404: {"model": ErrorResponse, "description": "One of the requested backtests was not found."},
+        400: {
+            "model": ErrorResponse,
+            "description": "At least two backtests are required.",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "One of the requested backtests was not found.",
+        },
     },
 )
 async def portfolio_blend(
@@ -867,10 +904,14 @@ async def portfolio_blend(
     ]
 
     # Metrics on portfolio
-    bench_series = pd.Series(
-        [p["value"] for p in runs[0].benchmark_curve],
-        index=pd.to_datetime([p["date"] for p in runs[0].benchmark_curve]),
-    ) if runs[0].benchmark_curve else pd.Series(dtype=float)
+    bench_series = (
+        pd.Series(
+            [p["value"] for p in runs[0].benchmark_curve],
+            index=pd.to_datetime([p["date"] for p in runs[0].benchmark_curve]),
+        )
+        if runs[0].benchmark_curve
+        else pd.Series(dtype=float)
+    )
     # Normalize benchmark to same scale
     if not bench_series.empty:
         bench_series = bench_series / bench_series.iloc[0] * initial_capital
@@ -878,18 +919,19 @@ async def portfolio_blend(
     metrics = compute_all_metrics(portfolio_equity, bench_series, initial_capital)
 
     # Per-asset contribution (return attribution)
-    total_return = float(portfolio_equity.iloc[-1] / portfolio_equity.iloc[0] - 1) * 100
     asset_contribs = []
     for i, run in enumerate(runs):
         asset_return = float(df.iloc[-1, i] / df.iloc[0, i] - 1) * 100
-        asset_contribs.append({
-            "id": run.id,
-            "strategy_id": run.strategy_id,
-            "tickers": run.tickers,
-            "weight": round(float(weights[i]), 4),
-            "asset_return_pct": round(asset_return, 2),
-            "contribution_pct": round(asset_return * float(weights[i]), 2),
-        })
+        asset_contribs.append(
+            {
+                "id": run.id,
+                "strategy_id": run.strategy_id,
+                "tickers": run.tickers,
+                "weight": round(float(weights[i]), 4),
+                "asset_return_pct": round(asset_return, 2),
+                "contribution_pct": round(asset_return * float(weights[i]), 2),
+            }
+        )
 
     return {
         "weights": [round(float(w), 4) for w in weights],
@@ -957,7 +999,10 @@ def _min_dd_weights(returns: pd.DataFrame, df: pd.DataFrame) -> np.ndarray:
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Invalid request parameters."},
-        422: {"model": ErrorResponse, "description": "Could not load data for one or more tickers."},
+        422: {
+            "model": ErrorResponse,
+            "description": "Could not load data for one or more tickers.",
+        },
     },
 )
 async def correlation_analysis(
@@ -965,11 +1010,12 @@ async def correlation_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import date as date_cls
-    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+
     from app.services.cointegration import (
         compute_correlation_matrix,
         discover_pairs,
     )
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
     start = date_cls.fromisoformat(payload.start_date)
     end = date_cls.fromisoformat(payload.end_date)
@@ -1017,7 +1063,10 @@ async def correlation_analysis(
         "mean reversion, and Engle-Granger cointegration test for a specific pair."
     ),
     responses={
-        422: {"model": ErrorResponse, "description": "Could not load data for one or both tickers."},
+        422: {
+            "model": ErrorResponse,
+            "description": "Could not load data for one or both tickers.",
+        },
     },
 )
 async def spread_analysis(
@@ -1025,8 +1074,9 @@ async def spread_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import date as date_cls
-    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
+
     from app.services.cointegration import compute_spread, engle_granger_test
+    from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
     start = date_cls.fromisoformat(payload.start_date)
     end = date_cls.fromisoformat(payload.end_date)
@@ -1043,10 +1093,12 @@ async def spread_analysis(
         raise HTTPException(422, "Insufficient price data for one or both tickers")
 
     # Align on common dates
-    combined = pd.DataFrame({
-        payload.ticker_a: df_a["close"],
-        payload.ticker_b: df_b["close"],
-    }).dropna()
+    combined = pd.DataFrame(
+        {
+            payload.ticker_a: df_a["close"],
+            payload.ticker_b: df_b["close"],
+        }
+    ).dropna()
 
     if len(combined) < payload.lookback:
         raise HTTPException(

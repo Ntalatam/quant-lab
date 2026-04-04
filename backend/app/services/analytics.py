@@ -26,9 +26,7 @@ def compute_all_metrics(
     returns = equity.pct_change().dropna()
     bench_returns = benchmark.pct_change().dropna()
 
-    aligned = pd.DataFrame(
-        {"strategy": returns, "benchmark": bench_returns}
-    ).dropna()
+    aligned = pd.DataFrame({"strategy": returns, "benchmark": bench_returns}).dropna()
     strat_ret = aligned["strategy"]
     bench_ret = aligned["benchmark"]
 
@@ -43,9 +41,7 @@ def compute_all_metrics(
     # Risk
     ann_vol = returns.std() * np.sqrt(252)
     downside_returns = returns[returns < 0]
-    downside_vol = (
-        downside_returns.std() * np.sqrt(252) if len(downside_returns) > 0 else 0
-    )
+    downside_vol = downside_returns.std() * np.sqrt(252) if len(downside_returns) > 0 else 0
 
     # Drawdown
     rolling_max = equity.expanding().max()
@@ -55,28 +51,18 @@ def compute_all_metrics(
     current_dd = float(drawdown.iloc[-1])
 
     # Risk-adjusted
-    sharpe = (
-        (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() > 0 else 0
-    )
-    sortino = (
-        (returns.mean() / downside_vol) * np.sqrt(252) if downside_vol > 0 else 0
-    )
+    sharpe = (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() > 0 else 0
+    sortino = (returns.mean() / downside_vol) * np.sqrt(252) if downside_vol > 0 else 0
     calmar = cagr / abs(max_dd) if max_dd != 0 else 0
 
     # Information ratio
     excess = strat_ret - bench_ret
     tracking_error = excess.std() * np.sqrt(252)
-    info_ratio = (
-        (excess.mean() * 252) / tracking_error if tracking_error > 0 else 0
-    )
+    info_ratio = (excess.mean() * 252) / tracking_error if tracking_error > 0 else 0
 
     # Tail risk
     var_95 = np.percentile(returns, 5) if len(returns) > 20 else 0
-    cvar_95 = (
-        returns[returns <= var_95].mean()
-        if len(returns[returns <= var_95]) > 0
-        else var_95
-    )
+    cvar_95 = returns[returns <= var_95].mean() if len(returns[returns <= var_95]) > 0 else var_95
     skew = float(stats.skew(returns)) if len(returns) > 3 else 0
     kurt = float(stats.kurtosis(returns)) if len(returns) > 3 else 0
 
@@ -168,17 +154,13 @@ def compute_trade_statistics(trade_log: list[dict]) -> dict:
     return {
         "total_trades": len(closed_trades),
         "win_rate_pct": round(len(wins) / len(closed_trades) * 100, 2),
-        "avg_win_pct": round(
-            np.mean([t["pnl_pct"] for t in wins]), 3
-        ) if wins else 0,
-        "avg_loss_pct": round(
-            np.mean([t["pnl_pct"] for t in losses]), 3
-        ) if losses else 0,
+        "avg_win_pct": round(np.mean([t["pnl_pct"] for t in wins]), 3) if wins else 0,
+        "avg_loss_pct": round(np.mean([t["pnl_pct"] for t in losses]), 3) if losses else 0,
         "best_trade_pct": round(max(t["pnl_pct"] for t in closed_trades), 3),
         "worst_trade_pct": round(min(t["pnl_pct"] for t in closed_trades), 3),
-        "profit_factor": round(
-            sum(t["pnl"] for t in wins) / abs(sum(t["pnl"] for t in losses)), 3
-        ) if losses and sum(t["pnl"] for t in losses) != 0 else 9999,
+        "profit_factor": round(sum(t["pnl"] for t in wins) / abs(sum(t["pnl"] for t in losses)), 3)
+        if losses and sum(t["pnl"] for t in losses) != 0
+        else 9999,
         "avg_holding_period_days": round(np.mean(holding_periods), 1) if holding_periods else 0,
     }
 
@@ -249,23 +231,54 @@ def _empty_metrics() -> dict:
     return {
         k: 0
         for k in [
-            "total_return_pct", "annualized_return_pct", "cagr_pct",
-            "annualized_volatility_pct", "max_drawdown_pct",
-            "max_drawdown_duration_days", "current_drawdown_pct",
-            "sharpe_ratio", "sortino_ratio", "calmar_ratio",
-            "information_ratio", "var_95_pct", "cvar_95_pct",
-            "skewness", "kurtosis", "total_trades", "win_rate_pct",
-            "avg_win_pct", "avg_loss_pct", "profit_factor",
-            "avg_holding_period_days", "best_trade_pct", "worst_trade_pct",
-            "avg_exposure_pct", "max_exposure_pct", "avg_net_exposure_pct",
-            "max_net_exposure_pct", "avg_short_exposure_pct",
-            "max_short_exposure_pct", "alpha", "beta", "correlation",
-            "tracking_error_pct", "avg_turnover_pct", "max_turnover_pct",
-            "total_commission", "total_slippage", "total_spread_cost",
-            "total_market_impact_cost", "total_timing_cost",
-            "total_opportunity_cost", "total_implementation_shortfall",
-            "avg_fill_rate_pct", "avg_participation_rate_pct",
-            "total_borrow_cost", "total_locate_fees", "total_cost",
-            "cost_drag_bps", "cost_drag_pct",
+            "total_return_pct",
+            "annualized_return_pct",
+            "cagr_pct",
+            "annualized_volatility_pct",
+            "max_drawdown_pct",
+            "max_drawdown_duration_days",
+            "current_drawdown_pct",
+            "sharpe_ratio",
+            "sortino_ratio",
+            "calmar_ratio",
+            "information_ratio",
+            "var_95_pct",
+            "cvar_95_pct",
+            "skewness",
+            "kurtosis",
+            "total_trades",
+            "win_rate_pct",
+            "avg_win_pct",
+            "avg_loss_pct",
+            "profit_factor",
+            "avg_holding_period_days",
+            "best_trade_pct",
+            "worst_trade_pct",
+            "avg_exposure_pct",
+            "max_exposure_pct",
+            "avg_net_exposure_pct",
+            "max_net_exposure_pct",
+            "avg_short_exposure_pct",
+            "max_short_exposure_pct",
+            "alpha",
+            "beta",
+            "correlation",
+            "tracking_error_pct",
+            "avg_turnover_pct",
+            "max_turnover_pct",
+            "total_commission",
+            "total_slippage",
+            "total_spread_cost",
+            "total_market_impact_cost",
+            "total_timing_cost",
+            "total_opportunity_cost",
+            "total_implementation_shortfall",
+            "avg_fill_rate_pct",
+            "avg_participation_rate_pct",
+            "total_borrow_cost",
+            "total_locate_fees",
+            "total_cost",
+            "cost_drag_bps",
+            "cost_drag_pct",
         ]
     }

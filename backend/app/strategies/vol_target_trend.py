@@ -34,6 +34,7 @@ Parameters:
 from __future__ import annotations
 
 import math
+
 import pandas as pd
 
 from app.strategies.base import BaseStrategy

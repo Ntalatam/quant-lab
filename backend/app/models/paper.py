@@ -1,12 +1,12 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Float,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -82,9 +82,7 @@ class PaperTradingPosition(Base):
     __table_args__ = (UniqueConstraint("session_id", "ticker", name="uq_paper_session_ticker"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("paper_trading_sessions.id")
-    )
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey("paper_trading_sessions.id"))
     ticker: Mapped[str] = mapped_column(String(10))
     shares: Mapped[int] = mapped_column(Integer)
     avg_cost: Mapped[float] = mapped_column(Float)
@@ -106,9 +104,7 @@ class PaperTradingEvent(Base):
     __tablename__ = "paper_trading_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("paper_trading_sessions.id")
-    )
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey("paper_trading_sessions.id"))
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     event_type: Mapped[str] = mapped_column(String(20))
     ticker: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -126,9 +122,7 @@ class PaperTradingEquityPoint(Base):
     __tablename__ = "paper_trading_equity_points"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("paper_trading_sessions.id")
-    )
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey("paper_trading_sessions.id"))
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     equity: Mapped[float] = mapped_column(Float)
     cash: Mapped[float] = mapped_column(Float)

@@ -3,11 +3,13 @@ POST /api/demo/seed  — Load demo data and run sample backtests
 GET  /api/demo/status — Check if demo data has already been seeded
 """
 
+from datetime import date
+
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db, async_session
+from app.database import async_session, get_db
 from app.models.backtest import BacktestRun
 from app.models.price_data import PriceData
 from app.models.trade import TradeRecord
@@ -15,7 +17,6 @@ from app.schemas.backtest import BacktestConfig
 from app.schemas.demo import DemoSeedResponse, DemoStatusResponse
 from app.services.backtest_engine import run_backtest
 from app.services.data_ingestion import ensure_data_loaded
-from datetime import date
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
@@ -46,7 +47,12 @@ DEMO_BACKTESTS = [
     ),
     BacktestConfig(
         strategy_id="momentum",
-        params={"lookback_days": 90, "top_n": 2, "skip_days": 5, "position_weight": 0.9},
+        params={
+            "lookback_days": 90,
+            "top_n": 2,
+            "skip_days": 5,
+            "position_weight": 0.9,
+        },
         tickers=["SPY", "AAPL", "MSFT", "GLD"],
         benchmark="SPY",
         start_date=DEMO_START,
@@ -132,15 +138,10 @@ async def demo_status(db: AsyncSession = Depends(get_db)):
     """Check if demo data is already loaded."""
     ticker_count = await db.scalar(
         select(func.count()).select_from(
-            select(PriceData.ticker)
-            .where(PriceData.ticker.in_(DEMO_TICKERS))
-            .distinct()
-            .subquery()
+            select(PriceData.ticker).where(PriceData.ticker.in_(DEMO_TICKERS)).distinct().subquery()
         )
     )
-    run_count = await db.scalar(
-        select(func.count()).select_from(BacktestRun)
-    )
+    run_count = await db.scalar(select(func.count()).select_from(BacktestRun))
     return {
         "tickers_loaded": int(ticker_count or 0),
         "total_tickers": len(DEMO_TICKERS),
@@ -164,9 +165,7 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
     Idempotent — skips backtest creation if demo runs already exist.
     """
     # Guard: skip if backtests already exist (prevents duplicates on re-click)
-    existing_count = await db.scalar(
-        select(func.count()).select_from(BacktestRun)
-    )
+    existing_count = await db.scalar(select(func.count()).select_from(BacktestRun))
     if existing_count and existing_count > 0:
         return {
             "status": "already_seeded",

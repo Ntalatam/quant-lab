@@ -8,8 +8,8 @@ GET  /api/data/ohlcv      — Get OHLCV data for charting
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import select, distinct
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -28,9 +28,7 @@ router = APIRouter(prefix="/data", tags=["data"])
     description="Returns every ticker symbol currently cached in the local market-data store.",
 )
 async def list_tickers(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(distinct(PriceData.ticker)).order_by(PriceData.ticker)
-    )
+    result = await db.execute(select(distinct(PriceData.ticker)).order_by(PriceData.ticker))
     return [row[0] for row in result.fetchall()]
 
 

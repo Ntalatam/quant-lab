@@ -104,11 +104,7 @@ def simulate_fill(
     commission = actual_shares * commission_per_share
     slippage_cost = spread_cost + market_impact_cost
     implementation_shortfall = (
-        commission
-        + spread_cost
-        + market_impact_cost
-        + timing_cost
-        + opportunity_cost
+        commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
     )
 
     return FillResult(

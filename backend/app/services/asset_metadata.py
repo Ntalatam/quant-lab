@@ -5,7 +5,6 @@ from functools import lru_cache
 
 import yfinance as yf
 
-
 _SECTOR_OVERRIDES = {
     "SPY": "Broad Market ETF",
     "QQQ": "Broad Market ETF",

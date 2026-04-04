@@ -15,7 +15,6 @@ entry (prevents holding positions through extended downtrends).
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
 from app.strategies.base import BaseStrategy
@@ -96,7 +95,7 @@ class RSIMeanReversion(BaseStrategy):
         """Wilder-smoothed RSI using EWM (alpha = 1/period)."""
         delta = close.diff()
         gain = delta.clip(lower=0)
-        loss = (-delta.clip(upper=0))
+        loss = -delta.clip(upper=0)
         alpha = 1.0 / period
         avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
         avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()

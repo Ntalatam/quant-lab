@@ -1,12 +1,12 @@
 from fastapi import APIRouter
 
-from app.api.data import router as data_router
-from app.api.backtest import router as backtest_router
-from app.api.strategies import router as strategies_router
 from app.api.analytics import router as analytics_router
+from app.api.backtest import router as backtest_router
+from app.api.data import router as data_router
 from app.api.demo import router as demo_router
-from app.api.paper import router as paper_router
 from app.api.options import router as options_router
+from app.api.paper import router as paper_router
+from app.api.strategies import router as strategies_router
 
 api_router = APIRouter()
 api_router.include_router(data_router)

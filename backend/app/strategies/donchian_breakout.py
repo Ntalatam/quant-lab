@@ -102,9 +102,9 @@ class DonchianBreakout(BaseStrategy):
 
             # Donchian entry channel: highest close over last entry_period bars
             # Use .iloc[-entry_period-1:-1] so we don't include today's close
-            entry_high = close.iloc[-(self.entry_period + 1):-1].max()
+            entry_high = close.iloc[-(self.entry_period + 1) : -1].max()
             # Donchian exit channel: lowest close over last exit_period bars
-            exit_low = close.iloc[-(self.exit_period + 1):-1].min()
+            exit_low = close.iloc[-(self.exit_period + 1) : -1].min()
 
             current_close = close.iloc[-1]
 

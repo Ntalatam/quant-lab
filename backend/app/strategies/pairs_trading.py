@@ -6,8 +6,8 @@ Uses the log price ratio z-score for entry/exit signals.
 Requires exactly 2 tickers.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from app.strategies.base import BaseStrategy
 

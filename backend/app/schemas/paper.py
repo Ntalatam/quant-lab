@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 PaperSessionStatus = Literal["draft", "active", "paused", "stopped", "error"]
 PaperEventType = Literal["status", "signal", "fill", "error"]
 BarInterval = Literal["1m", "5m", "15m", "1h", "1d"]
@@ -65,7 +64,9 @@ class PaperTradingSessionCreate(BaseModel):
     @field_validator("tickers")
     @classmethod
     def normalize_tickers(cls, values: list[str]) -> list[str]:
-        normalized = list(dict.fromkeys(ticker.strip().upper() for ticker in values if ticker.strip()))
+        normalized = list(
+            dict.fromkeys(ticker.strip().upper() for ticker in values if ticker.strip())
+        )
         if not normalized:
             raise ValueError("At least one ticker is required")
         return normalized

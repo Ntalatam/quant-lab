@@ -11,7 +11,7 @@ import yfinance as yf
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.paper import (
     PaperTradingEquityPoint,
@@ -19,20 +19,20 @@ from app.models.paper import (
     PaperTradingPosition,
     PaperTradingSession,
 )
+from app.observability import elapsed_ms, get_logger
 from app.schemas.paper import (
     PaperTradingSessionCreate,
     PaperTradingSessionDetail,
     PaperTradingSessionSummary,
 )
 from app.services.execution import simulate_fill
+from app.services.portfolio import Portfolio, Position
 from app.services.portfolio_optimizer import (
     PortfolioConstructionRequest,
     construct_target_weights,
 )
-from app.services.portfolio import Portfolio, Position
 from app.services.strategy_registry import get_strategy_class
 from app.services.trading import execute_target_weights
-from app.observability import elapsed_ms, get_logger
 
 NO_MARKET_DATA_ERROR = "No live market data was returned."
 logger = get_logger(__name__)
@@ -77,16 +77,16 @@ def _normalize_history(df: pd.DataFrame) -> pd.DataFrame:
     if "adj_close" not in df.columns:
         df["adj_close"] = df["close"]
 
-    df = df[["open", "high", "low", "close", "adj_close", "volume"]].dropna(
-        subset=["close"]
-    )
+    df = df[["open", "high", "low", "close", "adj_close", "volume"]].dropna(subset=["close"])
     df.index = pd.to_datetime(df.index)
     if getattr(df.index, "tz", None) is not None:
         df.index = df.index.tz_convert(None)
     return df.sort_index()
 
 
-def _latest_common_timestamp(price_frames: dict[str, pd.DataFrame]) -> pd.Timestamp | None:
+def _latest_common_timestamp(
+    price_frames: dict[str, pd.DataFrame],
+) -> pd.Timestamp | None:
     candidates = [df.index[-1] for df in price_frames.values() if not df.empty]
     if not candidates:
         return None
@@ -367,9 +367,7 @@ class PaperTradingManager:
             )
 
             positions_result = await db.execute(
-                select(PaperTradingPosition).where(
-                    PaperTradingPosition.session_id == session_id
-                )
+                select(PaperTradingPosition).where(PaperTradingPosition.session_id == session_id)
             )
             positions = positions_result.scalars().all()
             for row in positions:
@@ -547,9 +545,7 @@ class PaperTradingManager:
                         or current_ts > runtime.last_processed_bar
                     ):
                         try:
-                            signals = runtime.strategy.generate_signals(
-                                signal_windows, current_ts
-                            )
+                            signals = runtime.strategy.generate_signals(signal_windows, current_ts)
                         except Exception:
                             log.exception(
                                 "paper_trading.strategy_error",
@@ -605,9 +601,7 @@ class PaperTradingManager:
                                     id=str(uuid.uuid4()),
                                     session_id=session_id,
                                     timestamp=current_dt,
-                                    event_type="fill"
-                                    if execution.status == "filled"
-                                    else "signal",
+                                    event_type="fill" if execution.status == "filled" else "signal",
                                     ticker=execution.ticker,
                                     action=execution.action.lower(),
                                     signal=execution.signal,
@@ -731,9 +725,7 @@ class PaperTradingManager:
         existing_positions_result = await db.execute(
             select(PaperTradingPosition).where(PaperTradingPosition.session_id == session.id)
         )
-        existing_positions = {
-            row.ticker: row for row in existing_positions_result.scalars().all()
-        }
+        existing_positions = {row.ticker: row for row in existing_positions_result.scalars().all()}
 
         live_tickers = set(portfolio.positions.keys())
         for ticker, row in list(existing_positions.items()):
@@ -749,9 +741,7 @@ class PaperTradingManager:
                     ticker=ticker,
                     shares=position.shares,
                     avg_cost=position.avg_cost,
-                    entry_date=datetime.combine(
-                        position.entry_date, datetime.min.time()
-                    ),
+                    entry_date=datetime.combine(position.entry_date, datetime.min.time()),
                     current_price=position.current_price,
                     market_value=position.market_value,
                     unrealized_pnl=position.unrealized_pnl,
@@ -772,9 +762,7 @@ class PaperTradingManager:
             row.accrued_locate_fee = position.accrued_locate_fee
             row.updated_at = datetime.utcnow()
 
-    async def _load_detail(
-        self, db: AsyncSession, session_id: str
-    ) -> PaperTradingSessionDetail:
+    async def _load_detail(self, db: AsyncSession, session_id: str) -> PaperTradingSessionDetail:
         session = await db.get(PaperTradingSession, session_id)
         if not session:
             raise ValueError("Paper trading session not found")
@@ -862,9 +850,7 @@ class PaperTradingManager:
             ],
         )
 
-    def _session_to_summary(
-        self, session: PaperTradingSession
-    ) -> PaperTradingSessionSummary:
+    def _session_to_summary(self, session: PaperTradingSession) -> PaperTradingSessionSummary:
         return PaperTradingSessionSummary(
             id=session.id,
             name=session.name,

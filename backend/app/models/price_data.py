@@ -1,6 +1,14 @@
 from datetime import date, datetime
 
-from sqlalchemy import String, Float, BigInteger, Date, DateTime, UniqueConstraint, Index
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    Float,
+    Index,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base

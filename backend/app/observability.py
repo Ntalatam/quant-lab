@@ -13,9 +13,7 @@ _SERVICE_CONTEXT: dict[str, Any] = {
 }
 
 
-def _add_service_context(
-    _: Any, __: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _add_service_context(_: Any, __: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     event_dict.setdefault("service", _SERVICE_CONTEXT["service"])
     event_dict.setdefault("environment", _SERVICE_CONTEXT["environment"])
     return event_dict

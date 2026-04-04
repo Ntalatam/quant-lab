@@ -9,7 +9,6 @@ import pandas as pd
 from app.services.asset_metadata import get_ticker_sectors
 from app.services.portfolio import Portfolio
 
-
 SUPPORTED_CONSTRUCTION_MODELS = {
     "equal_weight",
     "risk_parity",
@@ -98,15 +97,9 @@ def _build_long_only_targets(
     model: str,
     warnings: list[str],
 ) -> dict[str, float]:
-    targets = {
-        ticker: max(weight, 0.0)
-        for ticker, weight in current_weights.items()
-        if weight > 0
-    }
+    targets = {ticker: max(weight, 0.0) for ticker, weight in current_weights.items() if weight > 0}
     positive_signals = {
-        ticker: signal
-        for ticker, signal in request.raw_signals.items()
-        if signal > 0
+        ticker: signal for ticker, signal in request.raw_signals.items() if signal > 0
     }
 
     for ticker, signal in request.raw_signals.items():
@@ -119,7 +112,9 @@ def _build_long_only_targets(
         reduction = min(abs(signal), 1.0)
         targets[ticker] = existing * (1 - reduction)
 
-    preserved_gross = sum(weight for ticker, weight in targets.items() if ticker not in positive_signals)
+    preserved_gross = sum(
+        weight for ticker, weight in targets.items() if ticker not in positive_signals
+    )
     gross_cap = max(request.max_gross_exposure_pct / 100, 0.0)
     available_gross = max(gross_cap - preserved_gross, 0.0)
     desired_long_gross = min(sum(positive_signals.values()), available_gross)
@@ -149,11 +144,7 @@ def _build_long_short_targets(
     universe = set(current_weights) | set(request.raw_signals)
     targets = {ticker: 0.0 for ticker in universe}
 
-    long_views = {
-        ticker: signal
-        for ticker, signal in request.raw_signals.items()
-        if signal > 0
-    }
+    long_views = {ticker: signal for ticker, signal in request.raw_signals.items() if signal > 0}
     short_views = {
         ticker: abs(signal)
         for ticker, signal in request.raw_signals.items()
@@ -224,7 +215,9 @@ def _allocate_side(
         raw_weights = _mean_variance_weights(returns, tickers, view_strengths)
     else:
         posterior = _black_litterman_expected_returns(returns, tickers, view_strengths)
-        raw_weights = _mean_variance_weights(returns, tickers, view_strengths, expected_returns=posterior)
+        raw_weights = _mean_variance_weights(
+            returns, tickers, view_strengths, expected_returns=posterior
+        )
 
     return _cap_and_scale_weights(
         tickers=tickers,
@@ -263,7 +256,9 @@ def _mean_variance_weights(
 ) -> np.ndarray:
     covariance = _regularized_covariance(returns)
     if expected_returns is None:
-        signal_vector = np.array([max(view_strengths[ticker], 1e-6) for ticker in tickers], dtype=float)
+        signal_vector = np.array(
+            [max(view_strengths[ticker], 1e-6) for ticker in tickers], dtype=float
+        )
         signal_vector /= max(signal_vector.sum(), 1e-6)
         expected_returns = signal_vector
 
@@ -294,10 +289,11 @@ def _black_litterman_expected_returns(
     omega = np.diag(omega_diag)
     p_matrix = np.eye(n_assets)
 
-    middle = np.linalg.pinv(np.linalg.pinv(tau * covariance) + p_matrix.T @ np.linalg.pinv(omega) @ p_matrix)
+    middle = np.linalg.pinv(
+        np.linalg.pinv(tau * covariance) + p_matrix.T @ np.linalg.pinv(omega) @ p_matrix
+    )
     posterior = middle @ (
-        np.linalg.pinv(tau * covariance) @ prior
-        + p_matrix.T @ np.linalg.pinv(omega) @ views
+        np.linalg.pinv(tau * covariance) @ prior + p_matrix.T @ np.linalg.pinv(omega) @ views
     )
     return np.maximum(posterior, 0.0)
 
@@ -339,10 +335,7 @@ def _cap_and_scale_weights(
         else:
             weights[under_mask] += excess * (under_raw / under_raw.sum())
 
-    return {
-        ticker: float(weight)
-        for ticker, weight in zip(tickers, np.maximum(weights, 0.0))
-    }
+    return {ticker: float(weight) for ticker, weight in zip(tickers, np.maximum(weights, 0.0))}
 
 
 async def _apply_sector_limits(
@@ -433,7 +426,7 @@ def _current_weights(
 
 def _summarize_sector_exposure(weights: dict[str, float]) -> dict[str, float]:
     summary: defaultdict[str, float] = defaultdict(float)
-    for ticker, weight in weights.items():
+    for _ticker, weight in weights.items():
         if abs(weight) <= 1e-8:
             continue
         summary["Unclassified"] += abs(weight) * 100
@@ -441,8 +434,4 @@ def _summarize_sector_exposure(weights: dict[str, float]) -> dict[str, float]:
 
 
 def _clean_weights(weights: dict[str, float]) -> dict[str, float]:
-    return {
-        ticker: round(weight, 8)
-        for ticker, weight in weights.items()
-        if abs(weight) > 1e-8
-    }
+    return {ticker: round(weight, 8) for ticker, weight in weights.items() if abs(weight) > 1e-8}

@@ -1,14 +1,13 @@
 """Tests for trading strategies."""
 
-import pandas as pd
 import numpy as np
-import pytest
+import pandas as pd
 
-from app.strategies.sma_crossover import SMACrossover
+from app.strategies.market_neutral_momentum import MarketNeutralMomentum
 from app.strategies.mean_reversion import MeanReversion
 from app.strategies.momentum import MomentumStrategy
-from app.strategies.market_neutral_momentum import MarketNeutralMomentum
 from app.strategies.pairs_trading import PairsTrading
+from app.strategies.sma_crossover import SMACrossover
 
 
 def _make_df(prices: list[float], start: str = "2023-01-02") -> pd.DataFrame:

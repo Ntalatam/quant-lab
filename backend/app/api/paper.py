@@ -24,7 +24,12 @@ def get_paper_manager(request: Request) -> PaperTradingManager:
     response_model=list[PaperTradingSessionSummary],
     summary="List paper-trading sessions",
     description="Returns every persisted paper-trading session with summary performance and runtime state.",
-    responses={503: {"model": ErrorResponse, "description": "Paper-trading runtime unavailable."}},
+    responses={
+        503: {
+            "model": ErrorResponse,
+            "description": "Paper-trading runtime unavailable.",
+        }
+    },
 )
 async def list_paper_sessions(request: Request):
     manager = get_paper_manager(request)
@@ -40,8 +45,14 @@ async def list_paper_sessions(request: Request):
         "settings. The session can optionally start immediately."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "Session configuration was invalid."},
-        503: {"model": ErrorResponse, "description": "Paper-trading runtime unavailable."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Session configuration was invalid.",
+        },
+        503: {
+            "model": ErrorResponse,
+            "description": "Paper-trading runtime unavailable.",
+        },
     },
 )
 async def create_paper_session(payload: PaperTradingSessionCreate, request: Request):
@@ -59,7 +70,10 @@ async def create_paper_session(payload: PaperTradingSessionCreate, request: Requ
     description="Returns the live state, positions, recent events, and equity curve for a paper session.",
     responses={
         404: {"model": ErrorResponse, "description": "Session was not found."},
-        503: {"model": ErrorResponse, "description": "Paper-trading runtime unavailable."},
+        503: {
+            "model": ErrorResponse,
+            "description": "Paper-trading runtime unavailable.",
+        },
     },
 )
 async def get_paper_session(session_id: str, request: Request):
@@ -77,7 +91,10 @@ async def get_paper_session(session_id: str, request: Request):
     description="Transitions a paper-trading session into the active polling and execution state.",
     responses={
         404: {"model": ErrorResponse, "description": "Session was not found."},
-        503: {"model": ErrorResponse, "description": "Paper-trading runtime unavailable."},
+        503: {
+            "model": ErrorResponse,
+            "description": "Paper-trading runtime unavailable.",
+        },
     },
 )
 async def start_paper_session(session_id: str, request: Request):
@@ -96,7 +113,10 @@ async def start_paper_session(session_id: str, request: Request):
     description="Stops polling and order generation while leaving the paper session intact.",
     responses={
         404: {"model": ErrorResponse, "description": "Session was not found."},
-        503: {"model": ErrorResponse, "description": "Paper-trading runtime unavailable."},
+        503: {
+            "model": ErrorResponse,
+            "description": "Paper-trading runtime unavailable.",
+        },
     },
 )
 async def pause_paper_session(session_id: str, request: Request):
@@ -115,7 +135,10 @@ async def pause_paper_session(session_id: str, request: Request):
     description="Stops the session and finalizes its status without deleting its audit trail.",
     responses={
         404: {"model": ErrorResponse, "description": "Session was not found."},
-        503: {"model": ErrorResponse, "description": "Paper-trading runtime unavailable."},
+        503: {
+            "model": ErrorResponse,
+            "description": "Paper-trading runtime unavailable.",
+        },
     },
 )
 async def stop_paper_session(session_id: str, request: Request):
@@ -140,9 +163,7 @@ async def paper_session_websocket(websocket: WebSocket, session_id: str):
 
     try:
         detail = await manager.get_session_detail(session_id)
-        await websocket.send_json(
-            {"type": "snapshot", "session": jsonable_encoder(detail)}
-        )
+        await websocket.send_json({"type": "snapshot", "session": jsonable_encoder(detail)})
         await manager.subscribe(session_id, websocket)
         while True:
             await websocket.receive_text()

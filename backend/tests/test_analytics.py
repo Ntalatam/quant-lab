@@ -2,12 +2,11 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from app.services.analytics import (
     compute_all_metrics,
-    compute_monthly_returns,
     compute_monte_carlo,
+    compute_monthly_returns,
 )
 
 

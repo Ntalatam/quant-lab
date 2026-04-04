@@ -109,10 +109,7 @@ class PortfolioTransactionResult:
         self.implementation_shortfall += other.implementation_shortfall
         if self.executed_shares > 0:
             self.participation_rate_pct = (
-                (
-                    self.participation_rate_pct
-                    * max(self.executed_shares - other.executed_shares, 0)
-                )
+                (self.participation_rate_pct * max(self.executed_shares - other.executed_shares, 0))
                 + (other.participation_rate_pct * other.executed_shares)
             ) / self.executed_shares
 
@@ -142,11 +139,15 @@ class Portfolio:
 
     @property
     def long_market_value(self) -> float:
-        return sum(position.market_value for position in self.positions.values() if position.shares > 0)
+        return sum(
+            position.market_value for position in self.positions.values() if position.shares > 0
+        )
 
     @property
     def short_market_value(self) -> float:
-        return sum(-position.market_value for position in self.positions.values() if position.shares < 0)
+        return sum(
+            -position.market_value for position in self.positions.values() if position.shares < 0
+        )
 
     @property
     def total_equity(self) -> float:
@@ -382,9 +383,7 @@ class Portfolio:
 
         return result
 
-    def _accrue_short_borrow(
-        self, current_date: date, short_borrow_rate_bps: float
-    ) -> None:
+    def _accrue_short_borrow(self, current_date: date, short_borrow_rate_bps: float) -> None:
         if self.last_borrow_accrual_date is None:
             self.last_borrow_accrual_date = current_date
             return
@@ -478,11 +477,7 @@ class Portfolio:
                 opportunity_cost=opportunity_cost,
                 participation_rate_pct=participation_rate_pct,
                 implementation_shortfall=(
-                    commission
-                    + spread_cost
-                    + market_impact_cost
-                    + timing_cost
-                    + opportunity_cost
+                    commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
                 ),
             )
         )
@@ -497,11 +492,7 @@ class Portfolio:
         result.opportunity_cost = opportunity_cost
         result.participation_rate_pct = participation_rate_pct
         result.implementation_shortfall = (
-            commission
-            + spread_cost
-            + market_impact_cost
-            + timing_cost
-            + opportunity_cost
+            commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
         )
         return result
 
@@ -568,11 +559,7 @@ class Portfolio:
                 opportunity_cost=opportunity_cost,
                 participation_rate_pct=participation_rate_pct,
                 implementation_shortfall=(
-                    commission
-                    + spread_cost
-                    + market_impact_cost
-                    + timing_cost
-                    + opportunity_cost
+                    commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
                 ),
                 risk_event=risk_event,
             )
@@ -593,11 +580,7 @@ class Portfolio:
         result.opportunity_cost = opportunity_cost
         result.participation_rate_pct = participation_rate_pct
         result.implementation_shortfall = (
-            commission
-            + spread_cost
-            + market_impact_cost
-            + timing_cost
-            + opportunity_cost
+            commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
         )
         return result
 
@@ -621,7 +604,12 @@ class Portfolio:
         result = PortfolioTransactionResult()
         margin_fraction = short_margin_requirement_pct / 100
         locate_fee_per_share = fill_price * short_locate_fee_bps / 10_000
-        cost_per_share = (fill_price * margin_fraction) + commission_per_share + slippage_per_share + locate_fee_per_share
+        cost_per_share = (
+            (fill_price * margin_fraction)
+            + commission_per_share
+            + slippage_per_share
+            + locate_fee_per_share
+        )
         if cost_per_share <= 0:
             return result
 
@@ -683,11 +671,7 @@ class Portfolio:
                 opportunity_cost=opportunity_cost,
                 participation_rate_pct=participation_rate_pct,
                 implementation_shortfall=(
-                    commission
-                    + spread_cost
-                    + market_impact_cost
-                    + timing_cost
-                    + opportunity_cost
+                    commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
                 ),
             )
         )
@@ -703,11 +687,7 @@ class Portfolio:
         result.opportunity_cost = opportunity_cost
         result.participation_rate_pct = participation_rate_pct
         result.implementation_shortfall = (
-            commission
-            + spread_cost
-            + market_impact_cost
-            + timing_cost
-            + opportunity_cost
+            commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
         )
         return result
 
@@ -793,11 +773,7 @@ class Portfolio:
                 opportunity_cost=opportunity_cost,
                 participation_rate_pct=participation_rate_pct,
                 implementation_shortfall=(
-                    commission
-                    + spread_cost
-                    + market_impact_cost
-                    + timing_cost
-                    + opportunity_cost
+                    commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
                 ),
                 risk_event=risk_event,
             )
@@ -822,10 +798,6 @@ class Portfolio:
         result.opportunity_cost = opportunity_cost
         result.participation_rate_pct = participation_rate_pct
         result.implementation_shortfall = (
-            commission
-            + spread_cost
-            + market_impact_cost
-            + timing_cost
-            + opportunity_cost
+            commission + spread_cost + market_impact_cost + timing_cost + opportunity_cost
         )
         return result

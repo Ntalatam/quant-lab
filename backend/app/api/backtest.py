@@ -12,8 +12,15 @@ import json
 import time
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from sqlalchemy import select, delete
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -62,8 +69,7 @@ def serialize_backtest_run(run: BacktestRun, trades: list[TradeRecord]) -> dict:
             "market_impact_model": run.market_impact_model or "almgren_chriss",
             "max_volume_participation_pct": run.max_volume_participation_pct or 5,
             "position_sizing": run.position_sizing,
-            "portfolio_construction_model": run.portfolio_construction_model
-            or run.position_sizing,
+            "portfolio_construction_model": run.portfolio_construction_model or run.position_sizing,
             "portfolio_lookback_days": run.portfolio_lookback_days or 63,
             "max_position_pct": run.max_position_pct,
             "max_gross_exposure_pct": run.max_gross_exposure_pct or 150,
@@ -132,13 +138,17 @@ def serialize_backtest_run(run: BacktestRun, trades: list[TradeRecord]) -> dict:
         "and returns the full tear-sheet payload used by the frontend."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "Backtest configuration was invalid."},
-        500: {"model": ErrorResponse, "description": "Backtest execution failed unexpectedly."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Backtest configuration was invalid.",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "Backtest execution failed unexpectedly.",
+        },
     },
 )
-async def execute_backtest(
-    config: BacktestConfig, db: AsyncSession = Depends(get_db)
-):
+async def execute_backtest(config: BacktestConfig, db: AsyncSession = Depends(get_db)):
     start_time = time.perf_counter()
     log = logger.bind(
         strategy_id=config.strategy_id,
@@ -262,10 +272,7 @@ async def list_backtests(
 
     total = await db.scalar(select(func.count()).select_from(BacktestRun))
     result = await db.execute(
-        select(BacktestRun)
-        .order_by(BacktestRun.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        select(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(limit).offset(offset)
     )
     runs = result.scalars().all()
     return {
@@ -297,9 +304,7 @@ async def list_backtests(
     responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
 )
 async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(BacktestRun).where(BacktestRun.id == backtest_id)
-    )
+    result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = result.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
@@ -321,19 +326,13 @@ async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
     responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
 )
 async def delete_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(BacktestRun).where(BacktestRun.id == backtest_id)
-    )
+    result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
     run = result.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
 
-    await db.execute(
-        delete(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
-    )
-    await db.execute(
-        delete(BacktestRun).where(BacktestRun.id == backtest_id)
-    )
+    await db.execute(delete(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id))
+    await db.execute(delete(BacktestRun).where(BacktestRun.id == backtest_id))
     await db.commit()
     return {"status": "deleted"}
 
@@ -369,12 +368,11 @@ async def update_notes(
     ),
     responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
 )
-async def parameter_sweep(
-    config: BacktestSweepConfig, db: AsyncSession = Depends(get_db)
-):
+async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depends(get_db)):
     """Run multiple backtests varying one parameter."""
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
+
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
 
@@ -392,9 +390,11 @@ async def parameter_sweep(
             sweep_config = config.base_config.model_copy(update={"params": params})
 
             try:
+
                 async def _run(cfg=sweep_config):
                     async with _async_session() as sess:
                         return await run_backtest(sess, cfg)
+
                 result = asyncio.run(_run())
                 results.append(
                     {
@@ -429,12 +429,11 @@ async def parameter_sweep(
     ),
     responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
 )
-async def parameter_sweep_2d(
-    config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)
-):
+async def parameter_sweep_2d(config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)):
     """Run backtests varying two parameters simultaneously and return a heatmap matrix."""
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
+
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
 
@@ -454,9 +453,11 @@ async def parameter_sweep_2d(
                 params[config.param_y] = vy
                 sweep_config = config.base_config.model_copy(update={"params": params})
                 try:
+
                     async def _run(cfg=sweep_config):
                         async with _async_session() as sess:
                             return await run_backtest(sess, cfg)
+
                     result = asyncio.run(_run())
                     metric_val = result["metrics"].get(config.metric)
                     row.append(
@@ -496,7 +497,10 @@ async def parameter_sweep_2d(
         "measure robustness and out-of-sample degradation."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "Walk-forward request was invalid."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Walk-forward request was invalid.",
+        },
         500: {"model": ErrorResponse, "description": "Walk-forward execution failed."},
     },
 )
@@ -507,6 +511,7 @@ async def walk_forward(
     """Run walk-forward analysis on an existing backtest config."""
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
+
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
 
@@ -528,6 +533,7 @@ async def walk_forward(
         async def _inner():
             async with _async_session() as sess:
                 return await run_walk_forward(sess, config, n_folds=n_folds, train_pct=train_pct)
+
         return asyncio.run(_inner())
 
     try:
@@ -550,8 +556,14 @@ async def walk_forward(
         "returns the best parameter set plus the complete trial log."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "Optimization request was invalid."},
-        500: {"model": ErrorResponse, "description": "Optimization could not be completed."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Optimization request was invalid.",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "Optimization could not be completed.",
+        },
     },
 )
 async def bayesian_optimize(
@@ -566,6 +578,7 @@ async def bayesian_optimize(
     """
     try:
         import optuna
+
         optuna.logging.set_verbosity(optuna.logging.WARNING)
     except ImportError:
         raise HTTPException(500, "optuna is not installed. Run: pip install optuna")
@@ -574,6 +587,7 @@ async def bayesian_optimize(
 
     # Pre-load price data once so individual trials skip ensure_data_loaded DB checks
     from app.services.data_ingestion import ensure_data_loaded
+
     start = date.fromisoformat(config.base_config.start_date)
     end = date.fromisoformat(config.base_config.end_date)
     all_tickers = list(set(config.base_config.tickers + [config.base_config.benchmark]))
@@ -591,9 +605,13 @@ async def bayesian_optimize(
         for spec in config.param_specs:
             if spec.type == "int":
                 step = int(spec.step) if spec.step else 1
-                params[spec.name] = trial.suggest_int(spec.name, int(spec.low), int(spec.high), step=step)
+                params[spec.name] = trial.suggest_int(
+                    spec.name, int(spec.low), int(spec.high), step=step
+                )
             else:
-                params[spec.name] = trial.suggest_float(spec.name, spec.low, spec.high, step=spec.step)
+                params[spec.name] = trial.suggest_float(
+                    spec.name, spec.low, spec.high, step=spec.step
+                )
 
         trial_config = config.base_config.model_copy(update={"params": params})
 
@@ -610,11 +628,13 @@ async def bayesian_optimize(
         if metric_val is None:
             return float("-inf") if config.maximize else float("inf")
 
-        trials_log.append({
-            "trial": trial.number,
-            "params": dict(params),
-            "value": float(metric_val),
-        })
+        trials_log.append(
+            {
+                "trial": trial.number,
+                "params": dict(params),
+                "value": float(metric_val),
+            }
+        )
         return float(metric_val) if config.maximize else -float(metric_val)
 
     # Optuna must run sync — use thread pool to avoid blocking event loop
@@ -730,19 +750,21 @@ async def get_lineage(
                 if old != new:
                     diffs.append({"key": k, "old_value": old, "new_value": new})
 
-        entries.append({
-            "id": run.id,
-            "version": run.version,
-            "created_at": run.created_at.isoformat() if run.created_at else None,
-            "notes": run.notes or "",
-            "strategy_id": run.strategy_id,
-            "tickers": run.tickers,
-            "params": params,
-            "sharpe_ratio": run.metrics.get("sharpe_ratio", 0),
-            "total_return_pct": run.metrics.get("total_return_pct", 0),
-            "max_drawdown_pct": run.metrics.get("max_drawdown_pct", 0),
-            "param_diffs": diffs,
-        })
+        entries.append(
+            {
+                "id": run.id,
+                "version": run.version,
+                "created_at": run.created_at.isoformat() if run.created_at else None,
+                "notes": run.notes or "",
+                "strategy_id": run.strategy_id,
+                "tickers": run.tickers,
+                "params": params,
+                "sharpe_ratio": run.metrics.get("sharpe_ratio", 0),
+                "total_return_pct": run.metrics.get("total_return_pct", 0),
+                "max_drawdown_pct": run.metrics.get("max_drawdown_pct", 0),
+                "param_diffs": diffs,
+            }
+        )
         prev_params = params
 
     return {"lineage_tag": tag, "entries": entries}
@@ -799,14 +821,16 @@ async def backtest_websocket(websocket: WebSocket):
         async def on_progress(bar_num: int, total_bars: int, date_str: str, equity: float):
             pct = round(bar_num / total_bars, 4) if total_bars else 0
             try:
-                await websocket.send_json({
-                    "type":   "progress",
-                    "bar":    bar_num,
-                    "total":  total_bars,
-                    "date":   date_str,
-                    "equity": round(equity, 2),
-                    "pct":    pct,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "progress",
+                        "bar": bar_num,
+                        "total": total_bars,
+                        "date": date_str,
+                        "equity": round(equity, 2),
+                        "pct": pct,
+                    }
+                )
             except Exception:
                 pass  # client disconnected mid-run
 

@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ── Pricing request / response ────────────────────────────────────────────
+
 
 class OptionPriceRequest(BaseModel):
     model_config = ConfigDict(
@@ -47,6 +47,7 @@ class OptionPriceResponse(BaseModel):
 
 # ── Implied volatility ────────────────────────────────────────────────────
 
+
 class ImpliedVolRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
@@ -78,6 +79,7 @@ class ImpliedVolResponse(BaseModel):
 
 
 # ── Options chain ─────────────────────────────────────────────────────────
+
 
 class ChainRequest(BaseModel):
     model_config = ConfigDict(
@@ -126,6 +128,7 @@ class ChainResponse(BaseModel):
 
 # ── Volatility surface ────────────────────────────────────────────────────
 
+
 class VolSurfaceRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
@@ -164,6 +167,7 @@ class VolSurfaceResponse(BaseModel):
 
 
 # ── P&L scenario ──────────────────────────────────────────────────────────
+
 
 class PnlScenarioRequest(BaseModel):
     model_config = ConfigDict(

@@ -45,8 +45,12 @@ router = APIRouter(prefix="/options", tags=["options"])
 async def price_option(payload: OptionPriceRequest):
     T = payload.days_to_expiry / 365.0
     result = black_scholes(
-        payload.spot, payload.strike, T,
-        payload.risk_free_rate, payload.volatility, payload.option_type,
+        payload.spot,
+        payload.strike,
+        T,
+        payload.risk_free_rate,
+        payload.volatility,
+        payload.option_type,
     )
     moneyness = payload.spot / payload.strike
     if moneyness > 1.02:
@@ -86,14 +90,22 @@ async def price_option(payload: OptionPriceRequest):
 async def solve_implied_vol(payload: ImpliedVolRequest):
     T = payload.days_to_expiry / 365.0
     iv = implied_volatility(
-        payload.market_price, payload.spot, payload.strike,
-        T, payload.risk_free_rate, payload.option_type,
+        payload.market_price,
+        payload.spot,
+        payload.strike,
+        T,
+        payload.risk_free_rate,
+        payload.option_type,
     )
     theo = None
     if iv is not None:
         theo = black_scholes(
-            payload.spot, payload.strike, T,
-            payload.risk_free_rate, iv, payload.option_type,
+            payload.spot,
+            payload.strike,
+            T,
+            payload.risk_free_rate,
+            iv,
+            payload.option_type,
         ).price
 
     return {
@@ -101,9 +113,7 @@ async def solve_implied_vol(payload: ImpliedVolRequest):
         "implied_volatility_pct": round(iv * 100, 2) if iv else None,
         "market_price": payload.market_price,
         "theoretical_price": theo,
-        "message": (
-            f"IV = {iv * 100:.2f}%" if iv else "Could not solve for implied volatility"
-        ),
+        "message": (f"IV = {iv * 100:.2f}%" if iv else "Could not solve for implied volatility"),
     }
 
 
@@ -163,9 +173,14 @@ async def vol_surface(payload: VolSurfaceRequest):
 async def pnl_scenario(payload: PnlScenarioRequest):
     T = payload.days_to_expiry / 365.0
     result = compute_pnl_grid(
-        payload.spot, payload.strike, T,
-        payload.risk_free_rate, payload.volatility,
-        payload.option_type, payload.position,
-        payload.entry_price, payload.price_range_pct,
+        payload.spot,
+        payload.strike,
+        T,
+        payload.risk_free_rate,
+        payload.volatility,
+        payload.option_type,
+        payload.position,
+        payload.entry_price,
+        payload.price_range_pct,
     )
     return result

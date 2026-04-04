@@ -6,12 +6,11 @@ Implements gap-fill logic to avoid redundant API calls for already-loaded data.
 """
 
 import time
-
-import yfinance as yf
-import pandas as pd
 from datetime import date, timedelta
 
-from sqlalchemy import select, and_
+import pandas as pd
+import yfinance as yf
+from sqlalchemy import and_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 

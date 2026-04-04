@@ -3,15 +3,15 @@ Strategy registry — central lookup for all strategy classes.
 """
 
 from app.strategies.base import BaseStrategy
-from app.strategies.sma_crossover import SMACrossover
+from app.strategies.donchian_breakout import DonchianBreakout
+from app.strategies.macd_crossover import MACDCrossover
+from app.strategies.market_neutral_momentum import MarketNeutralMomentum
 from app.strategies.mean_reversion import MeanReversion
+from app.strategies.ml_classifier import MLClassifier
 from app.strategies.momentum import MomentumStrategy
 from app.strategies.pairs_trading import PairsTrading
-from app.strategies.market_neutral_momentum import MarketNeutralMomentum
-from app.strategies.ml_classifier import MLClassifier
 from app.strategies.rsi_mean_reversion import RSIMeanReversion
-from app.strategies.macd_crossover import MACDCrossover
-from app.strategies.donchian_breakout import DonchianBreakout
+from app.strategies.sma_crossover import SMACrossover
 from app.strategies.vol_target_trend import VolTargetTrend
 
 STRATEGIES: dict[str, type[BaseStrategy]] = {
@@ -30,9 +30,7 @@ STRATEGIES: dict[str, type[BaseStrategy]] = {
 
 def get_strategy_class(strategy_id: str) -> type[BaseStrategy]:
     if strategy_id not in STRATEGIES:
-        raise ValueError(
-            f"Unknown strategy: {strategy_id}. Available: {list(STRATEGIES.keys())}"
-        )
+        raise ValueError(f"Unknown strategy: {strategy_id}. Available: {list(STRATEGIES.keys())}")
     return STRATEGIES[strategy_id]
 
 

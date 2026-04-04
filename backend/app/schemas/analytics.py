@@ -201,7 +201,9 @@ class CorrelationRequest(BaseModel):
     tickers: list[str] = Field(min_length=2, description="Tickers to analyse")
     start_date: str = Field(description="ISO start date")
     end_date: str = Field(description="ISO end date")
-    rolling_window: int = Field(default=63, ge=10, le=504, description="Rolling window in trading days")
+    rolling_window: int = Field(
+        default=63, ge=10, le=504, description="Rolling window in trading days"
+    )
     max_pairs: int = Field(default=10, ge=1, le=50, description="Max pairs for auto-discovery")
 
 

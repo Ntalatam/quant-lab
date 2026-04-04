@@ -16,7 +16,14 @@ class TestPortfolio:
 
     def test_buy_reduces_cash(self):
         p = Portfolio(initial_capital=100_000)
-        p.execute_buy("AAPL", 100, 150.0, commission=0.50, slippage_cost=1.0, trade_date=date(2024, 1, 2))
+        p.execute_buy(
+            "AAPL",
+            100,
+            150.0,
+            commission=0.50,
+            slippage_cost=1.0,
+            trade_date=date(2024, 1, 2),
+        )
         expected_cost = (150.0 * 100) + 0.50 + 1.0
         assert abs(p.cash - (100_000 - expected_cost)) < 0.01
         assert "AAPL" in p.positions
@@ -159,13 +166,31 @@ class TestPortfolio:
 
 class TestPosition:
     def test_market_value(self):
-        pos = Position(ticker="AAPL", shares=100, avg_cost=150.0, entry_date=date(2024, 1, 1), current_price=160.0)
+        pos = Position(
+            ticker="AAPL",
+            shares=100,
+            avg_cost=150.0,
+            entry_date=date(2024, 1, 1),
+            current_price=160.0,
+        )
         assert pos.market_value == 16000.0
 
     def test_unrealized_pnl(self):
-        pos = Position(ticker="AAPL", shares=100, avg_cost=150.0, entry_date=date(2024, 1, 1), current_price=160.0)
+        pos = Position(
+            ticker="AAPL",
+            shares=100,
+            avg_cost=150.0,
+            entry_date=date(2024, 1, 1),
+            current_price=160.0,
+        )
         assert pos.unrealized_pnl == 1000.0
 
     def test_unrealized_pnl_pct(self):
-        pos = Position(ticker="AAPL", shares=100, avg_cost=100.0, entry_date=date(2024, 1, 1), current_price=110.0)
+        pos = Position(
+            ticker="AAPL",
+            shares=100,
+            avg_cost=100.0,
+            entry_date=date(2024, 1, 1),
+            current_price=110.0,
+        )
         assert abs(pos.unrealized_pnl_pct - 10.0) < 0.01
