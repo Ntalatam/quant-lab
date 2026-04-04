@@ -7,12 +7,12 @@ Implements gap-fill logic to avoid redundant API calls for already-loaded data.
 
 import time
 from datetime import date, timedelta
+from typing import Any
 
 import pandas as pd
 import yfinance as yf
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.dml import Insert
 
 from app.models.price_data import PriceData
 from app.observability import elapsed_ms, get_logger
@@ -20,40 +20,48 @@ from app.observability import elapsed_ms, get_logger
 logger = get_logger(__name__)
 
 
-def _build_price_data_upsert_statement(db: AsyncSession, records: list[dict]) -> Insert:
+def _build_sqlite_price_data_upsert(records: list[dict]) -> Any:
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    stmt = sqlite_insert(PriceData).values(records)
+    return stmt.on_conflict_do_update(
+        index_elements=["ticker", "date"],
+        set_={
+            "open": stmt.excluded.open,
+            "high": stmt.excluded.high,
+            "low": stmt.excluded.low,
+            "close": stmt.excluded.close,
+            "adj_close": stmt.excluded.adj_close,
+            "volume": stmt.excluded.volume,
+        },
+    )
+
+
+def _build_postgres_price_data_upsert(records: list[dict]) -> Any:
+    from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+
+    stmt = postgresql_insert(PriceData).values(records)
+    return stmt.on_conflict_do_update(
+        constraint="uq_ticker_date",
+        set_={
+            "open": stmt.excluded.open,
+            "high": stmt.excluded.high,
+            "low": stmt.excluded.low,
+            "close": stmt.excluded.close,
+            "adj_close": stmt.excluded.adj_close,
+            "volume": stmt.excluded.volume,
+        },
+    )
+
+
+def _build_price_data_upsert_statement(db: AsyncSession, records: list[dict]) -> Any:
     dialect_name = db.bind.dialect.name if db.bind is not None else ""
 
     if dialect_name == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-        stmt = sqlite_insert(PriceData).values(records)
-        return stmt.on_conflict_do_update(
-            index_elements=["ticker", "date"],
-            set_={
-                "open": stmt.excluded.open,
-                "high": stmt.excluded.high,
-                "low": stmt.excluded.low,
-                "close": stmt.excluded.close,
-                "adj_close": stmt.excluded.adj_close,
-                "volume": stmt.excluded.volume,
-            },
-        )
+        return _build_sqlite_price_data_upsert(records)
 
     if dialect_name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-
-        stmt = postgresql_insert(PriceData).values(records)
-        return stmt.on_conflict_do_update(
-            constraint="uq_ticker_date",
-            set_={
-                "open": stmt.excluded.open,
-                "high": stmt.excluded.high,
-                "low": stmt.excluded.low,
-                "close": stmt.excluded.close,
-                "adj_close": stmt.excluded.adj_close,
-                "volume": stmt.excluded.volume,
-            },
-        )
+        return _build_postgres_price_data_upsert(records)
 
     raise RuntimeError(f"Unsupported database dialect for price-data upserts: {dialect_name}")
 

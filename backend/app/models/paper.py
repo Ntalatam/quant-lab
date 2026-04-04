@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.datetime import utc_now_naive
 
 
 class PaperTradingSession(Base):
@@ -59,9 +60,9 @@ class PaperTradingSession(Base):
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     stopped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -86,7 +87,7 @@ class PaperTradingPosition(Base):
     ticker: Mapped[str] = mapped_column(String(10))
     shares: Mapped[int] = mapped_column(Integer)
     avg_cost: Mapped[float] = mapped_column(Float)
-    entry_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    entry_date: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     current_price: Mapped[float] = mapped_column(Float, default=0.0)
     market_value: Mapped[float] = mapped_column(Float, default=0.0)
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
@@ -94,7 +95,7 @@ class PaperTradingPosition(Base):
     accrued_borrow_cost: Mapped[float] = mapped_column(Float, default=0.0)
     accrued_locate_fee: Mapped[float] = mapped_column(Float, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
     )
 
     session: Mapped["PaperTradingSession"] = relationship(back_populates="positions")
@@ -105,7 +106,7 @@ class PaperTradingEvent(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey("paper_trading_sessions.id"))
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     event_type: Mapped[str] = mapped_column(String(20))
     ticker: Mapped[str | None] = mapped_column(String(10), nullable=True)
     action: Mapped[str] = mapped_column(String(30))
@@ -123,7 +124,7 @@ class PaperTradingEquityPoint(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey("paper_trading_sessions.id"))
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive, index=True)
     equity: Mapped[float] = mapped_column(Float)
     cash: Mapped[float] = mapped_column(Float)
     market_value: Mapped[float] = mapped_column(Float)

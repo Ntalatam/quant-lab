@@ -9,7 +9,7 @@ the current bar (no lookahead bias).
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import date, datetime
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,7 @@ from app.services.portfolio_optimizer import (
 )
 from app.services.strategy_registry import build_strategy_instance
 from app.services.trading import execute_target_weights
+from app.utils.datetime import utc_now_iso
 
 ProgressCallback = Callable[[int, int, str, float], Awaitable[None]]
 logger = get_logger(__name__)
@@ -390,7 +391,7 @@ async def run_backtest(
     result = {
         "id": backtest_id,
         "config": config.model_dump(),
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": utc_now_iso(),
         "equity_curve": equity_curve,
         "clean_equity_curve": clean_equity_curve,
         "benchmark_curve": benchmark_curve,

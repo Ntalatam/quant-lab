@@ -7,6 +7,7 @@ from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.datetime import utc_now_naive
 
 if TYPE_CHECKING:
     from app.models.trade import TradeRecord
@@ -62,7 +63,7 @@ class BacktestRun(Base):
     version: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     trades: Mapped[list[TradeRecord]] = relationship(
         back_populates="backtest_run", cascade="all, delete-orphan"

@@ -4,6 +4,7 @@ from sqlalchemy import JSON, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.datetime import utc_now_naive
 
 
 class CustomStrategy(Base):
@@ -18,9 +19,9 @@ class CustomStrategy(Base):
     code: Mapped[str] = mapped_column(Text, nullable=False)
     param_schema: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     default_params: Mapped[dict] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
     )

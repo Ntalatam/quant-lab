@@ -40,6 +40,7 @@ from app.services.portfolio_optimizer import (
 from app.services.strategy_registry import build_strategy_instance
 from app.services.trading import execute_target_weights
 from app.strategies.base import BaseStrategy
+from app.utils.datetime import utc_now_naive
 
 NO_MARKET_DATA_ERROR = "No live market data was returned."
 logger = get_logger(__name__)
@@ -138,7 +139,7 @@ class PaperTradingManager:
         )
         log.info("paper_trading.session_create.started")
         session_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = utc_now_naive()
 
         async with self._session_factory() as db:
             strategy = await build_strategy_instance(db, payload.strategy_id, payload.params)
@@ -235,14 +236,14 @@ class PaperTradingManager:
             session.last_error = None
             session.stopped_at = None
             if session.started_at is None:
-                session.started_at = datetime.utcnow()
+                session.started_at = utc_now_naive()
 
             if emit_status and status_changed:
                 db.add(
                     PaperTradingEvent(
                         id=str(uuid.uuid4()),
                         session_id=session_id,
-                        timestamp=datetime.utcnow(),
+                        timestamp=utc_now_naive(),
                         event_type="status",
                         action="started",
                         status="info",
@@ -268,7 +269,7 @@ class PaperTradingManager:
                     PaperTradingEvent(
                         id=str(uuid.uuid4()),
                         session_id=session_id,
-                        timestamp=datetime.utcnow(),
+                        timestamp=utc_now_naive(),
                         event_type="status",
                         action="paused",
                         status="info",
@@ -290,12 +291,12 @@ class PaperTradingManager:
             status_changed = session.status != "stopped"
             session.status = "stopped"
             if status_changed:
-                session.stopped_at = datetime.utcnow()
+                session.stopped_at = utc_now_naive()
                 db.add(
                     PaperTradingEvent(
                         id=str(uuid.uuid4()),
                         session_id=session_id,
-                        timestamp=datetime.utcnow(),
+                        timestamp=utc_now_naive(),
                         event_type="status",
                         action="stopped",
                         status="info",
@@ -416,14 +417,14 @@ class PaperTradingManager:
                     current_ts = _latest_common_timestamp(price_frames)
 
                     if current_ts is None:
-                        session.last_heartbeat_at = datetime.utcnow()
+                        session.last_heartbeat_at = utc_now_naive()
                         if session.last_error != NO_MARKET_DATA_ERROR:
                             session.last_error = NO_MARKET_DATA_ERROR
                             db.add(
                                 PaperTradingEvent(
                                     id=str(uuid.uuid4()),
                                     session_id=session_id,
-                                    timestamp=datetime.utcnow(),
+                                    timestamp=utc_now_naive(),
                                     event_type="error",
                                     action="market_data",
                                     status="warning",
@@ -486,7 +487,7 @@ class PaperTradingManager:
                             PaperTradingEvent(
                                 id=str(uuid.uuid4()),
                                 session_id=session_id,
-                                timestamp=datetime.utcnow(),
+                                timestamp=utc_now_naive(),
                                 event_type="status",
                                 action="market_data_recovered",
                                 status="info",
@@ -599,7 +600,7 @@ class PaperTradingManager:
                             max_volume_participation=session.max_volume_participation_pct / 100,
                         )
                         runtime.last_processed_bar = current_ts
-                        session.last_signal_at = datetime.utcnow()
+                        session.last_signal_at = utc_now_naive()
 
                         for execution in executions:
                             if execution.status == "skipped" and execution.reason in {
@@ -652,12 +653,12 @@ class PaperTradingManager:
                     if session:
                         session.status = "error"
                         session.last_error = str(exc)
-                        session.last_heartbeat_at = datetime.utcnow()
+                        session.last_heartbeat_at = utc_now_naive()
                         db.add(
                             PaperTradingEvent(
                                 id=str(uuid.uuid4()),
                                 session_id=session_id,
-                                timestamp=datetime.utcnow(),
+                                timestamp=utc_now_naive(),
                                 event_type="error",
                                 action="runtime",
                                 status="error",
@@ -719,7 +720,7 @@ class PaperTradingManager:
             ((portfolio.total_equity / session.initial_capital) - 1) * 100, 3
         )
         session.last_price_at = latest_bar_ts
-        session.last_heartbeat_at = datetime.utcnow()
+        session.last_heartbeat_at = utc_now_naive()
 
         if previous_price_at is None or pd.Timestamp(latest_bar_ts) > pd.Timestamp(
             previous_price_at
@@ -772,7 +773,7 @@ class PaperTradingManager:
             position_row.unrealized_pnl_pct = position.unrealized_pnl_pct
             position_row.accrued_borrow_cost = position.accrued_borrow_cost
             position_row.accrued_locate_fee = position.accrued_locate_fee
-            position_row.updated_at = datetime.utcnow()
+            position_row.updated_at = utc_now_naive()
 
     async def _load_detail(self, db: AsyncSession, session_id: str) -> PaperTradingSessionDetail:
         session = await db.get(PaperTradingSession, session_id)

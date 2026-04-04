@@ -12,6 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.datetime import utc_now_naive
 
 
 class PriceData(Base):
@@ -26,7 +27,7 @@ class PriceData(Base):
     close: Mapped[float] = mapped_column(Float)
     adj_close: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     __table_args__ = (
         UniqueConstraint("ticker", "date", name="uq_ticker_date"),

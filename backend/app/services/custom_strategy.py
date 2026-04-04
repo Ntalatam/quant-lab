@@ -5,7 +5,6 @@ import hashlib
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -16,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.custom_strategy import CustomStrategy
 from app.schemas.strategy import StrategyEditorHelper
 from app.strategies.base import BaseStrategy
+from app.utils.datetime import utc_now_naive
 
 CUSTOM_STRATEGY_ID_PREFIX = "custom_"
 MAX_SOURCE_BYTES = 20_000
@@ -463,7 +463,7 @@ async def create_custom_strategy(
     code: str,
 ) -> CustomStrategy:
     metadata, _runner = _compile_source(code)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = utc_now_naive()
     strategy = CustomStrategy(
         id=f"{CUSTOM_STRATEGY_ID_PREFIX}{uuid.uuid4().hex[:12]}",
         name=metadata.name,
@@ -496,7 +496,7 @@ async def update_custom_strategy(
     strategy.code = code
     strategy.param_schema = metadata.param_schema
     strategy.default_params = metadata.default_params
-    strategy.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    strategy.updated_at = utc_now_naive()
     await db.flush()
     return strategy
 
