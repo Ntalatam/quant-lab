@@ -1,0 +1,13 @@
+.git
+.pytest_cache
+__pycache__
+*.py[cod]
+.venv
+venv
+env
+tests
+.ruff_cache
+dist
+build
+*.egg-info
+quantlab.db

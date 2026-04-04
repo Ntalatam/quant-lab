@@ -1,0 +1,25 @@
+aws_region        = "us-east-1"
+project_name      = "quantlab"
+environment       = "production"
+
+# Optional vanity domain. Leave blank to use the CloudFront domain output.
+domain_name         = "quantlab.example.com"
+hosted_zone_id      = "Z0123456789ABCDEF"
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# These tags are applied to most resources.
+tags = {
+  Owner      = "your-name"
+  CostCenter = "portfolio"
+}
+
+# After the first apply creates the ECR repositories, push images with your chosen
+# tags and re-apply using the same tags below.
+frontend_image_tag = "2026-04-04"
+backend_image_tag  = "2026-04-04"
+
+# Sensible demo-friendly defaults. Increase desired counts and instance sizing if
+# you expect more sustained traffic.
+frontend_desired_count = 1
+backend_desired_count  = 1
+database_instance_class = "db.t4g.micro"

@@ -36,10 +36,19 @@ Thumbs.db
 
 # Secrets
 secrets/
+!secrets/
+secrets/*
+!secrets/*.example
 
 # Database
 pgdata/
 *.db
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+*.tfplan
 
 # Test / Coverage
 .coverage

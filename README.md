@@ -186,11 +186,30 @@ User configures strategy
 
 ---
 
+## Cloud Deployment
+
+QuantLab now includes a production-oriented AWS deployment stack built around:
+
+- CloudFront for the public app URL
+- Application Load Balancer path routing (`/api/*` to FastAPI, app traffic to Next.js)
+- ECS Fargate services for frontend and backend containers
+- RDS PostgreSQL in private DB subnets
+- Secrets Manager for runtime `DATABASE_URL`
+
+Deployment files live in `infra/aws/`, with step-by-step instructions in `docs/deployment/aws-ecs.md`.
+Image build and push automation for AWS lives in `scripts/deploy/push-aws-images.sh`.
+
+---
+
 ## Project Structure
 
 ```
 quant-lab/
 ├── docker-compose.yml
+├── docs/deployment/
+│   └── aws-ecs.md          # AWS deployment instructions
+├── infra/aws/              # Terraform for ECS + ALB + CloudFront + RDS
+├── scripts/deploy/         # Image build + push helpers
 ├── .github/workflows/
 │   ├── backend-ci.yml        # Runs pytest on every push to backend/
 │   └── frontend-ci.yml       # Runs lint + build on every push to frontend/
@@ -365,6 +384,9 @@ Interactive docs: `http://localhost:8000/docs`
 ```bash
 git clone https://github.com/Ntalatam/quant-lab.git
 cd quant-lab
+
+# Create the local Docker secret file (first time only)
+cp secrets/db_password.txt.example secrets/db_password.txt
 
 # Start PostgreSQL on port 5433
 docker compose up db -d
