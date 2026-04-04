@@ -18,7 +18,8 @@ function ProgressBar({ pct }: { pct: number }) {
         className="h-full rounded-full transition-all duration-300"
         style={{
           width: `${Math.round(pct * 100)}%`,
-          background: "linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-green))",
+          background:
+            "linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-green))",
           boxShadow: "0 0 8px rgba(0,212,170,0.4)",
         }}
       />
@@ -28,7 +29,7 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function ConfigLoader() {
   const searchParams = useSearchParams();
-  const { setConfig } = useBacktestStore();
+  const setConfig = useBacktestStore((state) => state.setConfig);
   const applied = useRef(false);
 
   useEffect(() => {
@@ -49,10 +50,11 @@ function ConfigLoader() {
 
 export default function NewBacktestPage() {
   const router = useRouter();
-  const { config } = useBacktestStore();
+  const config = useBacktestStore((state) => state.config);
   const { progress, run, reset } = useBacktestProgress();
 
-  const isRunning = progress.status === "running" || progress.status === "connecting";
+  const isRunning =
+    progress.status === "running" || progress.status === "connecting";
 
   const handleRun = async () => {
     try {
@@ -81,7 +83,8 @@ export default function NewBacktestPage() {
           New Backtest
         </h1>
         <p className="text-xs text-text-muted mt-0.5">
-          Configure your strategy, set execution parameters, and run the simulation
+          Configure your strategy, set execution parameters, and run the
+          simulation
         </p>
       </div>
 
@@ -93,7 +96,8 @@ export default function NewBacktestPage() {
             style={{
               background: "var(--color-bg-card)",
               border: "1px solid var(--color-border)",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
+              boxShadow:
+                "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
             }}
           >
             <StrategyForm />
@@ -122,7 +126,8 @@ export default function NewBacktestPage() {
               )}
 
               {/* Live progress UI */}
-              {(progress.status === "connecting" || progress.status === "running") && (
+              {(progress.status === "connecting" ||
+                progress.status === "running") && (
                 <div
                   className="mb-4 rounded-md p-4 space-y-3"
                   style={{
@@ -132,8 +137,13 @@ export default function NewBacktestPage() {
                 >
                   {progress.status === "connecting" && (
                     <div className="flex items-center gap-2">
-                      <Wifi size={13} className="text-accent-blue animate-pulse" />
-                      <span className="text-xs text-accent-blue">Connecting to simulation engine…</span>
+                      <Wifi
+                        size={13}
+                        className="text-accent-blue animate-pulse"
+                      />
+                      <span className="text-xs text-accent-blue">
+                        Connecting to simulation engine…
+                      </span>
                     </div>
                   )}
 
@@ -147,7 +157,8 @@ export default function NewBacktestPage() {
                           </span>
                         </div>
                         <span className="text-[10px] font-mono text-text-muted">
-                          {progress.bar.toLocaleString()} / {progress.total.toLocaleString()} bars
+                          {progress.bar.toLocaleString()} /{" "}
+                          {progress.total.toLocaleString()} bars
                         </span>
                       </div>
 
@@ -155,12 +166,18 @@ export default function NewBacktestPage() {
 
                       <div className="flex justify-between text-[10px] font-mono">
                         <span className="text-text-muted">
-                          Date: <span className="text-text-secondary">{progress.date}</span>
+                          Date:{" "}
+                          <span className="text-text-secondary">
+                            {progress.date}
+                          </span>
                         </span>
                         <span className="text-text-muted">
                           Equity:{" "}
                           <span className="text-accent-green font-semibold">
-                            ${progress.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            $
+                            {progress.equity.toLocaleString(undefined, {
+                              maximumFractionDigits: 0,
+                            })}
                           </span>
                         </span>
                       </div>
@@ -227,13 +244,25 @@ export default function NewBacktestPage() {
 
             <dl className="space-y-2.5">
               {[
-                { label: "Strategy",   value: config.strategy_id || "—" },
-                { label: "Tickers",    value: config.tickers?.join(", ") || "—" },
-                { label: "Benchmark",  value: config.benchmark || "SPY" },
-                { label: "Period",     value: config.start_date && config.end_date ? `${config.start_date} → ${config.end_date}` : "—" },
-                { label: "Capital",    value: `$${(config.initial_capital || 100000).toLocaleString()}` },
-                { label: "Slippage",   value: `${config.slippage_bps ?? 5} bps` },
-                { label: "Commission", value: `$${config.commission_per_share ?? 0.005}/share` },
+                { label: "Strategy", value: config.strategy_id || "—" },
+                { label: "Tickers", value: config.tickers?.join(", ") || "—" },
+                { label: "Benchmark", value: config.benchmark || "SPY" },
+                {
+                  label: "Period",
+                  value:
+                    config.start_date && config.end_date
+                      ? `${config.start_date} → ${config.end_date}`
+                      : "—",
+                },
+                {
+                  label: "Capital",
+                  value: `$${(config.initial_capital || 100000).toLocaleString()}`,
+                },
+                { label: "Slippage", value: `${config.slippage_bps ?? 5} bps` },
+                {
+                  label: "Commission",
+                  value: `$${config.commission_per_share ?? 0.005}/share`,
+                },
                 {
                   label: "Impact",
                   value: config.market_impact_model ?? "almgren_chriss",
@@ -249,11 +278,26 @@ export default function NewBacktestPage() {
                     config.position_sizing ??
                     "equal_weight",
                 },
-                { label: "Rebalance",  value: config.rebalance_frequency || "daily" },
-                { label: "Max Pos",    value: `${config.max_position_pct ?? 25}%` },
-                { label: "Max Gross",  value: `${config.max_gross_exposure_pct ?? 150}%` },
-                { label: "Turnover",   value: `${config.turnover_limit_pct ?? 100}%` },
-                { label: "Shorting",   value: config.allow_short_selling ? "Enabled" : "Disabled" },
+                {
+                  label: "Rebalance",
+                  value: config.rebalance_frequency || "daily",
+                },
+                {
+                  label: "Max Pos",
+                  value: `${config.max_position_pct ?? 25}%`,
+                },
+                {
+                  label: "Max Gross",
+                  value: `${config.max_gross_exposure_pct ?? 150}%`,
+                },
+                {
+                  label: "Turnover",
+                  value: `${config.turnover_limit_pct ?? 100}%`,
+                },
+                {
+                  label: "Shorting",
+                  value: config.allow_short_selling ? "Enabled" : "Disabled",
+                },
                 ...(config.allow_short_selling
                   ? [
                       {
@@ -291,10 +335,13 @@ export default function NewBacktestPage() {
           >
             <div className="flex items-center gap-1.5 mb-1">
               <Wifi size={10} className="text-accent-green" />
-              <span className="text-[10px] font-medium text-accent-green">Live streaming</span>
+              <span className="text-[10px] font-medium text-accent-green">
+                Live streaming
+              </span>
             </div>
             <p className="text-[10px] text-text-muted leading-relaxed">
-              Progress is streamed in real time via WebSocket — watch equity build bar-by-bar as the simulation runs.
+              Progress is streamed in real time via WebSocket — watch equity
+              build bar-by-bar as the simulation runs.
             </p>
           </div>
 
@@ -307,7 +354,9 @@ export default function NewBacktestPage() {
             }}
           >
             <p className="text-[10px] text-text-muted leading-relaxed">
-              <span className="text-accent-blue font-medium">Event-driven engine</span>{" "}
+              <span className="text-accent-blue font-medium">
+                Event-driven engine
+              </span>{" "}
               — Each bar is processed sequentially. The strategy only sees data
               available at that point in time. No lookahead bias.
             </p>

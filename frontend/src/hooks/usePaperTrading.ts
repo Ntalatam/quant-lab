@@ -4,15 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
-import type { PaperTradingSessionDetail, PaperTradingSessionSummary } from "@/lib/types";
-
-const WS_BASE =
-  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api")
-    .replace(/^http/, "ws")
-    .replace(/\/api$/, "");
+import { buildWebSocketUrl } from "@/lib/network";
+import type {
+  PaperTradingSessionDetail,
+  PaperTradingSessionSummary,
+} from "@/lib/types";
 
 function toPaperSessionSummary(
-  session: PaperTradingSessionDetail
+  session: PaperTradingSessionDetail,
 ): PaperTradingSessionSummary {
   return {
     id: session.id,
@@ -94,11 +93,11 @@ export function useStopPaperSession() {
 
 export function usePaperSessionStream(
   sessionId: string | undefined,
-  initialSession: PaperTradingSessionDetail | undefined
+  initialSession: PaperTradingSessionDetail | undefined,
 ) {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<PaperTradingSessionDetail | undefined>(
-    initialSession
+    initialSession,
   );
   const [connection, setConnection] = useState<
     "idle" | "connecting" | "connected" | "error"
@@ -127,21 +126,25 @@ export function usePaperSessionStream(
         (current) => {
           const nextSummary = toPaperSessionSummary(nextSession);
           if (!current) return [nextSummary];
-          const existingIndex = current.findIndex((item) => item.id === nextSummary.id);
+          const existingIndex = current.findIndex(
+            (item) => item.id === nextSummary.id,
+          );
           if (existingIndex === -1) {
             return [nextSummary, ...current];
           }
           return current.map((item) =>
-            item.id === nextSummary.id ? nextSummary : item
+            item.id === nextSummary.id ? nextSummary : item,
           );
-        }
+        },
       );
     };
 
     const connect = () => {
       if (disposed) return;
       setConnection("connecting");
-      ws = new WebSocket(`${WS_BASE}/api/paper/sessions/${sessionId}/ws`);
+      ws = new WebSocket(
+        buildWebSocketUrl(`/api/paper/sessions/${sessionId}/ws`),
+      );
 
       ws.onopen = () => {
         reconnectAttempt = 0;
@@ -154,7 +157,7 @@ export function usePaperSessionStream(
         setConnection("connecting");
         reconnectTimer = setTimeout(
           connect,
-          Math.min(10_000, 1_000 * reconnectAttempt)
+          Math.min(10_000, 1_000 * reconnectAttempt),
         );
       };
       ws.onmessage = (event) => {
@@ -184,7 +187,7 @@ export function usePaperSessionStream(
 
   const summary = useMemo<PaperTradingSessionSummary | undefined>(
     () => (session ? toPaperSessionSummary(session) : undefined),
-    [session]
+    [session],
   );
 
   return { session, summary, connection };

@@ -37,8 +37,9 @@ import type {
   VolSurfaceResult,
   WalkForwardResult,
 } from "./types";
+import { buildApiUrl, getApiBaseUrl } from "./network";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = getApiBaseUrl();
 
 class ApiClient {
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -56,7 +57,7 @@ class ApiClient {
       headers.set("Accept", "application/json");
     }
 
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(buildApiUrl(path, API_BASE), {
       headers,
       ...options,
     });

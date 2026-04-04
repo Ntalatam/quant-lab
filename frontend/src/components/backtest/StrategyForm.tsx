@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import type { BacktestConfig } from "@/lib/types";
 import { useStrategies } from "@/hooks/useAnalytics";
@@ -16,30 +16,35 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 
 export function StrategyForm() {
   const { data: strategies, isLoading } = useStrategies();
-  const { config, setConfig } = useBacktestStore();
+  const config = useBacktestStore((state) => state.config);
+  const setConfig = useBacktestStore((state) => state.setConfig);
+  const lastAppliedStrategyId = useRef<string | null>(null);
 
   const selectedStrategy = strategies?.find((s) => s.id === config.strategy_id);
 
   // Set default params when strategy changes
   useEffect(() => {
-    if (selectedStrategy) {
-      const defaults: Record<string, number | string | boolean> = {};
-      selectedStrategy.params.forEach((p) => {
-        defaults[p.name] = p.default;
-      });
-      setConfig({
-        params: defaults,
-        allow_short_selling: selectedStrategy.requires_short_selling
-          ? true
-          : config.allow_short_selling,
-      });
+    if (!selectedStrategy) {
+      lastAppliedStrategyId.current = null;
+      return;
     }
-  }, [
-    config.allow_short_selling,
-    config.strategy_id,
-    selectedStrategy,
-    setConfig,
-  ]);
+    if (lastAppliedStrategyId.current === selectedStrategy.id) {
+      return;
+    }
+
+    lastAppliedStrategyId.current = selectedStrategy.id;
+
+    const defaults: Record<string, number | string | boolean> = {};
+    selectedStrategy.params.forEach((param) => {
+      defaults[param.name] = param.default;
+    });
+    setConfig({
+      params: defaults,
+      ...(selectedStrategy.requires_short_selling
+        ? { allow_short_selling: true }
+        : {}),
+    });
+  }, [selectedStrategy, setConfig]);
 
   if (isLoading) return <LoadingSpinner />;
 

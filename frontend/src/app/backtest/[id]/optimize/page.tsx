@@ -24,14 +24,14 @@ import type { BayesOptParamSpec, BayesOptResult } from "@/lib/types";
 import { useBacktestStore } from "@/store/backtest-store";
 
 const OPTIMIZABLE_METRICS = [
-  { value: "sharpe_ratio",            label: "Sharpe Ratio" },
-  { value: "total_return_pct",        label: "Total Return %" },
-  { value: "cagr_pct",                label: "CAGR %" },
-  { value: "sortino_ratio",           label: "Sortino Ratio" },
-  { value: "calmar_ratio",            label: "Calmar Ratio" },
-  { value: "max_drawdown_pct",        label: "Max Drawdown % (minimize)" },
-  { value: "profit_factor",           label: "Profit Factor" },
-  { value: "win_rate_pct",            label: "Win Rate %" },
+  { value: "sharpe_ratio", label: "Sharpe Ratio" },
+  { value: "total_return_pct", label: "Total Return %" },
+  { value: "cagr_pct", label: "CAGR %" },
+  { value: "sortino_ratio", label: "Sortino Ratio" },
+  { value: "calmar_ratio", label: "Calmar Ratio" },
+  { value: "max_drawdown_pct", label: "Max Drawdown % (minimize)" },
+  { value: "profit_factor", label: "Profit Factor" },
+  { value: "win_rate_pct", label: "Win Rate %" },
 ];
 
 function formatMetricValue(value: number, metric: string): string {
@@ -55,7 +55,7 @@ export default function OptimizePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { setConfig } = useBacktestStore();
+  const setConfig = useBacktestStore((state) => state.setConfig);
 
   const { data: result, isLoading, error } = useBacktestResult(id);
   const { data: strategyInfo } = useQuery({
@@ -80,16 +80,19 @@ export default function OptimizePage({
       .filter((p) => p.type === "int" || p.type === "float")
       .map((p) => {
         const current = result?.config.params[p.name];
-        const defaultVal = typeof current === "number" ? current : (p.default as number);
-        const range = p.max !== undefined && p.min !== undefined
-          ? { low: p.min, high: p.max }
-          : { low: Math.max(0, defaultVal * 0.5), high: defaultVal * 2 };
+        const defaultVal =
+          typeof current === "number" ? current : (p.default as number);
+        const range =
+          p.max !== undefined && p.min !== undefined
+            ? { low: p.min, high: p.max }
+            : { low: Math.max(0, defaultVal * 0.5), high: defaultVal * 2 };
         return {
           name: p.name,
           type: p.type as "int" | "float",
           low: String(Math.floor(range.low)),
           high: String(Math.ceil(range.high)),
-          step: p.step !== undefined ? String(p.step) : p.type === "int" ? "1" : "",
+          step:
+            p.step !== undefined ? String(p.step) : p.type === "int" ? "1" : "",
           enabled: true,
         };
       });
@@ -99,10 +102,10 @@ export default function OptimizePage({
   const updateRow = useCallback(
     (idx: number, field: keyof ParamRow, value: string | boolean) => {
       setParamRows((prev) =>
-        prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r))
+        prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)),
       );
     },
-    []
+    [],
   );
 
   const runOptimization = async () => {
@@ -148,7 +151,8 @@ export default function OptimizePage({
   };
 
   if (isLoading) return <PageLoading />;
-  if (error || !result) return <ErrorMessage message={error?.message ?? "Not found"} />;
+  if (error || !result)
+    return <ErrorMessage message={error?.message ?? "Not found"} />;
 
   // Build running best line for convergence chart
   const chartData = optResult
@@ -156,9 +160,15 @@ export default function OptimizePage({
         const best = optResult.trials
           .slice(0, i + 1)
           .reduce((acc, cur) =>
-            OPTIMIZABLE_METRICS.find((m) => m.value === optResult.metric)?.label.includes("minimize")
-              ? cur.value < acc.value ? cur : acc
-              : cur.value > acc.value ? cur : acc
+            OPTIMIZABLE_METRICS.find(
+              (m) => m.value === optResult.metric,
+            )?.label.includes("minimize")
+              ? cur.value < acc.value
+                ? cur
+                : acc
+              : cur.value > acc.value
+                ? cur
+                : acc,
           );
         return { trial: t.trial + 1, value: t.value, best: best.value };
       })
@@ -221,7 +231,8 @@ export default function OptimizePage({
               </div>
               <div>
                 <label className="text-[11px] text-text-muted block mb-1">
-                  Trials: <span className="text-accent-blue font-mono">{nTrials}</span>
+                  Trials:{" "}
+                  <span className="text-accent-blue font-mono">{nTrials}</span>
                 </label>
                 <input
                   type="range"
@@ -261,10 +272,14 @@ export default function OptimizePage({
                     <input
                       type="checkbox"
                       checked={row.enabled}
-                      onChange={(e) => updateRow(idx, "enabled", e.target.checked)}
+                      onChange={(e) =>
+                        updateRow(idx, "enabled", e.target.checked)
+                      }
                       className="accent-accent-blue"
                     />
-                    <span className="text-xs font-mono text-text-primary">{row.name}</span>
+                    <span className="text-xs font-mono text-text-primary">
+                      {row.name}
+                    </span>
                     <span
                       className="text-[9px] px-1 rounded"
                       style={{
@@ -279,30 +294,42 @@ export default function OptimizePage({
                   {row.enabled && (
                     <div className="grid grid-cols-3 gap-1.5 ml-5">
                       <div>
-                        <label className="text-[9px] text-text-muted block mb-0.5">Low</label>
+                        <label className="text-[9px] text-text-muted block mb-0.5">
+                          Low
+                        </label>
                         <input
                           type="number"
                           value={row.low}
-                          onChange={(e) => updateRow(idx, "low", e.target.value)}
+                          onChange={(e) =>
+                            updateRow(idx, "low", e.target.value)
+                          }
                           className={inputClass}
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] text-text-muted block mb-0.5">High</label>
+                        <label className="text-[9px] text-text-muted block mb-0.5">
+                          High
+                        </label>
                         <input
                           type="number"
                           value={row.high}
-                          onChange={(e) => updateRow(idx, "high", e.target.value)}
+                          onChange={(e) =>
+                            updateRow(idx, "high", e.target.value)
+                          }
                           className={inputClass}
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] text-text-muted block mb-0.5">Step</label>
+                        <label className="text-[9px] text-text-muted block mb-0.5">
+                          Step
+                        </label>
                         <input
                           type="number"
                           value={row.step}
                           placeholder={row.type === "int" ? "1" : "–"}
-                          onChange={(e) => updateRow(idx, "step", e.target.value)}
+                          onChange={(e) =>
+                            updateRow(idx, "step", e.target.value)
+                          }
                           className={inputClass}
                         />
                       </div>
@@ -353,8 +380,9 @@ export default function OptimizePage({
                 to begin.
               </p>
               <p className="text-text-muted text-xs mt-2">
-                Optuna&apos;s TPE sampler will intelligently search the parameter space using
-                Bayesian inference — typically converges within 20–30 trials.
+                Optuna&apos;s TPE sampler will intelligently search the
+                parameter space using Bayesian inference — typically converges
+                within 20–30 trials.
               </p>
             </div>
           )}
@@ -376,7 +404,9 @@ export default function OptimizePage({
                   Running {nTrials} backtests via Optuna TPE…
                 </p>
               </div>
-              <p className="text-text-muted text-xs mt-3">This may take a minute.</p>
+              <p className="text-text-muted text-xs mt-3">
+                This may take a minute.
+              </p>
             </div>
           )}
 
@@ -393,12 +423,19 @@ export default function OptimizePage({
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <CheckCircle2 size={14} style={{ color: "var(--color-accent-purple)" }} />
-                      <p className="text-sm font-semibold text-text-primary">Best Result</p>
+                      <CheckCircle2
+                        size={14}
+                        style={{ color: "var(--color-accent-purple)" }}
+                      />
+                      <p className="text-sm font-semibold text-text-primary">
+                        Best Result
+                      </p>
                     </div>
                     <p className="text-[11px] text-text-muted">
                       Optimized{" "}
-                      <span className="text-accent-blue font-mono">{optResult.metric}</span>{" "}
+                      <span className="text-accent-blue font-mono">
+                        {optResult.metric}
+                      </span>{" "}
                       over {optResult.n_trials} trials
                     </p>
                   </div>
@@ -407,13 +444,21 @@ export default function OptimizePage({
                       className="text-2xl font-bold font-mono tabular-nums"
                       style={{ color: "var(--color-accent-purple)" }}
                     >
-                      {formatMetricValue(optResult.best_value, optResult.metric)}
+                      {formatMetricValue(
+                        optResult.best_value,
+                        optResult.metric,
+                      )}
                     </p>
-                    <p className="text-[10px] text-text-muted">{optResult.metric}</p>
+                    <p className="text-[10px] text-text-muted">
+                      {optResult.metric}
+                    </p>
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--color-border)" }}>
+                <div
+                  className="mt-4 pt-4"
+                  style={{ borderTop: "1px solid var(--color-border)" }}
+                >
                   <p className="section-label mb-2">Best Parameters</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {Object.entries(optResult.best_params).map(([k, v]) => (
@@ -425,7 +470,9 @@ export default function OptimizePage({
                           border: "1px solid var(--color-border)",
                         }}
                       >
-                        <p className="text-[10px] text-text-muted font-mono">{k}</p>
+                        <p className="text-[10px] text-text-muted font-mono">
+                          {k}
+                        </p>
                         <p className="text-sm font-bold font-mono text-text-primary tabular-nums">
                           {typeof v === "number"
                             ? Number.isInteger(v)
@@ -487,7 +534,10 @@ export default function OptimizePage({
                 </div>
                 <div className="p-4">
                   <ResponsiveContainer width="100%" height={240}>
-                    <LineChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+                    <LineChart
+                      data={chartData}
+                      margin={{ top: 4, right: 16, bottom: 4, left: 0 }}
+                    >
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke="rgba(37,37,53,0.8)"
@@ -497,14 +547,22 @@ export default function OptimizePage({
                         tick={{ fill: "var(--color-text-muted)", fontSize: 10 }}
                         axisLine={false}
                         tickLine={false}
-                        label={{ value: "Trial", position: "insideBottom", offset: -2, fill: "var(--color-text-muted)", fontSize: 10 }}
+                        label={{
+                          value: "Trial",
+                          position: "insideBottom",
+                          offset: -2,
+                          fill: "var(--color-text-muted)",
+                          fontSize: 10,
+                        }}
                       />
                       <YAxis
                         tick={{ fill: "var(--color-text-muted)", fontSize: 10 }}
                         axisLine={false}
                         tickLine={false}
                         width={48}
-                        tickFormatter={(v) => formatMetricValue(v, optResult.metric)}
+                        tickFormatter={(v) =>
+                          formatMetricValue(v, optResult.metric)
+                        }
                       />
                       <Tooltip
                         contentStyle={{
@@ -513,10 +571,15 @@ export default function OptimizePage({
                           borderRadius: 4,
                           fontSize: 11,
                         }}
-                        formatter={((value: unknown, name: unknown) => [
-                          formatMetricValue(Number(value ?? 0), optResult.metric),
-                          name === "best" ? "Running Best" : "Trial Value",
-                        ]) as never}
+                        formatter={
+                          ((value: unknown, name: unknown) => [
+                            formatMetricValue(
+                              Number(value ?? 0),
+                              optResult.metric,
+                            ),
+                            name === "best" ? "Running Best" : "Trial Value",
+                          ]) as never
+                        }
                       />
                       <ReferenceLine
                         y={optResult.best_value}
@@ -563,11 +626,23 @@ export default function OptimizePage({
                 </div>
                 <div className="overflow-x-auto max-h-64 overflow-y-auto">
                   <table className="w-full text-xs font-mono">
-                    <thead className="sticky top-0" style={{ background: "var(--color-bg-card)" }}>
-                      <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                        <th className="section-label py-2 px-4 text-left font-normal">#</th>
+                    <thead
+                      className="sticky top-0"
+                      style={{ background: "var(--color-bg-card)" }}
+                    >
+                      <tr
+                        style={{
+                          borderBottom: "1px solid var(--color-border)",
+                        }}
+                      >
+                        <th className="section-label py-2 px-4 text-left font-normal">
+                          #
+                        </th>
                         {optResult.param_specs.map((s) => (
-                          <th key={s.name} className="section-label py-2 px-4 text-right font-normal">
+                          <th
+                            key={s.name}
+                            className="section-label py-2 px-4 text-right font-normal"
+                          >
                             {s.name}
                           </th>
                         ))}
@@ -587,14 +662,19 @@ export default function OptimizePage({
                               className="hover:bg-bg-hover transition-colors"
                               style={{
                                 borderBottom: "1px solid rgba(37,37,53,0.5)",
-                                background: isBest ? "rgba(136,85,255,0.06)" : undefined,
+                                background: isBest
+                                  ? "rgba(136,85,255,0.06)"
+                                  : undefined,
                               }}
                             >
                               <td className="py-1.5 px-4 text-text-muted">
                                 {isBest ? "★" : t.trial + 1}
                               </td>
                               {optResult.param_specs.map((s) => (
-                                <td key={s.name} className="py-1.5 px-4 text-right tabular-nums text-text-secondary">
+                                <td
+                                  key={s.name}
+                                  className="py-1.5 px-4 text-right tabular-nums text-text-secondary"
+                                >
                                   {typeof t.params[s.name] === "number"
                                     ? Number.isInteger(t.params[s.name])
                                       ? t.params[s.name]
@@ -604,7 +684,11 @@ export default function OptimizePage({
                               ))}
                               <td
                                 className="py-1.5 px-4 text-right tabular-nums font-semibold"
-                                style={{ color: isBest ? "var(--color-accent-purple)" : "var(--color-text-primary)" }}
+                                style={{
+                                  color: isBest
+                                    ? "var(--color-accent-purple)"
+                                    : "var(--color-text-primary)",
+                                }}
                               >
                                 {formatMetricValue(t.value, optResult.metric)}
                               </td>

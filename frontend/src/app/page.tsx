@@ -7,6 +7,7 @@ import { useBacktestList } from "@/hooks/useBacktest";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { ErrorMessage } from "@/components/shared/ErrorBoundary";
 import { formatPercent, formatRatio, formatDate } from "@/lib/formatters";
+import { buildApiUrl } from "@/lib/network";
 import {
   Play,
   BarChart3,
@@ -21,15 +22,15 @@ import {
 } from "lucide-react";
 
 const STRATEGY_CATEGORY_MAP: Record<string, { label: string; cls: string }> = {
-  sma_crossover:       { label: "Trend",    cls: "badge-trend"     },
-  mean_reversion:      { label: "MeanRev",  cls: "badge-reversion" },
-  momentum:            { label: "Momentum", cls: "badge-momentum"  },
-  pairs_trading:       { label: "Arb",      cls: "badge-arb"       },
-  ml_classifier:       { label: "ML",       cls: "badge-arb"       },
-  rsi_mean_reversion:  { label: "RSI",      cls: "badge-reversion" },
-  macd_crossover:      { label: "MACD",     cls: "badge-trend"     },
-  donchian_breakout:   { label: "Turtle",   cls: "badge-trend"     },
-  vol_target_trend:    { label: "VolTgt",   cls: "badge-momentum"  },
+  sma_crossover: { label: "Trend", cls: "badge-trend" },
+  mean_reversion: { label: "MeanRev", cls: "badge-reversion" },
+  momentum: { label: "Momentum", cls: "badge-momentum" },
+  pairs_trading: { label: "Arb", cls: "badge-arb" },
+  ml_classifier: { label: "ML", cls: "badge-arb" },
+  rsi_mean_reversion: { label: "RSI", cls: "badge-reversion" },
+  macd_crossover: { label: "MACD", cls: "badge-trend" },
+  donchian_breakout: { label: "Turtle", cls: "badge-trend" },
+  vol_target_trend: { label: "VolTgt", cls: "badge-momentum" },
 };
 
 function SharpeCell({ value }: { value: number }) {
@@ -51,17 +52,18 @@ function SharpeCell({ value }: { value: number }) {
 // ── Demo seeder ───────────────────────────────────────────────────────
 
 function DemoLoader({ onDone }: { onDone: () => void }) {
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
+    "idle",
+  );
   const [msg, setMsg] = useState("");
 
   const seed = async () => {
     setState("loading");
     setMsg("Loading SPY, AAPL, MSFT, GLD and running 3 sample backtests…");
     try {
-      const result = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/demo/seed`,
-        { method: "POST" }
-      ).then((r) => r.json());
+      const result = await fetch(buildApiUrl("/demo/seed"), {
+        method: "POST",
+      }).then((r) => r.json());
       if (result.status === "already_seeded") {
         setState("done");
         setMsg("Demo data already loaded.");
@@ -72,7 +74,9 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
         onDone();
       } else {
         setState("error");
-        setMsg(result.errors?.[0] ?? "Demo seeding failed — check backend logs.");
+        setMsg(
+          result.errors?.[0] ?? "Demo seeding failed — check backend logs.",
+        );
       }
     } catch {
       setState("error");
@@ -125,11 +129,17 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
         }
       >
         {state === "loading" ? (
-          <><Loader2 size={12} className="animate-spin" /> Loading…</>
+          <>
+            <Loader2 size={12} className="animate-spin" /> Loading…
+          </>
         ) : state === "done" ? (
-          <><Sparkles size={12} /> Done!</>
+          <>
+            <Sparkles size={12} /> Done!
+          </>
         ) : (
-          <><Sparkles size={12} /> Load Demo Data</>
+          <>
+            <Sparkles size={12} /> Load Demo Data
+          </>
         )}
       </button>
     </div>
@@ -190,8 +200,8 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
         <p className="text-text-secondary text-sm max-w-xl leading-relaxed">
           Systematic backtesting against real historical market data. Tests
           strategies one bar at a time — no vectorized shortcuts, no peeking
-          ahead. Four strategy families, realistic execution simulation, and
-          a full research analytics suite.
+          ahead. Four strategy families, realistic execution simulation, and a
+          full research analytics suite.
         </p>
       </div>
 
@@ -262,7 +272,9 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
             Try{" "}
             <span className="font-mono text-accent-blue">AAPL, MSFT, SPY</span>
             {" · "}
-            <span className="text-text-secondary">SMA Crossover · 2020–2024</span>
+            <span className="text-text-secondary">
+              SMA Crossover · 2020–2024
+            </span>
           </p>
           <p className="text-[11px] text-text-muted mt-0.5">
             Load the tickers first, then configure the backtest.
@@ -285,10 +297,26 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
       {/* Capabilities strip */}
       <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { icon: Zap, label: "Event-Driven Engine", desc: "One bar at a time, no lookahead" },
-          { icon: Activity, label: "Realistic Execution", desc: "Slippage, commissions, volume limits" },
-          { icon: BarChart3, label: "25+ Analytics", desc: "Sharpe, CVaR, alpha, beta, rolling metrics" },
-          { icon: Columns3, label: "Strategy Comparison", desc: "Head-to-head with correlation analysis" },
+          {
+            icon: Zap,
+            label: "Event-Driven Engine",
+            desc: "One bar at a time, no lookahead",
+          },
+          {
+            icon: Activity,
+            label: "Realistic Execution",
+            desc: "Slippage, commissions, volume limits",
+          },
+          {
+            icon: BarChart3,
+            label: "25+ Analytics",
+            desc: "Sharpe, CVaR, alpha, beta, rolling metrics",
+          },
+          {
+            icon: Columns3,
+            label: "Strategy Comparison",
+            desc: "Head-to-head with correlation analysis",
+          },
         ].map((cap) => (
           <div
             key={cap.label}
@@ -328,7 +356,8 @@ export default function DashboardPage() {
   const recent = backtests?.slice(0, 10) || [];
   const totalRuns = backtests?.length || 0;
 
-  if (totalRuns === 0) return <EmptyDashboard onDemoLoaded={handleDemoLoaded} />;
+  if (totalRuns === 0)
+    return <EmptyDashboard onDemoLoaded={handleDemoLoaded} />;
 
   const bestSharpe = Math.max(...backtests!.map((b) => b.sharpe_ratio));
   const bestReturn = Math.max(...backtests!.map((b) => b.total_return_pct));
@@ -360,9 +389,11 @@ export default function DashboardPage() {
       value: formatPercent(bestReturn),
       sub: "Single backtest high",
       icon: Activity,
-      accent: bestReturn >= 0 ? "var(--color-accent-green)" : "var(--color-accent-red)",
-      iconBg:
-        bestReturn >= 0 ? "rgba(0,212,170,0.1)" : "rgba(255,68,102,0.1)",
+      accent:
+        bestReturn >= 0
+          ? "var(--color-accent-green)"
+          : "var(--color-accent-red)",
+      iconBg: bestReturn >= 0 ? "rgba(0,212,170,0.1)" : "rgba(255,68,102,0.1)",
       positive: bestReturn >= 0,
     },
     {
@@ -370,9 +401,11 @@ export default function DashboardPage() {
       value: formatPercent(avgReturn),
       sub: "Across all runs",
       icon: Columns3,
-      accent: avgReturn >= 0 ? "var(--color-accent-green)" : "var(--color-accent-red)",
-      iconBg:
-        avgReturn >= 0 ? "rgba(0,212,170,0.1)" : "rgba(255,68,102,0.1)",
+      accent:
+        avgReturn >= 0
+          ? "var(--color-accent-green)"
+          : "var(--color-accent-red)",
+      iconBg: avgReturn >= 0 ? "rgba(0,212,170,0.1)" : "rgba(255,68,102,0.1)",
       positive: avgReturn >= 0,
     },
   ];

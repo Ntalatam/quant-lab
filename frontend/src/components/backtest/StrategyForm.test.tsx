@@ -77,7 +77,7 @@ describe("StrategyForm", () => {
           tickers: ["AAPL"],
         },
       },
-      true
+      true,
     );
   });
 
@@ -91,11 +91,11 @@ describe("StrategyForm", () => {
 
     await user.selectOptions(
       screen.getByLabelText("Strategy"),
-      "market_neutral_momentum"
+      "market_neutral_momentum",
     );
 
     expect(
-      screen.getByText("Balanced long/short momentum basket.")
+      screen.getByText("Balanced long/short momentum basket."),
     ).toBeInTheDocument();
     expect(screen.getByText("Requires short selling")).toBeInTheDocument();
 
@@ -120,6 +120,27 @@ describe("StrategyForm", () => {
         "MSFT",
         "SPY",
       ]);
+    });
+  });
+
+  it("does not reset tuned params when optional short selling is toggled", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StrategyForm />);
+
+    await waitFor(() => {
+      expect(useBacktestStore.getState().config.params?.short_window).toBe(20);
+    });
+
+    useBacktestStore.getState().setConfig({
+      params: { short_window: 35 },
+    });
+
+    await user.click(screen.getByRole("checkbox"));
+
+    await waitFor(() => {
+      const config = useBacktestStore.getState().config;
+      expect(config.allow_short_selling).toBe(true);
+      expect(config.params?.short_window).toBe(35);
     });
   });
 });
