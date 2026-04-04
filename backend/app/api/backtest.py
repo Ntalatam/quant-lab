@@ -369,12 +369,12 @@ async def update_notes(
     responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
 )
 async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depends(get_db)):
-    """Run multiple backtests varying one parameter."""
+    """Run multiple backtests varying one parameter (parallelized)."""
     import asyncio
-    from concurrent.futures import ThreadPoolExecutor
 
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
+    from app.services.parallel import run_in_thread_pool, run_parallel_sweeps
 
     # Pre-load data so individual runs skip DB checks
     start = date.fromisoformat(config.base_config.start_date)
@@ -382,36 +382,32 @@ async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depend
     for t in set(config.base_config.tickers + [config.base_config.benchmark]):
         await _ensure(db, t, start, end)
 
-    def _run_sweep():
-        results = []
-        for value in config.sweep_values:
+    def _make_task(value):
+        def _task():
             params = config.base_config.params.copy()
             params[config.sweep_param] = value
             sweep_config = config.base_config.model_copy(update={"params": params})
-
             try:
 
-                async def _run(cfg=sweep_config):
+                async def _run():
                     async with _async_session() as sess:
-                        return await run_backtest(sess, cfg)
+                        return await run_backtest(sess, sweep_config)
 
                 result = asyncio.run(_run())
-                results.append(
-                    {
-                        "param_value": value,
-                        "sharpe_ratio": result["metrics"]["sharpe_ratio"],
-                        "total_return_pct": result["metrics"]["total_return_pct"],
-                        "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
-                        "cagr_pct": result["metrics"]["cagr_pct"],
-                    }
-                )
+                return {
+                    "param_value": value,
+                    "sharpe_ratio": result["metrics"]["sharpe_ratio"],
+                    "total_return_pct": result["metrics"]["total_return_pct"],
+                    "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
+                    "cagr_pct": result["metrics"]["cagr_pct"],
+                }
             except Exception as e:
-                results.append({"param_value": value, "error": str(e)})
-        return results
+                return {"param_value": value, "error": str(e)}
 
-    loop = asyncio.get_running_loop()
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        results = await loop.run_in_executor(pool, _run_sweep)
+        return _task
+
+    tasks = [_make_task(v) for v in config.sweep_values]
+    results = await run_in_thread_pool(lambda: run_parallel_sweeps(tasks), max_workers=1)
 
     return {
         "sweep_param": config.sweep_param,
@@ -430,12 +426,12 @@ async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depend
     responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
 )
 async def parameter_sweep_2d(config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)):
-    """Run backtests varying two parameters simultaneously and return a heatmap matrix."""
+    """Run backtests varying two parameters simultaneously (parallelized)."""
     import asyncio
-    from concurrent.futures import ThreadPoolExecutor
 
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
+    from app.services.parallel import run_in_thread_pool, run_parallel_sweeps
 
     # Pre-load data
     start = date.fromisoformat(config.base_config.start_date)
@@ -443,40 +439,41 @@ async def parameter_sweep_2d(config: BacktestSweep2DConfig, db: AsyncSession = D
     for t in set(config.base_config.tickers + [config.base_config.benchmark]):
         await _ensure(db, t, start, end)
 
-    def _run_sweep2d():
-        cells = []
-        for vx in config.values_x:
-            row = []
-            for vy in config.values_y:
-                params = config.base_config.params.copy()
-                params[config.param_x] = vx
-                params[config.param_y] = vy
-                sweep_config = config.base_config.model_copy(update={"params": params})
-                try:
+    # Flatten 2D grid into parallel tasks
+    grid_coords = [(vx, vy) for vx in config.values_x for vy in config.values_y]
 
-                    async def _run(cfg=sweep_config):
-                        async with _async_session() as sess:
-                            return await run_backtest(sess, cfg)
+    def _make_task(vx, vy):
+        def _task():
+            params = config.base_config.params.copy()
+            params[config.param_x] = vx
+            params[config.param_y] = vy
+            sweep_config = config.base_config.model_copy(update={"params": params})
+            try:
 
-                    result = asyncio.run(_run())
-                    metric_val = result["metrics"].get(config.metric)
-                    row.append(
-                        {
-                            "x": vx,
-                            "y": vy,
-                            "value": metric_val,
-                            "total_return_pct": result["metrics"].get("total_return_pct"),
-                            "max_drawdown_pct": result["metrics"].get("max_drawdown_pct"),
-                        }
-                    )
-                except Exception as e:
-                    row.append({"x": vx, "y": vy, "value": None, "error": str(e)})
-            cells.append(row)
-        return cells
+                async def _run():
+                    async with _async_session() as sess:
+                        return await run_backtest(sess, sweep_config)
 
-    loop = asyncio.get_running_loop()
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        cells = await loop.run_in_executor(pool, _run_sweep2d)
+                result = asyncio.run(_run())
+                metric_val = result["metrics"].get(config.metric)
+                return {
+                    "x": vx,
+                    "y": vy,
+                    "value": metric_val,
+                    "total_return_pct": result["metrics"].get("total_return_pct"),
+                    "max_drawdown_pct": result["metrics"].get("max_drawdown_pct"),
+                }
+            except Exception as e:
+                return {"x": vx, "y": vy, "value": None, "error": str(e)}
+
+        return _task
+
+    tasks = [_make_task(vx, vy) for vx, vy in grid_coords]
+    flat_results = await run_in_thread_pool(lambda: run_parallel_sweeps(tasks), max_workers=1)
+
+    # Reshape flat results back into 2D grid
+    n_y = len(config.values_y)
+    cells = [flat_results[i : i + n_y] for i in range(0, len(flat_results), n_y)]
 
     return {
         "param_x": config.param_x,
@@ -510,10 +507,10 @@ async def walk_forward(
 ):
     """Run walk-forward analysis on an existing backtest config."""
     import asyncio
-    from concurrent.futures import ThreadPoolExecutor
 
     from app.database import async_session as _async_session
     from app.services.data_ingestion import ensure_data_loaded as _ensure
+    from app.services.parallel import run_in_thread_pool
 
     config = payload.config
     n_folds = int(payload.n_folds)
@@ -537,10 +534,7 @@ async def walk_forward(
         return asyncio.run(_inner())
 
     try:
-        loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            result = await loop.run_in_executor(pool, _run_wfa)
-        return result
+        return await run_in_thread_pool(_run_wfa)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -638,8 +632,7 @@ async def bayesian_optimize(
         return float(metric_val) if config.maximize else -float(metric_val)
 
     # Optuna must run sync — use thread pool to avoid blocking event loop
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
+    from app.services.parallel import run_in_thread_pool
 
     def run_study():
         direction = "maximize" if config.maximize else "minimize"
@@ -647,9 +640,7 @@ async def bayesian_optimize(
         study.optimize(objective, n_trials=min(config.n_trials, 50), n_jobs=1)
         return study
 
-    loop = asyncio.get_running_loop()
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        study = await loop.run_in_executor(pool, run_study)
+    study = await run_in_thread_pool(run_study)
 
     best_params = dict(config.base_config.params)
     best_params.update(study.best_params)

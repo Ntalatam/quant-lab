@@ -22,7 +22,14 @@ router = APIRouter(prefix="/strategies", tags=["strategies"])
     ),
 )
 async def get_strategies():
-    return list_strategies()
+    from app.services import cache
+
+    cached = cache.get("strategies:list")
+    if cached is not None:
+        return cached
+    result = list_strategies()
+    cache.put("strategies:list", result, ttl=300)  # 5 min — strategies rarely change
+    return result
 
 
 @router.get(
