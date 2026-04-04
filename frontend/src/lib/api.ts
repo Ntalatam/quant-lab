@@ -24,6 +24,7 @@ import type {
   PnlScenarioResult,
   PortfolioBlendResult,
   RegimeAnalysisResult,
+  RiskBudgetResult,
   SpreadResult,
   StrategyInfo,
   SweepResult,
@@ -322,6 +323,16 @@ class ApiClient {
     return this.request(`/analytics/capacity/${backtestId}`, {
       method: "POST",
     });
+  }
+
+  async getRiskBudgetAnalysis(
+    backtestId: string,
+    lookbackDays: number = 63,
+  ): Promise<RiskBudgetResult> {
+    return this.request(
+      `/analytics/risk-budget/${backtestId}?lookback_days=${lookbackDays}`,
+      { method: "POST" },
+    );
   }
 
   async getTransactionCostAnalysis(

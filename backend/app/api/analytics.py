@@ -31,14 +31,49 @@ from app.schemas.analytics import (
     PortfolioBlendRequest,
     PortfolioBlendResponse,
     RegimeAnalysisResponse,
+    RiskBudgetResponse,
     SpreadRequest,
     SpreadResponse,
     TransactionCostAnalysisResponse,
 )
 from app.schemas.common import ErrorResponse
 from app.services.analytics import compute_all_metrics, compute_monte_carlo
+from app.services.risk_budget import build_risk_budget_report
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+@router.post(
+    "/risk-budget/{backtest_id}",
+    response_model=RiskBudgetResponse,
+    summary="Build a risk budgeting dashboard",
+    description=(
+        "Reconstructs the latest non-flat portfolio snapshot from a saved backtest, "
+        "decomposes one-day VaR / CVaR by position, and stress-tests that book "
+        "through 2008, COVID, and 2022 rate-shock regimes."
+    ),
+    responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
+)
+async def risk_budget_analysis(
+    backtest_id: str,
+    lookback_days: int = Query(63, ge=21, le=252),
+    db: AsyncSession = Depends(get_db),
+):
+    run_result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    run = run_result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Backtest not found")
+
+    trades_result = await db.execute(
+        select(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
+    )
+    trades = trades_result.scalars().all()
+    return await build_risk_budget_report(
+        db=db,
+        run=run,
+        trades=trades,
+        lookback_days=lookback_days,
+    )
 
 
 @router.post(

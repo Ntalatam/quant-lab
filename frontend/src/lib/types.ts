@@ -475,6 +475,66 @@ export interface CapacityResult {
   message?: string;
 }
 
+// ---- Risk Budgeting ----
+export interface RiskBudgetSummary {
+  snapshot_date: string;
+  lookback_days: number;
+  total_equity: number;
+  gross_exposure_pct: number;
+  net_exposure_pct: number;
+  daily_var_95_pct: number;
+  daily_var_95_dollar: number;
+  daily_cvar_95_pct: number;
+  daily_cvar_95_dollar: number;
+  diversification_ratio: number;
+  average_pairwise_correlation: number | null;
+}
+
+export interface RiskBudgetPosition {
+  ticker: string;
+  sector: string | null;
+  shares: number;
+  price: number;
+  market_value: number;
+  weight_pct: number;
+  daily_volatility_pct: number;
+  beta_to_portfolio: number;
+  var_contribution: number;
+  var_contribution_pct: number;
+  cvar_contribution: number;
+  cvar_contribution_pct: number;
+}
+
+export interface StressPositionImpact {
+  ticker: string;
+  source_ticker: string;
+  weight_pct: number;
+  scenario_return_pct: number;
+  pnl_impact: number;
+}
+
+export interface StressScenarioResult {
+  id: string;
+  name: string;
+  description: string;
+  start_date: string;
+  end_date: string;
+  portfolio_return_pct: number;
+  pnl_impact: number;
+  average_pairwise_correlation: number | null;
+  correlation_shift: number | null;
+  top_pair: string | null;
+  top_pair_correlation: number | null;
+  position_impacts: StressPositionImpact[];
+}
+
+export interface RiskBudgetResult {
+  summary: RiskBudgetSummary | null;
+  positions: RiskBudgetPosition[];
+  scenarios: StressScenarioResult[];
+  message?: string;
+}
+
 // ---- Transaction Cost Analysis ----
 export interface TransactionCostAnalysisResult {
   model: {

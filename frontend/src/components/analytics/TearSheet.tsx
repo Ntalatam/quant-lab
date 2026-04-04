@@ -9,6 +9,7 @@ import { FactorExposure } from "./FactorExposure";
 import { RegimeAnalysis } from "./RegimeAnalysis";
 import { CapacityAnalysis } from "./CapacityAnalysis";
 import { TransactionCostAnalysis } from "./TransactionCostAnalysis";
+import { RiskBudgetingDashboard } from "./RiskBudgetingDashboard";
 import { NotesEditor } from "./NotesEditor";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
@@ -20,7 +21,15 @@ import { formatPercent, formatRatio, formatCurrency } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useBacktestList } from "@/hooks/useBacktest";
-import { Download, Grid3X3, RefreshCw, Link2, Check, GitCompare, SlidersHorizontal } from "lucide-react";
+import {
+  Download,
+  Grid3X3,
+  RefreshCw,
+  Link2,
+  Check,
+  GitCompare,
+  SlidersHorizontal,
+} from "lucide-react";
 import Link from "next/link";
 
 interface TearSheetProps {
@@ -44,7 +53,8 @@ function ChartPanel({
       style={{
         background: "var(--color-bg-card)",
         border: "1px solid var(--color-border)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
+        boxShadow:
+          "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
       }}
     >
       <div
@@ -63,7 +73,11 @@ function ChartPanel({
   );
 }
 
-function computePercentile(value: number, allValues: number[], higherIsBetter = true): number {
+function computePercentile(
+  value: number,
+  allValues: number[],
+  higherIsBetter = true,
+): number {
   if (allValues.length < 2) return 0.5;
   const sorted = [...allValues].sort((a, b) => a - b);
   const rank = sorted.filter((v) => v < value).length;
@@ -72,13 +86,14 @@ function computePercentile(value: number, allValues: number[], higherIsBetter = 
 }
 
 export function TearSheet({ result }: TearSheetProps) {
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Performance");
+  const [activeTab, setActiveTab] =
+    useState<(typeof TABS)[number]>("Performance");
   const [copied, setCopied] = useState(false);
   // Sync visible range across all lightweight-charts in the same tab
   const [syncRange, setSyncRange] = useState<LogicalRange | null>(null);
   const handleRangeChange = useCallback(
     (range: LogicalRange | null) => setSyncRange(range),
-    []
+    [],
   );
 
   const copyShareLink = () => {
@@ -90,7 +105,7 @@ export function TearSheet({ result }: TearSheetProps) {
     });
   };
   const paperLaunchHref = `/paper?config=${encodeURIComponent(
-    btoa(JSON.stringify(result.config))
+    btoa(JSON.stringify(result.config)),
   )}`;
   const m = result.metrics;
   const bm = result.benchmark_metrics;
@@ -98,10 +113,31 @@ export function TearSheet({ result }: TearSheetProps) {
 
   // Compute percentile ranks across all runs
   const pct = {
-    sharpe: allBacktests ? computePercentile(m.sharpe_ratio, allBacktests.map((b) => b.sharpe_ratio)) : undefined,
-    return: allBacktests ? computePercentile(m.total_return_pct, allBacktests.map((b) => b.total_return_pct)) : undefined,
-    drawdown: allBacktests ? computePercentile(m.max_drawdown_pct, allBacktests.map((b) => b.max_drawdown_pct), false) : undefined,
-    cagr: allBacktests ? computePercentile(m.cagr_pct, allBacktests.map((b) => b.total_return_pct)) : undefined,
+    sharpe: allBacktests
+      ? computePercentile(
+          m.sharpe_ratio,
+          allBacktests.map((b) => b.sharpe_ratio),
+        )
+      : undefined,
+    return: allBacktests
+      ? computePercentile(
+          m.total_return_pct,
+          allBacktests.map((b) => b.total_return_pct),
+        )
+      : undefined,
+    drawdown: allBacktests
+      ? computePercentile(
+          m.max_drawdown_pct,
+          allBacktests.map((b) => b.max_drawdown_pct),
+          false,
+        )
+      : undefined,
+    cagr: allBacktests
+      ? computePercentile(
+          m.cagr_pct,
+          allBacktests.map((b) => b.total_return_pct),
+        )
+      : undefined,
   };
 
   return (
@@ -214,7 +250,9 @@ export function TearSheet({ result }: TearSheetProps) {
             className="flex items-center gap-1.5 text-xs transition-colors px-3 py-1.5 rounded"
             style={{
               border: "1px solid var(--color-border)",
-              color: copied ? "var(--color-accent-green)" : "var(--color-text-muted)",
+              color: copied
+                ? "var(--color-accent-green)"
+                : "var(--color-text-muted)",
             }}
           >
             {copied ? <Check size={11} /> : <Link2 size={11} />}
@@ -271,26 +309,61 @@ export function TearSheet({ result }: TearSheetProps) {
                   <p className="font-mono tabular-nums text-accent-red font-bold text-lg">
                     −{formatPercent(m.cost_drag_pct ?? 0, 3).replace("+", "")}
                   </p>
-                  <p className="text-[10px] text-text-muted">{m.cost_drag_bps ?? 0} bps total drag</p>
+                  <p className="text-[10px] text-text-muted">
+                    {m.cost_drag_bps ?? 0} bps total drag
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
-                  { label: "Commission", value: m.total_commission ?? 0, color: "var(--color-accent-yellow)" },
-                  { label: "Spread", value: m.total_spread_cost ?? 0, color: "var(--color-accent-yellow)" },
-                  { label: "Impact", value: m.total_market_impact_cost ?? 0, color: "var(--color-accent-blue)" },
-                  { label: "Timing", value: m.total_timing_cost ?? 0, color: "var(--color-accent-purple)" },
-                  { label: "Opportunity", value: m.total_opportunity_cost ?? 0, color: "var(--color-accent-red)" },
-                  { label: "Shortfall", value: m.total_implementation_shortfall ?? 0, color: "var(--color-accent-red)" },
+                  {
+                    label: "Commission",
+                    value: m.total_commission ?? 0,
+                    color: "var(--color-accent-yellow)",
+                  },
+                  {
+                    label: "Spread",
+                    value: m.total_spread_cost ?? 0,
+                    color: "var(--color-accent-yellow)",
+                  },
+                  {
+                    label: "Impact",
+                    value: m.total_market_impact_cost ?? 0,
+                    color: "var(--color-accent-blue)",
+                  },
+                  {
+                    label: "Timing",
+                    value: m.total_timing_cost ?? 0,
+                    color: "var(--color-accent-purple)",
+                  },
+                  {
+                    label: "Opportunity",
+                    value: m.total_opportunity_cost ?? 0,
+                    color: "var(--color-accent-red)",
+                  },
+                  {
+                    label: "Shortfall",
+                    value: m.total_implementation_shortfall ?? 0,
+                    color: "var(--color-accent-red)",
+                  },
                 ].map(({ label, value, color }) => (
                   <div
                     key={label}
                     className="rounded p-3 text-center"
-                    style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)" }}
+                    style={{
+                      background: "var(--color-bg-primary)",
+                      border: "1px solid var(--color-border)",
+                    }}
                   >
                     <p className="section-label mb-1">{label}</p>
-                    <p className="font-mono tabular-nums font-semibold text-base" style={{ color }}>
-                      ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    <p
+                      className="font-mono tabular-nums font-semibold text-base"
+                      style={{ color }}
+                    >
+                      $
+                      {value.toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}
                     </p>
                   </div>
                 ))}
@@ -327,18 +400,51 @@ export function TearSheet({ result }: TearSheetProps) {
       {activeTab === "Risk" && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MetricsCard label="Volatility"   value={formatPercent(m.annualized_volatility_pct)} />
-            <MetricsCard label="Sortino"      value={formatRatio(m.sortino_ratio)}     positive={m.sortino_ratio > 1} />
-            <MetricsCard label="Calmar"       value={formatRatio(m.calmar_ratio)}       positive={m.calmar_ratio > 0} />
-            <MetricsCard label="Info Ratio"   value={formatRatio(m.information_ratio)}  positive={m.information_ratio > 0} />
-            <MetricsCard label="VaR (95%)"    value={formatPercent(m.var_95_pct, 3)}    positive={false} />
-            <MetricsCard label="CVaR (95%)"   value={formatPercent(m.cvar_95_pct, 3)}   positive={false} />
-            <MetricsCard label="Skewness"     value={formatRatio(m.skewness)} />
-            <MetricsCard label="Kurtosis"     value={formatRatio(m.kurtosis)} />
-            <MetricsCard label="Beta"         value={formatRatio(m.beta)} />
-            <MetricsCard label="Alpha"        value={formatPercent(m.alpha)}            positive={m.alpha > 0} />
-            <MetricsCard label="Correlation"  value={formatRatio(m.correlation)} />
-            <MetricsCard label="Tracking Err" value={formatPercent(m.tracking_error_pct)} />
+            <MetricsCard
+              label="Volatility"
+              value={formatPercent(m.annualized_volatility_pct)}
+            />
+            <MetricsCard
+              label="Sortino"
+              value={formatRatio(m.sortino_ratio)}
+              positive={m.sortino_ratio > 1}
+            />
+            <MetricsCard
+              label="Calmar"
+              value={formatRatio(m.calmar_ratio)}
+              positive={m.calmar_ratio > 0}
+            />
+            <MetricsCard
+              label="Info Ratio"
+              value={formatRatio(m.information_ratio)}
+              positive={m.information_ratio > 0}
+            />
+            <MetricsCard
+              label="VaR (95%)"
+              value={formatPercent(m.var_95_pct, 3)}
+              positive={false}
+            />
+            <MetricsCard
+              label="CVaR (95%)"
+              value={formatPercent(m.cvar_95_pct, 3)}
+              positive={false}
+            />
+            <MetricsCard label="Skewness" value={formatRatio(m.skewness)} />
+            <MetricsCard label="Kurtosis" value={formatRatio(m.kurtosis)} />
+            <MetricsCard label="Beta" value={formatRatio(m.beta)} />
+            <MetricsCard
+              label="Alpha"
+              value={formatPercent(m.alpha)}
+              positive={m.alpha > 0}
+            />
+            <MetricsCard
+              label="Correlation"
+              value={formatRatio(m.correlation)}
+            />
+            <MetricsCard
+              label="Tracking Err"
+              value={formatPercent(m.tracking_error_pct)}
+            />
           </div>
 
           <ChartPanel
@@ -374,6 +480,8 @@ export function TearSheet({ result }: TearSheetProps) {
           >
             <ReturnsDistribution equity={result.equity_curve} />
           </ChartPanel>
+
+          <RiskBudgetingDashboard backtestId={result.id} />
         </div>
       )}
 
@@ -381,12 +489,26 @@ export function TearSheet({ result }: TearSheetProps) {
       {activeTab === "Trades" && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MetricsCard label="Total Trades"  value={String(m.total_trades)} />
-            <MetricsCard label="Avg Holding"   value={`${m.avg_holding_period_days}d`} />
-            <MetricsCard label="Best Trade"    value={formatPercent(m.best_trade_pct)}  positive={true} />
-            <MetricsCard label="Worst Trade"   value={formatPercent(m.worst_trade_pct)} positive={false} />
+            <MetricsCard label="Total Trades" value={String(m.total_trades)} />
+            <MetricsCard
+              label="Avg Holding"
+              value={`${m.avg_holding_period_days}d`}
+            />
+            <MetricsCard
+              label="Best Trade"
+              value={formatPercent(m.best_trade_pct)}
+              positive={true}
+            />
+            <MetricsCard
+              label="Worst Trade"
+              value={formatPercent(m.worst_trade_pct)}
+              positive={false}
+            />
           </div>
-          <ChartPanel title="Trade Log" subtitle="All fills with entry / exit / P&L">
+          <ChartPanel
+            title="Trade Log"
+            subtitle="All fills with entry / exit / P&L"
+          >
             <TradeLog trades={result.trades} />
           </ChartPanel>
         </div>
@@ -396,18 +518,58 @@ export function TearSheet({ result }: TearSheetProps) {
       {activeTab === "Analysis" && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <MetricsCard label="Alpha"        value={formatPercent(m.alpha)}             positive={m.alpha > 0}   description="Excess return vs benchmark" />
-            <MetricsCard label="Beta"         value={formatRatio(m.beta)}                                          description="Sensitivity to benchmark moves" />
-            <MetricsCard label="Avg Gross"    value={formatPercent(m.avg_exposure_pct, 1)}                         description="Average gross exposure" />
-            <MetricsCard label="Avg Net"      value={formatPercent(m.avg_net_exposure_pct ?? 0, 1)}               description="Directional net exposure" />
-            <MetricsCard label="Max Short"    value={formatPercent(m.max_short_exposure_pct ?? 0, 1)}             description="Largest short book" />
-            <MetricsCard label="Avg Turnover" value={formatPercent(m.avg_turnover_pct ?? 0, 1)}                   description="Rebalance turnover per event" />
-            <MetricsCard label="Borrow Cost"  value={formatCurrency(m.total_borrow_cost ?? 0)}                    description="Carry paid on shorts" />
-            <MetricsCard label="DD Duration"  value={`${m.max_drawdown_duration_days}d`}                           description="Longest drawdown period" />
-            <MetricsCard label="Current DD"   value={formatPercent(m.current_drawdown_pct)} positive={m.current_drawdown_pct === 0} />
+            <MetricsCard
+              label="Alpha"
+              value={formatPercent(m.alpha)}
+              positive={m.alpha > 0}
+              description="Excess return vs benchmark"
+            />
+            <MetricsCard
+              label="Beta"
+              value={formatRatio(m.beta)}
+              description="Sensitivity to benchmark moves"
+            />
+            <MetricsCard
+              label="Avg Gross"
+              value={formatPercent(m.avg_exposure_pct, 1)}
+              description="Average gross exposure"
+            />
+            <MetricsCard
+              label="Avg Net"
+              value={formatPercent(m.avg_net_exposure_pct ?? 0, 1)}
+              description="Directional net exposure"
+            />
+            <MetricsCard
+              label="Max Short"
+              value={formatPercent(m.max_short_exposure_pct ?? 0, 1)}
+              description="Largest short book"
+            />
+            <MetricsCard
+              label="Avg Turnover"
+              value={formatPercent(m.avg_turnover_pct ?? 0, 1)}
+              description="Rebalance turnover per event"
+            />
+            <MetricsCard
+              label="Borrow Cost"
+              value={formatCurrency(m.total_borrow_cost ?? 0)}
+              description="Carry paid on shorts"
+            />
+            <MetricsCard
+              label="DD Duration"
+              value={`${m.max_drawdown_duration_days}d`}
+              description="Longest drawdown period"
+            />
+            <MetricsCard
+              label="Current DD"
+              value={formatPercent(m.current_drawdown_pct)}
+              positive={m.current_drawdown_pct === 0}
+            />
           </div>
 
-          <NotesEditor backtestId={result.id} initialNotes={result.notes ?? ""} />
+          <NotesEditor
+            backtestId={result.id}
+            initialNotes={result.notes ?? ""}
+          />
           <TransactionCostAnalysis backtestId={result.id} />
           <RegimeAnalysis backtestId={result.id} />
           <CapacityAnalysis backtestId={result.id} />
@@ -431,34 +593,76 @@ export function TearSheet({ result }: TearSheetProps) {
             <div className="p-5">
               <div className="grid grid-cols-2 gap-x-8 gap-y-0 text-xs">
                 {[
-                  ["Strategy",    result.config.strategy_id],
-                  ["Tickers",     result.config.tickers.join(", ")],
-                  ["Period",      `${result.config.start_date} → ${result.config.end_date}`],
-                  ["Capital",     formatCurrency(result.config.initial_capital)],
-                  ["Slippage",    `${result.config.slippage_bps} bps`],
-                  ["Commission",  `$${result.config.commission_per_share}/share`],
-                  ["Impact Model", result.config.market_impact_model ?? "almgren_chriss"],
-                  ["Max Volume", `${result.config.max_volume_participation_pct ?? 5}%`],
+                  ["Strategy", result.config.strategy_id],
+                  ["Tickers", result.config.tickers.join(", ")],
+                  [
+                    "Period",
+                    `${result.config.start_date} → ${result.config.end_date}`,
+                  ],
+                  ["Capital", formatCurrency(result.config.initial_capital)],
+                  ["Slippage", `${result.config.slippage_bps} bps`],
+                  [
+                    "Commission",
+                    `$${result.config.commission_per_share}/share`,
+                  ],
+                  [
+                    "Impact Model",
+                    result.config.market_impact_model ?? "almgren_chriss",
+                  ],
+                  [
+                    "Max Volume",
+                    `${result.config.max_volume_participation_pct ?? 5}%`,
+                  ],
                   [
                     "Construction",
                     result.config.portfolio_construction_model ??
                       result.config.position_sizing ??
                       "equal_weight",
                   ],
-                  ["Risk Lookback", `${result.config.portfolio_lookback_days ?? 63} days`],
-                  ["Rebalance",   result.config.rebalance_frequency],
-                  ["Max Position",`${result.config.max_position_pct}%`],
-                  ["Max Gross",   `${result.config.max_gross_exposure_pct ?? 150}%`],
-                  ["Turnover Cap",`${result.config.turnover_limit_pct ?? 100}%`],
-                  ["Sector Cap",  `${result.config.max_sector_exposure_pct ?? 100}% gross`],
-                  ["Shorting",    result.config.allow_short_selling ? "Enabled" : "Disabled"],
+                  [
+                    "Risk Lookback",
+                    `${result.config.portfolio_lookback_days ?? 63} days`,
+                  ],
+                  ["Rebalance", result.config.rebalance_frequency],
+                  ["Max Position", `${result.config.max_position_pct}%`],
+                  [
+                    "Max Gross",
+                    `${result.config.max_gross_exposure_pct ?? 150}%`,
+                  ],
+                  [
+                    "Turnover Cap",
+                    `${result.config.turnover_limit_pct ?? 100}%`,
+                  ],
+                  [
+                    "Sector Cap",
+                    `${result.config.max_sector_exposure_pct ?? 100}% gross`,
+                  ],
+                  [
+                    "Shorting",
+                    result.config.allow_short_selling ? "Enabled" : "Disabled",
+                  ],
                   ...(result.config.allow_short_selling
                     ? [
-                        ["Max Short", `${result.config.max_short_position_pct}%`],
-                        ["Margin", `${result.config.short_margin_requirement_pct}%`],
-                        ["Borrow", `${result.config.short_borrow_rate_bps} bps/year`],
-                        ["Locate", `${result.config.short_locate_fee_bps} bps/entry`],
-                        ["Squeeze", `${result.config.short_squeeze_threshold_pct}% adverse move`],
+                        [
+                          "Max Short",
+                          `${result.config.max_short_position_pct}%`,
+                        ],
+                        [
+                          "Margin",
+                          `${result.config.short_margin_requirement_pct}%`,
+                        ],
+                        [
+                          "Borrow",
+                          `${result.config.short_borrow_rate_bps} bps/year`,
+                        ],
+                        [
+                          "Locate",
+                          `${result.config.short_locate_fee_bps} bps/entry`,
+                        ],
+                        [
+                          "Squeeze",
+                          `${result.config.short_squeeze_threshold_pct}% adverse move`,
+                        ],
                       ]
                     : []),
                 ].map(([label, value]) => (

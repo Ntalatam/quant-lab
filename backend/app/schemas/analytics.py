@@ -131,6 +131,65 @@ class TransactionCostAnalysisResponse(BaseModel):
     message: str | None = None
 
 
+class RiskBudgetSummary(BaseModel):
+    snapshot_date: str
+    lookback_days: int
+    total_equity: float
+    gross_exposure_pct: float
+    net_exposure_pct: float
+    daily_var_95_pct: float
+    daily_var_95_dollar: float
+    daily_cvar_95_pct: float
+    daily_cvar_95_dollar: float
+    diversification_ratio: float
+    average_pairwise_correlation: float | None = None
+
+
+class RiskBudgetPosition(BaseModel):
+    ticker: str
+    sector: str | None = None
+    shares: int
+    price: float
+    market_value: float
+    weight_pct: float
+    daily_volatility_pct: float
+    beta_to_portfolio: float
+    var_contribution: float
+    var_contribution_pct: float
+    cvar_contribution: float
+    cvar_contribution_pct: float
+
+
+class StressPositionImpact(BaseModel):
+    ticker: str
+    source_ticker: str
+    weight_pct: float
+    scenario_return_pct: float
+    pnl_impact: float
+
+
+class StressScenarioResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    start_date: str
+    end_date: str
+    portfolio_return_pct: float
+    pnl_impact: float
+    average_pairwise_correlation: float | None = None
+    correlation_shift: float | None = None
+    top_pair: str | None = None
+    top_pair_correlation: float | None = None
+    position_impacts: list[StressPositionImpact] = Field(default_factory=list)
+
+
+class RiskBudgetResponse(BaseModel):
+    summary: RiskBudgetSummary | None = None
+    positions: list[RiskBudgetPosition] = Field(default_factory=list)
+    scenarios: list[StressScenarioResponse] = Field(default_factory=list)
+    message: str | None = None
+
+
 class RegimeTimelinePoint(BaseModel):
     date: str
     regime: str
