@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import async_session, get_db
 from app.models.backtest import BacktestRun
 from app.models.price_data import PriceData
-from app.models.trade import TradeRecord
 from app.schemas.backtest import BacktestConfig
 from app.schemas.demo import DemoSeedResponse, DemoStatusResponse
 from app.services.backtest_engine import run_backtest
+from app.services.backtest_runs import persist_backtest_result
 from app.services.data_ingestion import ensure_data_loaded
 
 router = APIRouter(prefix="/demo", tags=["demo"])
@@ -206,74 +206,7 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
         try:
             async with async_session() as db2:
                 result = await run_backtest(db2, run_config)
-                run = BacktestRun(
-                    id=result["id"],
-                    strategy_id=run_config.strategy_id,
-                    strategy_params=run_config.params,
-                    tickers=run_config.tickers,
-                    benchmark=run_config.benchmark,
-                    start_date=run_config.start_date,
-                    end_date=run_config.end_date,
-                    initial_capital=run_config.initial_capital,
-                    slippage_bps=run_config.slippage_bps,
-                    commission_per_share=run_config.commission_per_share,
-                    market_impact_model=run_config.market_impact_model,
-                    max_volume_participation_pct=run_config.max_volume_participation_pct,
-                    position_sizing=run_config.position_sizing,
-                    portfolio_construction_model=run_config.portfolio_construction_model,
-                    portfolio_lookback_days=run_config.portfolio_lookback_days,
-                    max_position_pct=run_config.max_position_pct,
-                    max_gross_exposure_pct=run_config.max_gross_exposure_pct,
-                    turnover_limit_pct=run_config.turnover_limit_pct,
-                    max_sector_exposure_pct=run_config.max_sector_exposure_pct,
-                    allow_short_selling=run_config.allow_short_selling,
-                    max_short_position_pct=run_config.max_short_position_pct,
-                    short_margin_requirement_pct=run_config.short_margin_requirement_pct,
-                    short_borrow_rate_bps=run_config.short_borrow_rate_bps,
-                    short_locate_fee_bps=run_config.short_locate_fee_bps,
-                    short_squeeze_threshold_pct=run_config.short_squeeze_threshold_pct,
-                    rebalance_frequency=run_config.rebalance_frequency,
-                    equity_curve=result["equity_curve"],
-                    clean_equity_curve=result.get("clean_equity_curve", []),
-                    benchmark_curve=result["benchmark_curve"],
-                    drawdown_series=result["drawdown_series"],
-                    rolling_sharpe=result["rolling_sharpe"],
-                    rolling_volatility=result["rolling_volatility"],
-                    monthly_returns=result["monthly_returns"],
-                    metrics=result["metrics"],
-                    benchmark_metrics=result["benchmark_metrics"],
-                )
-                db2.add(run)
-                for trade in result["trades"]:
-                    tr = TradeRecord(
-                        id=trade["id"],
-                        backtest_run_id=result["id"],
-                        ticker=trade["ticker"],
-                        side=trade["side"],
-                        position_direction=trade["position_direction"],
-                        entry_date=trade["entry_date"],
-                        entry_price=trade["entry_price"],
-                        exit_date=trade["exit_date"],
-                        exit_price=trade["exit_price"],
-                        shares=trade["shares"],
-                        requested_shares=trade["requested_shares"],
-                        unfilled_shares=trade["unfilled_shares"],
-                        pnl=trade["pnl"],
-                        pnl_pct=trade["pnl_pct"],
-                        commission=trade["commission"],
-                        slippage=trade["slippage"],
-                        spread_cost=trade["spread_cost"],
-                        market_impact_cost=trade["market_impact_cost"],
-                        timing_cost=trade["timing_cost"],
-                        opportunity_cost=trade["opportunity_cost"],
-                        participation_rate_pct=trade["participation_rate_pct"],
-                        implementation_shortfall=trade["implementation_shortfall"],
-                        borrow_cost=trade["borrow_cost"],
-                        locate_fee=trade["locate_fee"],
-                        risk_event=trade["risk_event"],
-                    )
-                    db2.add(tr)
-                await db2.commit()
+                await persist_backtest_result(db2, run_config, result)
                 backtest_ids.append(result["id"])
         except Exception as e:
             errors.append(f"{config.strategy_id}: {str(e)}")
