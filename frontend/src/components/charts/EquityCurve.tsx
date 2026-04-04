@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import type { TimeSeriesPoint, Trade } from "@/lib/types";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { CHART_COLORS } from "@/lib/constants";
@@ -49,9 +49,7 @@ function tradeBorder(trade: Trade) {
       ? "rgba(255,187,51,0.3)"
       : "rgba(68,136,255,0.3)";
   }
-  return trade.side === "BUY"
-    ? "rgba(0,212,170,0.3)"
-    : "rgba(255,68,102,0.3)";
+  return trade.side === "BUY" ? "rgba(0,212,170,0.3)" : "rgba(255,68,102,0.3)";
 }
 
 function ChartLegend({
@@ -66,8 +64,7 @@ function ChartLegend({
     val != null
       ? formatPercent(((val - initialCapital) / initialCapital) * 100)
       : "—";
-  const fmt = (val: number | null) =>
-    val != null ? formatCurrency(val) : "—";
+  const fmt = (val: number | null) => (val != null ? formatCurrency(val) : "—");
   const color = (val: number | null) =>
     val != null && val >= initialCapital
       ? CHART_COLORS.positive
@@ -100,9 +97,7 @@ function ChartLegend({
             style={{ background: CHART_COLORS.benchmark }}
           />
           <span className="text-text-muted">Benchmark</span>
-          <span className="text-text-secondary">
-            {fmt(legend.benchmark)}
-          </span>
+          <span className="text-text-secondary">{fmt(legend.benchmark)}</span>
         </span>
       )}
       {legend.clean != null && (
@@ -112,9 +107,7 @@ function ChartLegend({
             style={{ background: CHART_COLORS.blue, opacity: 0.6 }}
           />
           <span className="text-text-muted">No-Cost</span>
-          <span className="text-text-secondary">
-            {fmt(legend.clean)}
-          </span>
+          <span className="text-text-secondary">{fmt(legend.clean)}</span>
         </span>
       )}
     </div>
@@ -200,7 +193,10 @@ function TradePanel({ trade, onClose }: TradePanelProps) {
             value: `$${(trade.commission ?? 0).toFixed(2)}`,
           },
           { label: "Spread", value: `$${(trade.spread_cost ?? 0).toFixed(2)}` },
-          { label: "Impact", value: `$${(trade.market_impact_cost ?? 0).toFixed(2)}` },
+          {
+            label: "Impact",
+            value: `$${(trade.market_impact_cost ?? 0).toFixed(2)}`,
+          },
           { label: "Timing", value: `$${(trade.timing_cost ?? 0).toFixed(2)}` },
           {
             label: "Opportunity",
@@ -289,25 +285,20 @@ export function EquityCurve({
 
   const showClean = cleanEquity && cleanEquity.length > 0;
 
-  // Build lookup maps for crosshair legend
-  const benchMap = useRef(new Map<string, number>());
-  const cleanMap = useRef(new Map<string, number>());
-  if (benchMap.current.size === 0) {
-    benchmark.forEach((p) => benchMap.current.set(p.date, p.value));
-    cleanEquity?.forEach((p) => cleanMap.current.set(p.date, p.value));
-  }
-
-  // Trade index for click lookup
-  const tradesByDate = useRef(new Map<string, Trade>());
-  if (tradesByDate.current.size === 0 && trades.length > 0) {
-    trades.forEach((t) => {
-      if (t.entry_date) tradesByDate.current.set(t.entry_date, t);
-      if (t.exit_date) tradesByDate.current.set(t.exit_date, t);
-    });
-  }
-
   const handleInit = useCallback(
     (chart: IChartApi) => {
+      const benchMap = new Map(
+        benchmark.map((point) => [point.date, point.value]),
+      );
+      const cleanMap = new Map(
+        (cleanEquity ?? []).map((point) => [point.date, point.value]),
+      );
+      const tradesByDate = new Map<string, Trade>();
+      trades.forEach((trade) => {
+        if (trade.entry_date) tradesByDate.set(trade.entry_date, trade);
+        if (trade.exit_date) tradesByDate.set(trade.exit_date, trade);
+      });
+
       // ── Strategy area ──
       const strategySeries = chart.addSeries(AreaSeries, {
         lineColor: CHART_COLORS.strategy,
@@ -355,8 +346,8 @@ export function EquityCurve({
             });
           }
         });
-        markers.sort(
-          (a, b) => (a.time as string).localeCompare(b.time as string)
+        markers.sort((a, b) =>
+          (a.time as string).localeCompare(b.time as string),
         );
         createSeriesMarkers(strategySeries, markers);
       }
@@ -377,7 +368,7 @@ export function EquityCurve({
         benchmark.map((p) => ({
           time: toTime(p.date),
           value: p.value,
-        })) as LineData<Time>[]
+        })) as LineData<Time>[],
       );
 
       // ── Clean (no-cost) line ──
@@ -398,7 +389,7 @@ export function EquityCurve({
           cleanEquity.map((p) => ({
             time: toTime(p.date),
             value: p.value,
-          })) as LineData<Time>[]
+          })) as LineData<Time>[],
         );
       }
 
@@ -410,8 +401,8 @@ export function EquityCurve({
             setLegend({
               date: last.date,
               strategy: last.value,
-              benchmark: benchMap.current.get(last.date) ?? null,
-              clean: cleanMap.current.get(last.date) ?? null,
+              benchmark: benchMap.get(last.date) ?? null,
+              clean: cleanMap.get(last.date) ?? null,
             });
           }
           return;
@@ -441,7 +432,7 @@ export function EquityCurve({
       chart.subscribeClick((param: MouseEventParams<Time>) => {
         if (!param.time) return;
         const dateStr = param.time as string;
-        const trade = tradesByDate.current.get(dateStr);
+        const trade = tradesByDate.get(dateStr);
         if (trade) setSelectedTrade(trade);
         else setSelectedTrade(null);
       });
@@ -452,20 +443,18 @@ export function EquityCurve({
         setLegend({
           date: last.date,
           strategy: last.value,
-          benchmark: benchMap.current.get(last.date) ?? null,
-          clean: cleanMap.current.get(last.date) ?? null,
+          benchmark: benchMap.get(last.date) ?? null,
+          clean: cleanMap.get(last.date) ?? null,
         });
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [equity, benchmark, cleanEquity, trades]
+    [benchmark, cleanEquity, equity, showClean, trades],
   );
 
   return (
     <div className="relative">
       <ChartLegend legend={legend} initialCapital={initialCapital} />
       <LightweightChart
-        key={equity.length}
         height={height}
         onInit={handleInit}
         syncRange={syncRange}
@@ -479,33 +468,21 @@ export function EquityCurve({
             <span style={{ color: CHART_COLORS.positive, fontSize: 14 }}>
               ▲
             </span>
-            <span className="text-[10px] text-text-muted">
-              Long entry
-            </span>
+            <span className="text-[10px] text-text-muted">Long entry</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span style={{ color: CHART_COLORS.negative, fontSize: 14 }}>
               ▼
             </span>
-            <span className="text-[10px] text-text-muted">
-              Long exit
-            </span>
+            <span className="text-[10px] text-text-muted">Long exit</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span style={{ color: CHART_COLORS.yellow, fontSize: 14 }}>
-              ▲
-            </span>
-            <span className="text-[10px] text-text-muted">
-              Short entry
-            </span>
+            <span style={{ color: CHART_COLORS.yellow, fontSize: 14 }}>▲</span>
+            <span className="text-[10px] text-text-muted">Short entry</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span style={{ color: CHART_COLORS.blue, fontSize: 14 }}>
-              ▼
-            </span>
-            <span className="text-[10px] text-text-muted">
-              Cover
-            </span>
+            <span style={{ color: CHART_COLORS.blue, fontSize: 14 }}>▼</span>
+            <span className="text-[10px] text-text-muted">Cover</span>
           </div>
           <span className="text-[10px] text-text-muted">
             — click any marker for trade details

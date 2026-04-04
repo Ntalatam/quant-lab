@@ -36,8 +36,7 @@ function DrawdownLegend({ value }: { value: number | null }) {
       <span className="text-text-muted">Drawdown</span>
       <span
         style={{
-          color:
-            value < -5 ? CHART_COLORS.negative : CHART_COLORS.axis,
+          color: value < -5 ? CHART_COLORS.negative : CHART_COLORS.axis,
         }}
       >
         {value.toFixed(2)}%
@@ -92,7 +91,7 @@ export function DrawdownChart({
               { time: toTime(data[0].date), value: 0 },
               { time: toTime(data[data.length - 1].date), value: 0 },
             ]
-          : []
+          : [],
       );
 
       if (data.length > 0) {
@@ -104,18 +103,16 @@ export function DrawdownChart({
           | SingleValueData<Time>
           | undefined;
         if (point) setDdValue(point.value);
-        else if (data.length > 0)
-          setDdValue(data[data.length - 1].value);
+        else if (data.length > 0) setDdValue(data[data.length - 1].value);
       });
     },
-    [data]
+    [data],
   );
 
   return (
     <div className="relative">
       <DrawdownLegend value={ddValue} />
       <LightweightChart
-        key={data.length}
         height={height}
         onInit={handleInit}
         syncRange={syncRange}

@@ -28,7 +28,7 @@ export const TV_CHART_OPTIONS: DeepPartial<ChartOptions> = {
     background: { type: ColorType.Solid, color: "transparent" },
     textColor: CHART_COLORS.axis,
     fontFamily:
-      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
     fontSize: 11,
     attributionLogo: false,
   },
@@ -97,18 +97,36 @@ export function LightweightChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const isSyncingRef = useRef(false);
+  const onCrosshairMoveRef = useRef(onCrosshairMove);
+  const onVisibleRangeChangeRef = useRef(onVisibleRangeChange);
+  const chartConfigRef = useRef({ height, options });
+
+  useEffect(() => {
+    onCrosshairMoveRef.current = onCrosshairMove;
+  }, [onCrosshairMove]);
+
+  useEffect(() => {
+    onVisibleRangeChangeRef.current = onVisibleRangeChange;
+  }, [onVisibleRangeChange]);
+
+  useEffect(() => {
+    chartConfigRef.current = { height, options };
+  }, [height, options]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const { height: initialHeight, options: initialOptions } =
+      chartConfigRef.current;
 
     const chart = createChart(container, {
       ...TV_CHART_OPTIONS,
-      ...options,
+      ...initialOptions,
       width: container.clientWidth,
-      height,
+      height: initialHeight,
     });
     chartRef.current = chart;
+    const timeScale = chart.timeScale();
 
     // Auto-resize
     const ro = new ResizeObserver((entries) => {
@@ -119,34 +137,41 @@ export function LightweightChart({
     });
     ro.observe(container);
 
-    // Crosshair subscription
-    if (onCrosshairMove) {
-      chart.subscribeCrosshairMove(onCrosshairMove);
-    }
+    const handleCrosshairMove = (param: MouseEventParams<Time>) => {
+      onCrosshairMoveRef.current?.(param);
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
 
-    // Visible range sync
-    if (onVisibleRangeChange) {
-      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (!isSyncingRef.current) {
-          onVisibleRangeChange(range);
-        }
-      });
-    }
+    const handleVisibleRangeChange = (range: LogicalRange | null) => {
+      if (!isSyncingRef.current) {
+        onVisibleRangeChangeRef.current?.(range);
+      }
+    };
+    timeScale.subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
 
     // Let the consumer add series
     const cleanup = onInit(chart, container);
 
     // Fit content after series are added
-    chart.timeScale().fitContent();
+    timeScale.fitContent();
 
     return () => {
       cleanup?.();
       ro.disconnect();
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      timeScale.unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
       chart.remove();
       chartRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onInit]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.applyOptions({
+      ...options,
+      height,
+    });
+  }, [height, options]);
 
   // Sync visible range from parent
   useEffect(() => {

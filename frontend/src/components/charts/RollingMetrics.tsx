@@ -73,7 +73,7 @@ export function RollingMetrics({
               { time: toTime(data[0].date), value: 0 },
               { time: toTime(data[data.length - 1].date), value: 0 },
             ]
-          : []
+          : [],
       );
 
       if (data.length > 0) setCurrentValue(data[data.length - 1].value);
@@ -83,19 +83,16 @@ export function RollingMetrics({
           | SingleValueData<Time>
           | undefined;
         if (point) setCurrentValue(point.value);
-        else if (data.length > 0)
-          setCurrentValue(data[data.length - 1].value);
+        else if (data.length > 0) setCurrentValue(data[data.length - 1].value);
       });
     },
-    [data, color, unit]
+    [data, color, unit],
   );
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-text-secondary">
-          {label}
-        </h3>
+        <h3 className="text-sm font-medium text-text-secondary">{label}</h3>
         {currentValue != null && (
           <span
             className="text-xs font-mono"
@@ -115,7 +112,6 @@ export function RollingMetrics({
       </div>
       <div className="relative">
         <LightweightChart
-          key={data.length}
           height={height}
           onInit={handleInit}
           syncRange={syncRange}
