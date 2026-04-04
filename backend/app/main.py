@@ -4,6 +4,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -170,7 +171,7 @@ def create_app() -> FastAPI:
     )
     async def health_check(request: Request):
         dependencies: dict[str, DependencyHealth] = {}
-        overall_status = "ok"
+        overall_status: Literal["ok", "degraded"] = "ok"
 
         db_start = time.perf_counter()
         try:

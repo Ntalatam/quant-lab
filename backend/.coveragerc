@@ -1,0 +1,15 @@
+[run]
+branch = true
+source =
+    app.services.analytics
+    app.services.cointegration
+    app.services.custom_strategy
+    app.services.execution
+    app.services.options
+    app.services.portfolio
+    app.services.strategy_registry
+
+[report]
+fail_under = 80
+show_missing = true
+skip_covered = true

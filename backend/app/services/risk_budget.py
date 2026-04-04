@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from itertools import combinations
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -18,7 +19,16 @@ from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 VAR_Z_95 = 1.6448536269514722
 DEFAULT_LOOKBACK_DAYS = 63
 
-STRESS_SCENARIOS = [
+
+class StressScenario(TypedDict):
+    id: str
+    name: str
+    description: str
+    start_date: date
+    end_date: date
+
+
+STRESS_SCENARIOS: list[StressScenario] = [
     {
         "id": "gfc_2008",
         "name": "2008 Global Financial Crisis",
@@ -63,7 +73,7 @@ SECTOR_PROXY_MAP = {
 async def build_risk_budget_report(
     db: AsyncSession,
     run: BacktestRun,
-    trades: list[TradeRecord],
+    trades: Sequence[TradeRecord | SimpleNamespace],
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> dict[str, Any]:
     cache_key = f"analytics:risk-budget:{run.id}:{lookback_days}"
@@ -204,7 +214,7 @@ async def build_risk_budget_report(
 
 
 def _reconstruct_share_panel(
-    trades: list[TradeRecord | SimpleNamespace],
+    trades: Sequence[TradeRecord | SimpleNamespace],
     date_index: pd.Index,
     tickers: list[str],
 ) -> pd.DataFrame:

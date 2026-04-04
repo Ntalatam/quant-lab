@@ -9,6 +9,7 @@ POST /api/analytics/spread              — Spread & z-score for a specific pair
 
 import csv
 import io
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -309,7 +310,7 @@ async def capacity_analysis(
 
     # For each trade, compute the ADV participation at baseline capital
     initial_capital = run.initial_capital
-    trade_stats = []
+    trade_stats: list[dict[str, Any]] = []
     for t in trades:
         if t.ticker not in price_cache:
             continue
@@ -340,13 +341,13 @@ async def capacity_analysis(
         }
 
     # Sort by ADV participation (most impactful first)
-    trade_stats.sort(key=lambda x: x["adv_participation_pct"], reverse=True)
+    trade_stats.sort(key=lambda x: float(x["adv_participation_pct"]), reverse=True)
 
     # Capacity scaling: at what AUM scale does max ADV participation reach threshold?
     # If strategy uses X% of ADV at current capital C, then at scale S×C it uses X*S%
     # Capacity at T% threshold = T / max_participation * initial_capital
-    participations = [t["adv_participation_pct"] for t in trade_stats]
-    max_participation = max(participations)
+    participations = [float(t["adv_participation_pct"]) for t in trade_stats]
+    max_participation = max(participations, default=0.0)
     avg_participation = float(np.mean(participations))
     p90_participation = float(np.percentile(participations, 90))
 
@@ -670,7 +671,7 @@ async def regime_analysis(
         "Neutral": "#888898",
     }
 
-    stats = []
+    stats: list[dict[str, Any]] = []
     for regime in regime_order:
         rets = regime_groups.get(regime, [])
         if not rets:
@@ -693,10 +694,13 @@ async def regime_analysis(
 
     # ADX description
     desc = ""
-    trending_pct = next((s["pct_of_period"] for s in stats if s["regime"] == "Trending"), 0)
+    trending_pct = float(
+        next((s["pct_of_period"] for s in stats if s["regime"] == "Trending"), 0.0)
+    )
+    choppy_pct = float(next((s["pct_of_period"] for s in stats if s["regime"] == "Choppy"), 0.0))
     if trending_pct > 40:
         desc = "The backtest period was predominantly trending — strategy likely benefits from directional positions."
-    elif next((s["pct_of_period"] for s in stats if s["regime"] == "Choppy"), 0) > 40:
+    elif choppy_pct > 40:
         desc = "The backtest period was predominantly choppy — mean-reversion strategies should outperform trend-following."
     else:
         desc = "Mixed regime environment — strategy performance may vary across sub-periods."
@@ -833,7 +837,7 @@ async def factor_exposure(
     except Exception as e:
         raise HTTPException(500, f"Regression failed: {e}")
 
-    result = {
+    result: dict[str, Any] = {
         "alpha_annualized": round(float(betas[0]) * 252 * 100, 4),
         "r_squared": round(float(r2), 4),
         "n_obs": int(n),

@@ -29,7 +29,7 @@ def configure_logging(
     _SERVICE_CONTEXT["service"] = service_name
     _SERVICE_CONTEXT["environment"] = environment
 
-    shared_processors = [
+    shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         _add_service_context,
         structlog.stdlib.add_logger_name,

@@ -1,48 +1,47 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 ParamValue = int | float | str | bool
 
+BACKTEST_CONFIG_EXAMPLE = {
+    "strategy_id": "sma_crossover",
+    "params": {
+        "short_window": 20,
+        "long_window": 60,
+        "position_weight": 0.95,
+    },
+    "tickers": ["AAPL", "MSFT"],
+    "benchmark": "SPY",
+    "start_date": "2019-01-01",
+    "end_date": "2024-01-01",
+    "initial_capital": 100000,
+    "slippage_bps": 5,
+    "commission_per_share": 0.005,
+    "market_impact_model": "almgren_chriss",
+    "max_volume_participation_pct": 5,
+    "position_sizing": "equal_weight",
+    "portfolio_construction_model": "equal_weight",
+    "portfolio_lookback_days": 63,
+    "max_position_pct": 25,
+    "max_gross_exposure_pct": 150,
+    "turnover_limit_pct": 100,
+    "max_sector_exposure_pct": 100,
+    "allow_short_selling": False,
+    "max_short_position_pct": 25,
+    "short_margin_requirement_pct": 50,
+    "short_borrow_rate_bps": 200,
+    "short_locate_fee_bps": 10,
+    "short_squeeze_threshold_pct": 15,
+    "rebalance_frequency": "daily",
+}
+BACKTEST_CONFIG_EXAMPLE_JSON = cast(Any, BACKTEST_CONFIG_EXAMPLE)
+
 
 class BacktestConfig(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "strategy_id": "sma_crossover",
-                "params": {
-                    "short_window": 20,
-                    "long_window": 60,
-                    "position_weight": 0.95,
-                },
-                "tickers": ["AAPL", "MSFT"],
-                "benchmark": "SPY",
-                "start_date": "2019-01-01",
-                "end_date": "2024-01-01",
-                "initial_capital": 100000,
-                "slippage_bps": 5,
-                "commission_per_share": 0.005,
-                "market_impact_model": "almgren_chriss",
-                "max_volume_participation_pct": 5,
-                "position_sizing": "equal_weight",
-                "portfolio_construction_model": "equal_weight",
-                "portfolio_lookback_days": 63,
-                "max_position_pct": 25,
-                "max_gross_exposure_pct": 150,
-                "turnover_limit_pct": 100,
-                "max_sector_exposure_pct": 100,
-                "allow_short_selling": False,
-                "max_short_position_pct": 25,
-                "short_margin_requirement_pct": 50,
-                "short_borrow_rate_bps": 200,
-                "short_locate_fee_bps": 10,
-                "short_squeeze_threshold_pct": 15,
-                "rebalance_frequency": "daily",
-            }
-        }
-    )
+    model_config = ConfigDict(json_schema_extra={"example": BACKTEST_CONFIG_EXAMPLE_JSON})
 
     strategy_id: str
     params: dict[str, ParamValue] = Field(default_factory=dict)
@@ -166,7 +165,7 @@ class BacktestResultResponse(BaseModel):
         json_schema_extra={
             "example": {
                 "id": "bt_sma_001",
-                "config": BacktestConfig.model_config["json_schema_extra"]["example"],
+                "config": BACKTEST_CONFIG_EXAMPLE_JSON,
                 "created_at": "2026-04-03T12:00:00Z",
                 "notes": "",
                 "equity_curve": [{"date": "2024-01-02", "value": 100000.0}],
@@ -263,7 +262,7 @@ class BacktestSweepConfig(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "base_config": BacktestConfig.model_config["json_schema_extra"]["example"],
+                "base_config": BACKTEST_CONFIG_EXAMPLE_JSON,
                 "sweep_param": "short_window",
                 "sweep_values": [10, 20, 30],
             }
@@ -293,7 +292,7 @@ class BacktestSweep2DConfig(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "base_config": BacktestConfig.model_config["json_schema_extra"]["example"],
+                "base_config": BACKTEST_CONFIG_EXAMPLE_JSON,
                 "param_x": "short_window",
                 "values_x": [10, 20, 30],
                 "param_y": "long_window",
@@ -333,7 +332,7 @@ class WalkForwardRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "config": BacktestConfig.model_config["json_schema_extra"]["example"],
+                "config": BACKTEST_CONFIG_EXAMPLE_JSON,
                 "n_folds": 5,
                 "train_pct": 0.7,
             }
@@ -382,7 +381,7 @@ class BayesOptConfig(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "base_config": BacktestConfig.model_config["json_schema_extra"]["example"],
+                "base_config": BACKTEST_CONFIG_EXAMPLE_JSON,
                 "param_specs": [
                     {
                         "name": "short_window",

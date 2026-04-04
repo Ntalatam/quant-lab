@@ -416,9 +416,12 @@ def get_editor_spec() -> dict[str, Any]:
 
 
 def validate_custom_strategy_source(code: str) -> dict[str, Any]:
+    tree = ast.parse(code.strip(), mode="exec")
+    strategy_literal = _extract_strategy_literal(tree)
+    declared_requires_short = bool(strategy_literal.get("requires_short_selling", False))
     metadata, runner = _compile_source(code)
     warnings: list[str] = []
-    if metadata.signal_mode == "long_short" and not metadata.requires_short_selling:
+    if metadata.signal_mode == "long_short" and not declared_requires_short:
         warnings.append("Long/short strategies automatically require short-selling support.")
 
     _dry_run_strategy(runner, metadata.default_params)
@@ -445,7 +448,7 @@ async def list_custom_strategy_records(db: AsyncSession) -> list[CustomStrategy]
             CustomStrategy.updated_at.desc(), CustomStrategy.created_at.desc()
         )
     )
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 
 async def get_custom_strategy_record(
@@ -576,12 +579,12 @@ def _compile_source(code: str) -> tuple[CustomStrategyMetadata, Any]:
         )
 
     tree = ast.parse(source, mode="exec")
-    _SafetyValidator(_helper_globals().keys()).validate(tree)
+    _SafetyValidator(set(_helper_globals())).validate(tree)
 
     strategy_literal = _extract_strategy_literal(tree)
     metadata = _parse_metadata(strategy_literal)
 
-    env = {"__builtins__": {}}
+    env: dict[str, Any] = {"__builtins__": {}}
     env.update(SAFE_BUILTINS)
     env.update(_helper_globals())
     exec(compile(tree, "<custom-strategy>", "exec"), env, env)
@@ -701,6 +704,7 @@ def _coerce_params(
 
 def _coerce_param_value(definition: dict[str, Any], value: Any) -> int | float | str | bool:
     param_type = definition["type"]
+    coerced: int | float | str | bool
     if param_type == "int":
         coerced = int(value)
     elif param_type == "float":

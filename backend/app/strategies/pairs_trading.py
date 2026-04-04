@@ -84,7 +84,7 @@ class PairsTrading(BaseStrategy):
         self.exit_z = float(exit_z)
         self.position_weight = float(position_weight)
         self._in_trade = False
-        self._trade_direction = None
+        self._trade_direction: str | None = None
 
     def generate_signals(
         self, data: dict[str, pd.DataFrame], current_date: pd.Timestamp

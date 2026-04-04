@@ -231,6 +231,8 @@ def _parse_fred_api_payload(observations: list[dict[str, Any]]) -> list[dict[str
         raw_value = observation.get("value")
         if raw_value in (None, ".", ""):
             continue
+        if not isinstance(raw_value, (str, int, float)):
+            continue
         points.append(
             {
                 "date": observation["date"],
@@ -250,6 +252,8 @@ def _parse_fred_csv_payload(csv_text: str) -> list[dict[str, Any]]:
     for row in reader:
         raw_value = row.get(value_field)
         if raw_value in (None, ".", ""):
+            continue
+        if not isinstance(raw_value, (str, int, float)):
             continue
         points.append(
             {

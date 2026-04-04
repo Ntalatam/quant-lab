@@ -5,6 +5,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, cast
 
 import pandas as pd
 import yfinance as yf
@@ -21,6 +22,11 @@ from app.models.paper import (
 )
 from app.observability import elapsed_ms, get_logger
 from app.schemas.paper import (
+    BarInterval,
+    PaperSessionStatus,
+    PaperTradingEquityPointView,
+    PaperTradingEventView,
+    PaperTradingPositionView,
     PaperTradingSessionCreate,
     PaperTradingSessionDetail,
     PaperTradingSessionSummary,
@@ -33,6 +39,7 @@ from app.services.portfolio_optimizer import (
 )
 from app.services.strategy_registry import build_strategy_instance
 from app.services.trading import execute_target_weights
+from app.strategies.base import BaseStrategy
 
 NO_MARKET_DATA_ERROR = "No live market data was returned."
 logger = get_logger(__name__)
@@ -41,7 +48,7 @@ logger = get_logger(__name__)
 @dataclass
 class PaperSessionRuntime:
     session_id: str
-    strategy: object | None = None
+    strategy: BaseStrategy | None = None
     portfolio: Portfolio | None = None
     task: asyncio.Task | None = None
     latest_frames: dict[str, pd.DataFrame] = field(default_factory=dict)
@@ -738,9 +745,9 @@ class PaperTradingManager:
                 await db.delete(row)
 
         for ticker, position in portfolio.positions.items():
-            row = existing_positions.get(ticker)
-            if row is None:
-                row = PaperTradingPosition(
+            position_row = existing_positions.get(ticker)
+            if position_row is None:
+                position_row = PaperTradingPosition(
                     id=str(uuid.uuid4()),
                     session_id=session.id,
                     ticker=ticker,
@@ -754,18 +761,18 @@ class PaperTradingManager:
                     accrued_borrow_cost=position.accrued_borrow_cost,
                     accrued_locate_fee=position.accrued_locate_fee,
                 )
-                db.add(row)
+                db.add(position_row)
                 continue
 
-            row.shares = position.shares
-            row.avg_cost = position.avg_cost
-            row.current_price = position.current_price
-            row.market_value = position.market_value
-            row.unrealized_pnl = position.unrealized_pnl
-            row.unrealized_pnl_pct = position.unrealized_pnl_pct
-            row.accrued_borrow_cost = position.accrued_borrow_cost
-            row.accrued_locate_fee = position.accrued_locate_fee
-            row.updated_at = datetime.utcnow()
+            position_row.shares = position.shares
+            position_row.avg_cost = position.avg_cost
+            position_row.current_price = position.current_price
+            position_row.market_value = position.market_value
+            position_row.unrealized_pnl = position.unrealized_pnl
+            position_row.unrealized_pnl_pct = position.unrealized_pnl_pct
+            position_row.accrued_borrow_cost = position.accrued_borrow_cost
+            position_row.accrued_locate_fee = position.accrued_locate_fee
+            position_row.updated_at = datetime.utcnow()
 
     async def _load_detail(self, db: AsyncSession, session_id: str) -> PaperTradingSessionDetail:
         session = await db.get(PaperTradingSession, session_id)
@@ -814,43 +821,43 @@ class PaperTradingManager:
             short_locate_fee_bps=session.short_locate_fee_bps,
             short_squeeze_threshold_pct=session.short_squeeze_threshold_pct,
             positions=[
-                {
-                    "ticker": row.ticker,
-                    "shares": row.shares,
-                    "avg_cost": row.avg_cost,
-                    "entry_date": row.entry_date,
-                    "current_price": row.current_price,
-                    "market_value": row.market_value,
-                    "unrealized_pnl": row.unrealized_pnl,
-                    "unrealized_pnl_pct": row.unrealized_pnl_pct,
-                    "accrued_borrow_cost": row.accrued_borrow_cost,
-                    "accrued_locate_fee": row.accrued_locate_fee,
-                    "updated_at": row.updated_at,
-                }
+                PaperTradingPositionView(
+                    ticker=row.ticker,
+                    shares=row.shares,
+                    avg_cost=row.avg_cost,
+                    entry_date=row.entry_date,
+                    current_price=row.current_price,
+                    market_value=row.market_value,
+                    unrealized_pnl=row.unrealized_pnl,
+                    unrealized_pnl_pct=row.unrealized_pnl_pct,
+                    accrued_borrow_cost=row.accrued_borrow_cost,
+                    accrued_locate_fee=row.accrued_locate_fee,
+                    updated_at=row.updated_at,
+                )
                 for row in positions
             ],
             recent_events=[
-                {
-                    "id": row.id,
-                    "timestamp": row.timestamp,
-                    "event_type": row.event_type,
-                    "ticker": row.ticker,
-                    "action": row.action,
-                    "signal": row.signal,
-                    "shares": row.shares,
-                    "fill_price": row.fill_price,
-                    "status": row.status,
-                    "message": row.message,
-                }
+                PaperTradingEventView(
+                    id=row.id,
+                    timestamp=row.timestamp,
+                    event_type=cast(Any, row.event_type),
+                    ticker=row.ticker,
+                    action=row.action,
+                    signal=row.signal,
+                    shares=row.shares,
+                    fill_price=row.fill_price,
+                    status=row.status,
+                    message=row.message,
+                )
                 for row in events
             ],
             equity_curve=[
-                {
-                    "timestamp": row.timestamp,
-                    "equity": row.equity,
-                    "cash": row.cash,
-                    "market_value": row.market_value,
-                }
+                PaperTradingEquityPointView(
+                    timestamp=row.timestamp,
+                    equity=row.equity,
+                    cash=row.cash,
+                    market_value=row.market_value,
+                )
                 for row in equity_points
             ],
         )
@@ -859,10 +866,10 @@ class PaperTradingManager:
         return PaperTradingSessionSummary(
             id=session.id,
             name=session.name,
-            status=session.status,
+            status=cast(PaperSessionStatus, session.status),
             strategy_id=session.strategy_id,
             tickers=session.tickers,
-            bar_interval=session.bar_interval,
+            bar_interval=cast(BarInterval, session.bar_interval),
             polling_interval_seconds=session.polling_interval_seconds,
             initial_capital=session.initial_capital,
             cash=session.cash,

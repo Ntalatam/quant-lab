@@ -1,0 +1,154 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "infra/aws/**"
+      - "scripts/deploy/**"
+      - ".github/workflows/deploy-staging.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+      missing: ${{ steps.check.outputs.missing }}
+    steps:
+      - id: check
+        env:
+          AWS_GITHUB_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_DEPLOY_ROLE_ARN }}
+          TF_BACKEND_CONFIG: ${{ secrets.TF_BACKEND_CONFIG }}
+          AWS_ECR_FRONTEND_REPOSITORY_URL: ${{ vars.AWS_ECR_FRONTEND_REPOSITORY_URL }}
+          AWS_ECR_BACKEND_REPOSITORY_URL: ${{ vars.AWS_ECR_BACKEND_REPOSITORY_URL }}
+        run: |
+          missing=()
+          [[ -n "${AWS_GITHUB_DEPLOY_ROLE_ARN}" ]] || missing+=("secret AWS_GITHUB_DEPLOY_ROLE_ARN")
+          [[ -n "${TF_BACKEND_CONFIG}" ]] || missing+=("secret TF_BACKEND_CONFIG")
+          [[ -n "${AWS_ECR_FRONTEND_REPOSITORY_URL}" ]] || missing+=("variable AWS_ECR_FRONTEND_REPOSITORY_URL")
+          [[ -n "${AWS_ECR_BACKEND_REPOSITORY_URL}" ]] || missing+=("variable AWS_ECR_BACKEND_REPOSITORY_URL")
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            printf 'missing=%s\n' "$(IFS=', '; echo "${missing[*]}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "missing=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish readiness summary
+        run: |
+          if [[ "${{ steps.check.outputs.enabled }}" == "true" ]]; then
+            {
+              echo "### Staging Deployment Readiness"
+              echo ""
+              echo "All required secrets and variables are configured."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Staging Deployment Skipped"
+              echo ""
+              echo "Missing configuration: ${{ steps.check.outputs.missing }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  deploy:
+    needs: readiness
+    if: needs.readiness.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      FRONTEND_REPO: ${{ vars.AWS_ECR_FRONTEND_REPOSITORY_URL }}
+      BACKEND_REPO: ${{ vars.AWS_ECR_BACKEND_REPOSITORY_URL }}
+      IMAGE_TAG: ${{ github.sha }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: ${{ vars.TF_VAR_project_name || 'quantlab' }}
+      TF_VAR_environment: ${{ vars.TF_VAR_environment || 'staging' }}
+      TF_VAR_frontend_image: ${{ vars.AWS_ECR_FRONTEND_REPOSITORY_URL }}:${{ github.sha }}
+      TF_VAR_backend_image: ${{ vars.AWS_ECR_BACKEND_REPOSITORY_URL }}:${{ github.sha }}
+      TF_VAR_frontend_next_public_api_url: /api
+      TF_VAR_domain_name: ${{ vars.TF_VAR_domain_name }}
+      TF_VAR_hosted_zone_id: ${{ vars.TF_VAR_hosted_zone_id }}
+      TF_VAR_acm_certificate_arn: ${{ vars.TF_VAR_acm_certificate_arn }}
+      TF_VAR_database_username: ${{ vars.TF_VAR_database_username || 'quantlab' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_GITHUB_DEPLOY_ROLE_ARN }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=/api
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Write Terraform backend config
+        run: |
+          cat <<'EOF' > infra/aws/backend.hcl
+          ${{ secrets.TF_BACKEND_CONFIG }}
+          EOF
+
+      - name: Terraform init
+        working-directory: infra/aws
+        run: terraform init -backend-config=backend.hcl
+
+      - name: Terraform apply
+        working-directory: infra/aws
+        run: terraform apply -auto-approve
+
+      - name: Verify deployed health checks
+        working-directory: infra/aws
+        run: |
+          FRONTEND_URL="$(terraform output -raw frontend_healthcheck_url)"
+          BACKEND_URL="$(terraform output -raw backend_healthcheck_url)"
+          curl --fail --retry 10 --retry-delay 5 "$FRONTEND_URL"
+          curl --fail --retry 10 --retry-delay 5 "$BACKEND_URL"
+
+      - name: Publish deployment summary
+        working-directory: infra/aws
+        run: |
+          APP_URL="$(terraform output -raw app_url)"
+          {
+            echo "### Staging Deployment"
+            echo ""
+            echo "- Image tag: \`${IMAGE_TAG}\`"
+            echo "- App URL: ${APP_URL}"
+          } >> "$GITHUB_STEP_SUMMARY"

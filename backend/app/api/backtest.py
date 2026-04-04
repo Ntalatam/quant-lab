@@ -10,7 +10,9 @@ POST   /api/backtest/sweep     — Parameter sensitivity sweep
 
 import json
 import time
+from collections.abc import Sequence
 from datetime import date
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -53,7 +55,7 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 logger = get_logger(__name__)
 
 
-def serialize_backtest_run(run: BacktestRun, trades: list[TradeRecord]) -> dict:
+def serialize_backtest_run(run: BacktestRun, trades: Sequence[TradeRecord]) -> dict[str, Any]:
     return {
         "id": run.id,
         "config": {
@@ -590,9 +592,9 @@ async def bayesian_optimize(
         if not loaded:
             raise HTTPException(400, f"Could not load data for {ticker}")
 
-    trials_log = []
+    trials_log: list[dict[str, Any]] = []
 
-    def objective(trial: "optuna.Trial") -> float:  # type: ignore[name-defined]
+    def objective(trial: Any) -> float:
         import asyncio
 
         params = dict(config.base_config.params)
@@ -647,7 +649,7 @@ async def bayesian_optimize(
     best_value = study.best_value if config.maximize else -study.best_value
 
     # Sort trials for visualization
-    trials_sorted = sorted(trials_log, key=lambda t: t["trial"])
+    trials_sorted = sorted(trials_log, key=lambda t: int(t["trial"]))
 
     return {
         "best_params": best_params,

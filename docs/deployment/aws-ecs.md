@@ -103,6 +103,32 @@ terraform apply
 - The frontend image is built with `NEXT_PUBLIC_API_URL=/api`; changing the public API base requires rebuilding the frontend image.
 - ECS services default to public subnets with public IPs to avoid NAT Gateway cost for a portfolio demo. Security groups still only allow ingress from the ALB.
 
+## GitHub Actions Staging Deploy
+
+Tier 4 adds a guarded staging workflow at `.github/workflows/deploy-staging.yml`. It triggers on pushes to `main` that affect the app, infra, or deployment scripts, and it will skip cleanly with a workflow summary if the repo is not configured for AWS yet.
+
+Required GitHub secrets:
+
+- `AWS_GITHUB_DEPLOY_ROLE_ARN`: IAM role assumed through GitHub OIDC for ECR + Terraform access
+- `TF_BACKEND_CONFIG`: multi-line Terraform backend config snippet (for example the S3 bucket / DynamoDB settings from the bootstrap stack)
+
+Required GitHub repository variables:
+
+- `AWS_ECR_FRONTEND_REPOSITORY_URL`
+- `AWS_ECR_BACKEND_REPOSITORY_URL`
+
+Optional GitHub repository variables:
+
+- `AWS_REGION` default: `us-east-1`
+- `TF_VAR_project_name` default: `quantlab`
+- `TF_VAR_environment` default: `staging`
+- `TF_VAR_domain_name`
+- `TF_VAR_hosted_zone_id`
+- `TF_VAR_acm_certificate_arn`
+- `TF_VAR_database_username` default: `quantlab`
+
+The workflow builds and pushes frontend/backend images tagged with `github.sha`, applies the Terraform stack in `infra/aws`, and verifies the deployed `/healthz` and `/health` endpoints from Terraform outputs. The first deploy still assumes the ECR repositories and Terraform backend already exist, so do the bootstrap and first-time infra setup once before relying on automated staging deploys.
+
 ## Operational Recommendations
 
 - Enable `enable_deletion_protection=true` before treating the database as persistent.
