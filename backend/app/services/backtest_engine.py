@@ -29,7 +29,7 @@ from app.services.portfolio_optimizer import (
     PortfolioConstructionRequest,
     construct_target_weights,
 )
-from app.services.strategy_registry import get_strategy_class
+from app.services.strategy_registry import build_strategy_instance
 from app.services.trading import execute_target_weights
 
 ProgressCallback = Callable[[int, int, str, float], Awaitable[None]]
@@ -90,10 +90,9 @@ async def run_backtest(
         raise ValueError("No trading dates found in the specified range")
 
     # 4. Initialize strategy and portfolio
-    strategy_cls = get_strategy_class(config.strategy_id)
-    if strategy_cls.requires_short_selling and not config.allow_short_selling:
-        raise ValueError(f"{strategy_cls.name} requires short selling to be enabled.")
-    strategy = strategy_cls(**config.params)
+    strategy = await build_strategy_instance(db, config.strategy_id, config.params)
+    if strategy.requires_short_selling and not config.allow_short_selling:
+        raise ValueError(f"{strategy.name} requires short selling to be enabled.")
     portfolio = Portfolio(initial_capital=config.initial_capital)
 
     rebalance_dates = _get_rebalance_dates(all_dates, config.rebalance_frequency)

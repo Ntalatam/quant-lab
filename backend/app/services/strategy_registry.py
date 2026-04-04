@@ -2,6 +2,14 @@
 Strategy registry — central lookup for all strategy classes.
 """
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.custom_strategy import CustomStrategy
+from app.services.custom_strategy import (
+    build_custom_strategy_definition,
+    list_custom_strategy_records,
+    strategy_record_to_info,
+)
 from app.strategies.base import BaseStrategy
 from app.strategies.donchian_breakout import DonchianBreakout
 from app.strategies.macd_crossover import MACDCrossover
@@ -34,7 +42,7 @@ def get_strategy_class(strategy_id: str) -> type[BaseStrategy]:
     return STRATEGIES[strategy_id]
 
 
-def list_strategies() -> list[dict]:
+def list_builtin_strategies() -> list[dict]:
     result = []
     for sid, cls in STRATEGIES.items():
         result.append(
@@ -43,9 +51,57 @@ def list_strategies() -> list[dict]:
                 "name": cls.name,
                 "description": cls.description,
                 "category": cls.category,
+                "source_type": "builtin",
                 "signal_mode": cls.signal_mode,
                 "requires_short_selling": cls.requires_short_selling,
                 "params": cls.param_schema,
             }
         )
     return result
+
+
+async def list_strategies(db: AsyncSession | None = None) -> list[dict]:
+    result = list_builtin_strategies()
+    if db is None:
+        return result
+    custom = await list_custom_strategy_records(db)
+    result.extend(strategy_record_to_info(item) for item in custom)
+    return result
+
+
+async def get_strategy_info(
+    db: AsyncSession,
+    strategy_id: str,
+) -> dict:
+    if strategy_id in STRATEGIES:
+        strategy_cls = STRATEGIES[strategy_id]
+        return {
+            "id": strategy_id,
+            "name": strategy_cls.name,
+            "description": strategy_cls.description,
+            "category": strategy_cls.category,
+            "source_type": "builtin",
+            "signal_mode": strategy_cls.signal_mode,
+            "requires_short_selling": strategy_cls.requires_short_selling,
+            "params": strategy_cls.param_schema,
+            "defaults": strategy_cls.default_params,
+        }
+
+    custom = await db.get(CustomStrategy, strategy_id)
+    if custom is None:
+        raise ValueError(f"Unknown strategy: {strategy_id}")
+    return {
+        **strategy_record_to_info(custom),
+        "defaults": custom.default_params,
+    }
+
+
+async def build_strategy_instance(
+    db: AsyncSession,
+    strategy_id: str,
+    params: dict,
+) -> BaseStrategy:
+    if strategy_id in STRATEGIES:
+        return STRATEGIES[strategy_id](**params)
+    definition = await build_custom_strategy_definition(db, strategy_id)
+    return definition.instantiate(params)

@@ -31,7 +31,7 @@ from app.services.portfolio_optimizer import (
     PortfolioConstructionRequest,
     construct_target_weights,
 )
-from app.services.strategy_registry import get_strategy_class
+from app.services.strategy_registry import build_strategy_instance
 from app.services.trading import execute_target_weights
 
 NO_MARKET_DATA_ERROR = "No live market data was returned."
@@ -132,11 +132,11 @@ class PaperTradingManager:
         log.info("paper_trading.session_create.started")
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow()
-        strategy_cls = get_strategy_class(payload.strategy_id)
-        if strategy_cls.requires_short_selling and not payload.allow_short_selling:
-            raise ValueError(f"{strategy_cls.name} requires short selling to be enabled.")
 
         async with self._session_factory() as db:
+            strategy = await build_strategy_instance(db, payload.strategy_id, payload.params)
+            if strategy.requires_short_selling and not payload.allow_short_selling:
+                raise ValueError(f"{strategy.name} requires short selling to be enabled.")
             session = PaperTradingSession(
                 id=session_id,
                 name=payload.name,
@@ -217,9 +217,11 @@ class PaperTradingManager:
             session = await db.get(PaperTradingSession, session_id)
             if not session:
                 raise ValueError("Paper trading session not found")
-            strategy_cls = get_strategy_class(session.strategy_id)
-            if strategy_cls.requires_short_selling and not session.allow_short_selling:
-                raise ValueError(f"{strategy_cls.name} requires short selling to be enabled.")
+            strategy = await build_strategy_instance(
+                db, session.strategy_id, session.strategy_params
+            )
+            if strategy.requires_short_selling and not session.allow_short_selling:
+                raise ValueError(f"{strategy.name} requires short selling to be enabled.")
 
             status_changed = session.status != "active"
             session.status = "active"
@@ -359,8 +361,11 @@ class PaperTradingManager:
             if not session:
                 raise ValueError("Paper trading session not found")
 
-            strategy_cls = get_strategy_class(session.strategy_id)
-            runtime.strategy = strategy_cls(**session.strategy_params)
+            runtime.strategy = await build_strategy_instance(
+                db,
+                session.strategy_id,
+                session.strategy_params,
+            )
             runtime.portfolio = Portfolio(
                 initial_capital=session.initial_capital,
                 cash=session.cash,

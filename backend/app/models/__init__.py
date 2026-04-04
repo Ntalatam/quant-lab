@@ -1,4 +1,5 @@
 from app.models.backtest import BacktestRun
+from app.models.custom_strategy import CustomStrategy
 from app.models.paper import (
     PaperTradingEquityPoint,
     PaperTradingEvent,
@@ -11,6 +12,7 @@ from app.models.trade import TradeRecord
 __all__ = [
     "PriceData",
     "BacktestRun",
+    "CustomStrategy",
     "TradeRecord",
     "PaperTradingSession",
     "PaperTradingPosition",

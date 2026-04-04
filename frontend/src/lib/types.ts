@@ -15,14 +15,55 @@ export interface StrategyInfo {
   id: string;
   name: string;
   description: string;
+  source_type?: "builtin" | "custom";
   signal_mode: "long_only" | "long_short";
   requires_short_selling: boolean;
   category:
     | "trend_following"
     | "mean_reversion"
     | "momentum"
-    | "statistical_arbitrage";
+    | "statistical_arbitrage"
+    | "risk_management"
+    | "custom"
+    | string;
   params: StrategyParam[];
+}
+
+export interface StrategyEditorHelper {
+  name: string;
+  signature: string;
+  description: string;
+}
+
+export interface StrategyEditorSpec {
+  template: string;
+  rules: string[];
+  helpers: StrategyEditorHelper[];
+}
+
+export interface StrategyValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  extracted: {
+    id: string;
+    name: string;
+    source_type: "custom";
+    params: StrategyParam[];
+    defaults: Record<string, number | string | boolean>;
+  } | null;
+  preview: StrategyInfo | null;
+}
+
+export interface CustomStrategySummary extends StrategyInfo {
+  source_type: "custom";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomStrategyDetail extends CustomStrategySummary {
+  defaults: Record<string, number | string | boolean>;
+  code: string;
 }
 
 // ---- Backtest Configuration ----

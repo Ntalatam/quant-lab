@@ -31,6 +31,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   mean_reversion: "Mean Reversion",
   momentum: "Momentum",
   statistical_arbitrage: "Statistical Arbitrage",
+  risk_management: "Risk Management",
+  custom: "Custom",
 };
 
 export const CHART_COLORS = {
@@ -47,6 +49,16 @@ export const CHART_COLORS = {
 } as const;
 
 export const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ] as const;

@@ -6,6 +6,8 @@ import type {
   BayesOptResult,
   CapacityResult,
   ComparisonResult,
+  CustomStrategyDetail,
+  CustomStrategySummary,
   EconomicIndicatorCatalogEntry,
   EconomicIndicatorsResponse,
   EarningsOverview,
@@ -27,6 +29,8 @@ import type {
   RiskBudgetResult,
   SpreadResult,
   StrategyInfo,
+  StrategyEditorSpec,
+  StrategyValidationResult,
   SweepResult,
   Sweep2DResult,
   TransactionCostAnalysisResult,
@@ -235,10 +239,55 @@ class ApiClient {
   async getStrategyParams(strategyId: string): Promise<{
     id: string;
     name: string;
+    source_type?: "builtin" | "custom";
     params: StrategyInfo["params"];
     defaults: Record<string, number | string | boolean>;
   }> {
     return this.request(`/strategies/${strategyId}/params`);
+  }
+
+  async getStrategyEditorSpec(): Promise<StrategyEditorSpec> {
+    return this.request("/strategies/custom/editor-spec");
+  }
+
+  async validateCustomStrategy(
+    code: string,
+  ): Promise<StrategyValidationResult> {
+    return this.request("/strategies/custom/validate", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async listCustomStrategies(): Promise<CustomStrategySummary[]> {
+    return this.request("/strategies/custom");
+  }
+
+  async getCustomStrategy(id: string): Promise<CustomStrategyDetail> {
+    return this.request(`/strategies/custom/${id}`);
+  }
+
+  async createCustomStrategy(code: string): Promise<CustomStrategyDetail> {
+    return this.request("/strategies/custom", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async updateCustomStrategy(
+    id: string,
+    code: string,
+  ): Promise<CustomStrategyDetail> {
+    return this.request(`/strategies/custom/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async deleteCustomStrategy(
+    id: string,
+  ): Promise<{ deleted: boolean; id: string }> {
+    return this.request(`/strategies/custom/${id}`, { method: "DELETE" });
   }
 
   // Analytics

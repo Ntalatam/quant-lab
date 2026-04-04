@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -105,7 +106,8 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
           prefillConfig.position_sizing ??
           draft.portfolio_construction_model,
         portfolio_lookback_days:
-          prefillConfig.portfolio_lookback_days ?? draft.portfolio_lookback_days,
+          prefillConfig.portfolio_lookback_days ??
+          draft.portfolio_lookback_days,
         max_position_pct:
           prefillConfig.max_position_pct ?? draft.max_position_pct,
         max_gross_exposure_pct:
@@ -113,11 +115,11 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
         turnover_limit_pct:
           prefillConfig.turnover_limit_pct ?? draft.turnover_limit_pct,
         max_sector_exposure_pct:
-          prefillConfig.max_sector_exposure_pct ?? draft.max_sector_exposure_pct,
-        allow_short_selling:
-          strategy.requires_short_selling
-            ? true
-            : prefillConfig.allow_short_selling ?? draft.allow_short_selling,
+          prefillConfig.max_sector_exposure_pct ??
+          draft.max_sector_exposure_pct,
+        allow_short_selling: strategy.requires_short_selling
+          ? true
+          : (prefillConfig.allow_short_selling ?? draft.allow_short_selling),
         max_short_position_pct:
           prefillConfig.max_short_position_pct ?? draft.max_short_position_pct,
         short_margin_requirement_pct:
@@ -144,8 +146,11 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
   }, [draft, prefillConfig, strategies]);
 
   const selectedStrategy = useMemo(
-    () => strategies?.find((strategy) => strategy.id === effectiveDraft.strategy_id),
-    [effectiveDraft.strategy_id, strategies]
+    () =>
+      strategies?.find(
+        (strategy) => strategy.id === effectiveDraft.strategy_id,
+      ),
+    [effectiveDraft.strategy_id, strategies],
   );
 
   const canSubmit =
@@ -249,8 +254,8 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
         </h2>
         <p className="text-xs text-text-muted mt-1">
           Live signal generation with minute-by-minute mark-to-market updates.
-          Existing strategy parameters are reused, so intraday intervals may need
-          tighter tuning than daily backtests.
+          Existing strategy parameters are reused, so intraday intervals may
+          need tighter tuning than daily backtests.
         </p>
       </div>
 
@@ -315,6 +320,14 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
                     Requires short selling
                   </span>
                 )}
+                {selectedStrategy.source_type === "custom" && (
+                  <Link
+                    href={`/strategies/custom?strategyId=${encodeURIComponent(selectedStrategy.id)}`}
+                    className="text-accent-purple hover:opacity-80 transition-opacity"
+                  >
+                    Edit in studio
+                  </Link>
+                )}
               </div>
             </div>
           )}
@@ -327,7 +340,8 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
             </p>
             <div className="space-y-3">
               {selectedStrategy.params.map((param) => {
-                const value = effectiveDraft.params[param.name] ?? param.default;
+                const value =
+                  effectiveDraft.params[param.name] ?? param.default;
                 return (
                   <div key={param.name}>
                     <div className="flex justify-between items-center mb-1">
@@ -481,7 +495,8 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
               onChange={(event) =>
                 setDraft({
                   ...effectiveDraft,
-                  bar_interval: event.target.value as PaperTradingSessionCreate["bar_interval"],
+                  bar_interval: event.target
+                    .value as PaperTradingSessionCreate["bar_interval"],
                 })
               }
               className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
@@ -578,8 +593,8 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
                   onChange={(event) =>
                     setDraft({
                       ...effectiveDraft,
-                      market_impact_model:
-                        event.target.value as PaperTradingSessionCreate["market_impact_model"],
+                      market_impact_model: event.target
+                        .value as PaperTradingSessionCreate["market_impact_model"],
                     })
                   }
                   className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
@@ -650,8 +665,8 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
                 onChange={(event) =>
                   setDraft({
                     ...effectiveDraft,
-                    portfolio_construction_model:
-                      event.target.value as PaperTradingSessionCreate["portfolio_construction_model"],
+                    portfolio_construction_model: event.target
+                      .value as PaperTradingSessionCreate["portfolio_construction_model"],
                   })
                 }
                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
@@ -808,7 +823,10 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
                       onChange={(event) =>
                         setDraft({
                           ...effectiveDraft,
-                          max_short_position_pct: parseInt(event.target.value, 10),
+                          max_short_position_pct: parseInt(
+                            event.target.value,
+                            10,
+                          ),
                         })
                       }
                       className="w-full accent-accent-yellow"
@@ -936,7 +954,9 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
           }}
         >
           {createMutation.isPending ? <LoadingSpinner size={14} /> : null}
-          {createMutation.isPending ? "Creating Session…" : "Create Live Session"}
+          {createMutation.isPending
+            ? "Creating Session…"
+            : "Create Live Session"}
         </button>
       </div>
     </div>

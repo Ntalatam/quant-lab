@@ -46,6 +46,7 @@ const NAV_SECTIONS = [
       { href: "/options", label: "Options Lab", icon: CircleDollarSign },
       { href: "/lineage", label: "Research Timeline", icon: GitBranch },
       { href: "/strategies", label: "Strategy Library", icon: Code2 },
+      { href: "/strategies/custom", label: "Strategy Studio", icon: Code2 },
     ],
   },
   {
@@ -71,8 +72,11 @@ export function Sidebar() {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/strategies") return pathname === "/strategies";
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   const sidebarContent = (
     <>

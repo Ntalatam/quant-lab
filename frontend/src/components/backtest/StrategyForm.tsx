@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import type { BacktestConfig } from "@/lib/types";
 import { useStrategies } from "@/hooks/useAnalytics";
 import { useBacktestStore } from "@/store/backtest-store";
@@ -17,9 +18,7 @@ export function StrategyForm() {
   const { data: strategies, isLoading } = useStrategies();
   const { config, setConfig } = useBacktestStore();
 
-  const selectedStrategy = strategies?.find(
-    (s) => s.id === config.strategy_id
-  );
+  const selectedStrategy = strategies?.find((s) => s.id === config.strategy_id);
 
   // Set default params when strategy changes
   useEffect(() => {
@@ -35,7 +34,12 @@ export function StrategyForm() {
           : config.allow_short_selling,
       });
     }
-  }, [config.allow_short_selling, config.strategy_id, selectedStrategy, setConfig]);
+  }, [
+    config.allow_short_selling,
+    config.strategy_id,
+    selectedStrategy,
+    setConfig,
+  ]);
 
   if (isLoading) return <LoadingSpinner />;
 
@@ -92,6 +96,14 @@ export function StrategyForm() {
                 <span className="text-accent-yellow">
                   Requires short selling
                 </span>
+              )}
+              {selectedStrategy.source_type === "custom" && (
+                <Link
+                  href={`/strategies/custom?strategyId=${encodeURIComponent(selectedStrategy.id)}`}
+                  className="text-accent-purple hover:opacity-80 transition-opacity"
+                >
+                  Edit in studio
+                </Link>
               )}
             </div>
           </div>
@@ -294,8 +306,8 @@ export function StrategyForm() {
                 value={config.market_impact_model ?? "almgren_chriss"}
                 onChange={(e) =>
                   setConfig({
-                    market_impact_model:
-                      e.target.value as BacktestConfig["market_impact_model"],
+                    market_impact_model: e.target
+                      .value as BacktestConfig["market_impact_model"],
                   })
                 }
                 className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -339,9 +351,10 @@ export function StrategyForm() {
               }
               onChange={(e) =>
                 setConfig({
-                  position_sizing: e.target.value as BacktestConfig["portfolio_construction_model"],
-                  portfolio_construction_model:
-                    e.target.value as BacktestConfig["portfolio_construction_model"],
+                  position_sizing: e.target
+                    .value as BacktestConfig["portfolio_construction_model"],
+                  portfolio_construction_model: e.target
+                    .value as BacktestConfig["portfolio_construction_model"],
                 })
               }
               className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -482,7 +495,8 @@ export function StrategyForm() {
                 : "Turn this on to let long/short strategies open new short positions and to enable borrow, locate, and squeeze controls."}
             </p>
 
-            {(config.allow_short_selling || selectedStrategy?.requires_short_selling) && (
+            {(config.allow_short_selling ||
+              selectedStrategy?.requires_short_selling) && (
               <div className="space-y-3">
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -518,7 +532,9 @@ export function StrategyForm() {
                     value={config.short_margin_requirement_pct ?? 50}
                     onChange={(e) =>
                       setConfig({
-                        short_margin_requirement_pct: parseFloat(e.target.value),
+                        short_margin_requirement_pct: parseFloat(
+                          e.target.value,
+                        ),
                       })
                     }
                     className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-yellow"
@@ -586,7 +602,10 @@ export function StrategyForm() {
             <select
               value={config.rebalance_frequency || "daily"}
               onChange={(e) =>
-                setConfig({ rebalance_frequency: e.target.value as BacktestConfig["rebalance_frequency"] })
+                setConfig({
+                  rebalance_frequency: e.target
+                    .value as BacktestConfig["rebalance_frequency"],
+                })
               }
               className="w-full bg-bg-card border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
