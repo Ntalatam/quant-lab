@@ -7,20 +7,15 @@ POST /api/analytics/correlation          — Correlation matrix & cointegration 
 POST /api/analytics/spread              — Spread & z-score for a specific pair
 """
 
-import csv
-import io
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.backtest import BacktestRun
-from app.models.trade import TradeRecord
 from app.schemas.analytics import (
     CapacityResponse,
     CompareRequest,
@@ -39,6 +34,17 @@ from app.schemas.analytics import (
 )
 from app.schemas.common import ErrorResponse
 from app.services.analytics import compute_all_metrics, compute_monte_carlo
+from app.services.analytics_backtests import (
+    aligned_equity_frame,
+    backtest_equity_series,
+    backtest_returns_series,
+    benchmark_series,
+    build_backtest_export_csv,
+    load_backtest_run_or_404,
+    load_backtest_runs_or_404,
+    load_backtest_trades,
+    resolve_blend_weights,
+)
 from app.services.risk_budget import build_risk_budget_report
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -60,15 +66,8 @@ async def risk_budget_analysis(
     lookback_days: int = Query(63, ge=21, le=252),
     db: AsyncSession = Depends(get_db),
 ):
-    run_result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = run_result.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
-
-    trades_result = await db.execute(
-        select(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
-    )
-    trades = trades_result.scalars().all()
+    run = await load_backtest_run_or_404(db, backtest_id)
+    trades = await load_backtest_trades(db, backtest_id)
     return await build_risk_budget_report(
         db=db,
         run=run,
@@ -104,28 +103,10 @@ async def compare_backtests(
     if len(ids) < 2:
         raise HTTPException(400, "Need at least 2 backtests to compare")
 
-    results = []
-    for bid in ids:
-        r = await db.execute(select(BacktestRun).where(BacktestRun.id == bid))
-        run = r.scalar_one_or_none()
-        if not run:
-            raise HTTPException(404, f"Backtest {bid} not found")
-        results.append(run)
+    results = await load_backtest_runs_or_404(db, ids)
 
     # Correlation matrix from equity curves
-    curves = {}
-    for run in results:
-        series = (
-            pd.Series(
-                [p["value"] for p in run.equity_curve],
-                index=pd.to_datetime([p["date"] for p in run.equity_curve]),
-            )
-            .pct_change()
-            .dropna()
-        )
-        curves[run.id] = series
-
-    df = pd.DataFrame(curves)
+    df = pd.concat([backtest_returns_series(run, name=run.id) for run in results], axis=1)
     corr = df.corr().values.tolist()
 
     return {
@@ -159,15 +140,8 @@ async def monte_carlo(
     n_days: int = Query(252, ge=30, le=1260),
     db: AsyncSession = Depends(get_db),
 ):
-    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = r.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
-
-    equity = pd.Series(
-        [p["value"] for p in run.equity_curve],
-        index=pd.to_datetime([p["date"] for p in run.equity_curve]),
-    )
+    run = await load_backtest_run_or_404(db, backtest_id)
+    equity = backtest_equity_series(run)
     returns = equity.pct_change().dropna()
 
     result = compute_monte_carlo(
@@ -204,41 +178,11 @@ async def export_results(
     format: str = Query("csv"),
     db: AsyncSession = Depends(get_db),
 ):
-    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = r.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
+    run = await load_backtest_run_or_404(db, backtest_id)
 
     if format == "csv":
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        writer.writerow(["=== Configuration ==="])
-        writer.writerow(["strategy", run.strategy_id])
-        writer.writerow(["tickers", ", ".join(run.tickers)])
-        writer.writerow(["period", f"{run.start_date} to {run.end_date}"])
-        writer.writerow(["initial_capital", run.initial_capital])
-        writer.writerow([])
-
-        writer.writerow(["=== Performance Metrics ==="])
-        for key, value in run.metrics.items():
-            writer.writerow([key, value])
-
-        writer.writerow([])
-        writer.writerow(["=== Equity Curve ==="])
-        writer.writerow(["date", "equity"])
-        for pt in run.equity_curve:
-            writer.writerow([pt["date"], pt["value"]])
-
-        writer.writerow([])
-        writer.writerow(["=== Monthly Returns ==="])
-        writer.writerow(["year", "month", "return_pct"])
-        for mr in run.monthly_returns:
-            writer.writerow([mr["year"], mr["month"], mr["return_pct"]])
-
-        output.seek(0)
         return StreamingResponse(
-            iter([output.getvalue()]),
+            iter([build_backtest_export_csv(run)]),
             media_type="text/csv",
             headers={
                 "Content-Disposition": (f"attachment; filename=backtest_{backtest_id[:8]}.csv")
@@ -270,19 +214,12 @@ async def capacity_analysis(
     """
     from datetime import date as date_cls
 
-    from app.models.trade import TradeRecord
     from app.services.data_ingestion import get_price_dataframe
 
-    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = r.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
+    run = await load_backtest_run_or_404(db, backtest_id)
 
     # Load trades
-    trades_r = await db.execute(
-        select(TradeRecord).where(TradeRecord.backtest_run_id == backtest_id)
-    )
-    trades = trades_r.scalars().all()
+    trades = await load_backtest_trades(db, backtest_id)
 
     if not trades:
         return {
@@ -390,17 +327,8 @@ async def transaction_cost_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    run_result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = run_result.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
-
-    trades_result = await db.execute(
-        select(TradeRecord)
-        .where(TradeRecord.backtest_run_id == backtest_id)
-        .order_by(TradeRecord.entry_date.asc(), TradeRecord.ticker.asc())
-    )
-    trades = trades_result.scalars().all()
+    run = await load_backtest_run_or_404(db, backtest_id)
+    trades = await load_backtest_trades(db, backtest_id)
     model = {
         "market_impact_model": run.market_impact_model or "almgren_chriss",
         "max_volume_participation_pct": run.max_volume_participation_pct or 5,
@@ -430,7 +358,7 @@ async def transaction_cost_analysis(
             "top_cost_trades": [],
         }
 
-    def _fill_rate(trade: TradeRecord) -> float:
+    def _fill_rate(trade: Any) -> float:
         requested = trade.requested_shares or trade.shares
         return (trade.shares / max(requested, 1)) * 100
 
@@ -578,10 +506,7 @@ async def regime_analysis(
 
     from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
-    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = r.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
+    run = await load_backtest_run_or_404(db, backtest_id)
 
     start = date_cls.fromisoformat(run.start_date)
     end = date_cls.fromisoformat(run.end_date)
@@ -595,10 +520,7 @@ async def regime_analysis(
     bench_df = await get_price_dataframe(db, benchmark_ticker, start, end)
 
     # Strategy equity
-    strat_series = pd.Series(
-        [p["value"] for p in run.equity_curve],
-        index=pd.to_datetime([p["date"] for p in run.equity_curve]),
-    )
+    strat_series = backtest_equity_series(run)
     strat_returns = strat_series.pct_change().dropna()
 
     # Compute ADX (14-period)
@@ -751,19 +673,13 @@ async def factor_exposure(
 
     from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
-    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
-    run = r.scalar_one_or_none()
-    if not run:
-        raise HTTPException(404, "Backtest not found")
+    run = await load_backtest_run_or_404(db, backtest_id)
 
     start = date_cls.fromisoformat(run.start_date)
     end = date_cls.fromisoformat(run.end_date)
 
     # Strategy returns
-    strategy_series = pd.Series(
-        [p["value"] for p in run.equity_curve],
-        index=pd.to_datetime([p["date"] for p in run.equity_curve]),
-    )
+    strategy_series = backtest_equity_series(run)
     strategy_returns = strategy_series.pct_change().dropna()
 
     # Fetch factor proxies (best-effort; skip if yfinance fails)
@@ -893,43 +809,17 @@ async def portfolio_blend(
     if len(ids) < 2:
         raise HTTPException(400, "Need at least 2 backtests to blend")
 
-    runs = []
-    for bid in ids:
-        r = await db.execute(select(BacktestRun).where(BacktestRun.id == bid))
-        run = r.scalar_one_or_none()
-        if not run:
-            raise HTTPException(404, f"Backtest {bid} not found")
-        runs.append(run)
+    runs = await load_backtest_runs_or_404(db, ids)
 
     # Align equity curves to common dates
-    series_list = []
-    for run in runs:
-        s = pd.Series(
-            [p["value"] for p in run.equity_curve],
-            index=pd.to_datetime([p["date"] for p in run.equity_curve]),
-        )
-        # Normalize to 1.0 start
-        s = s / s.iloc[0]
-        series_list.append(s)
-
-    df = pd.concat(series_list, axis=1).ffill().dropna()
-    df.columns = list(range(len(runs)))
+    df = aligned_equity_frame(
+        runs,
+        normalize_to=1.0,
+        column_names=list(range(len(runs))),
+    )
 
     returns = df.pct_change().dropna()
-    n = len(runs)
-
-    if optimize == "equal":
-        weights = np.array([1.0 / n] * n)
-    elif optimize == "max_sharpe":
-        weights = _max_sharpe_weights(returns)
-    elif optimize == "min_dd":
-        weights = _min_dd_weights(returns, df)
-    else:
-        # Use provided weights, normalize to sum to 1
-        w = np.array(weights_in[:n], dtype=float)
-        if w.sum() == 0:
-            w = np.ones(n) / n
-        weights = w / w.sum()
+    weights = resolve_blend_weights(returns, df, optimize, weights_in)
 
     # Compute portfolio equity curve
     initial_capital = runs[0].initial_capital
@@ -943,14 +833,7 @@ async def portfolio_blend(
     ]
 
     # Metrics on portfolio
-    bench_series = (
-        pd.Series(
-            [p["value"] for p in runs[0].benchmark_curve],
-            index=pd.to_datetime([p["date"] for p in runs[0].benchmark_curve]),
-        )
-        if runs[0].benchmark_curve
-        else pd.Series(dtype=float)
-    )
+    bench_series = benchmark_series(runs[0])
     # Normalize benchmark to same scale
     if not bench_series.empty:
         bench_series = bench_series / bench_series.iloc[0] * initial_capital
@@ -979,47 +862,6 @@ async def portfolio_blend(
         "metrics": metrics,
         "asset_contributions": asset_contribs,
     }
-
-
-def _max_sharpe_weights(returns: pd.DataFrame) -> np.ndarray:
-    """Find weights maximizing Sharpe ratio via scipy optimization."""
-    from scipy.optimize import minimize
-
-    n = returns.shape[1]
-    mean_ret = returns.mean() * 252
-    cov = returns.cov() * 252
-
-    def neg_sharpe(w):
-        port_ret = np.dot(w, mean_ret)
-        port_vol = np.sqrt(np.dot(w, np.dot(cov.values, w)))
-        return -port_ret / port_vol if port_vol > 0 else 0
-
-    constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
-    bounds = [(0.0, 1.0)] * n
-    x0 = np.ones(n) / n
-    result = minimize(neg_sharpe, x0, method="SLSQP", bounds=bounds, constraints=constraints)
-    w = result.x
-    return w / w.sum()
-
-
-def _min_dd_weights(returns: pd.DataFrame, df: pd.DataFrame) -> np.ndarray:
-    """Find weights minimizing maximum portfolio drawdown."""
-    from scipy.optimize import minimize
-
-    n = returns.shape[1]
-
-    def max_dd(w):
-        port_equity = (df * w).sum(axis=1)
-        roll_max = port_equity.expanding().max()
-        dd = (port_equity - roll_max) / roll_max
-        return float(dd.min())  # most negative value = worst drawdown
-
-    constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
-    bounds = [(0.0, 1.0)] * n
-    x0 = np.ones(n) / n
-    result = minimize(max_dd, x0, method="SLSQP", bounds=bounds, constraints=constraints)
-    w = result.x
-    return w / w.sum()
 
 
 # ---------------------------------------------------------------------------
