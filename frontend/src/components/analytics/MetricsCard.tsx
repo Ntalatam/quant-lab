@@ -35,29 +35,51 @@ export function MetricsCard({
         : "text-accent-red";
 
   // Benchmark delta — show arrow + color if provided
-  const hasBench = benchmark !== undefined && benchmark !== null && benchmark !== "";
+  const hasBench =
+    benchmark !== undefined && benchmark !== null && benchmark !== "";
 
   return (
     <div
-      className="relative overflow-hidden rounded-[5px] hover:bg-bg-hover transition-colors duration-150"
+      className="panel-soft relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:bg-bg-hover"
       style={{
-        background: "var(--color-bg-card)",
-        border: "1px solid var(--color-border)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
+        borderColor: "rgba(111,130,166,0.14)",
       }}
       title={description}
     >
-      {/* Accent bar — 2px strip at top, color-coded */}
       <div
-        className="absolute top-0 left-0 right-0 h-[2px] rounded-t-[5px]"
-        style={{ background: accentColor, opacity: 0.7 }}
+        className="absolute inset-x-0 top-0 h-[3px]"
+        style={{
+          background: `linear-gradient(90deg, ${accentColor}, transparent)`,
+          opacity: 0.9,
+        }}
+      />
+      <div
+        className="absolute -right-10 top-0 h-24 w-24 rounded-full blur-2xl"
+        style={{ background: `${accentColor}26` }}
       />
 
-      <div className={size === "sm" ? "px-3 py-2.5 pt-3.5" : "px-4 py-3 pt-4"}>
-        {/* Label */}
-        <p className="section-label mb-1.5">{label}</p>
+      <div className={size === "sm" ? "px-3 py-3.5" : "px-4 py-4"}>
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <p className="section-label">{label}</p>
+          {percentile !== undefined && (
+            <span
+              className="rounded-full px-2 py-1 text-[9px] font-mono"
+              style={{
+                color:
+                  percentile >= 0.67
+                    ? "var(--color-accent-green)"
+                    : percentile >= 0.33
+                      ? "var(--color-accent-yellow)"
+                      : "var(--color-accent-red)",
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(111,130,166,0.12)",
+              }}
+            >
+              top {Math.max(1, Math.round((1 - percentile) * 100))}%
+            </span>
+          )}
+        </div>
 
-        {/* Value */}
         <p
           className={`font-mono tabular-nums font-semibold ${valueColor} ${
             size === "sm" ? "text-base" : "text-xl"
@@ -66,25 +88,15 @@ export function MetricsCard({
           {value ?? "—"}
         </p>
 
-        {/* Benchmark */}
         {hasBench && (
           <p className="text-[10px] text-text-muted mt-1 font-mono tabular-nums">
-            <span className="text-text-muted/60">Bench</span>{" "}
-            {benchmark}
+            <span className="text-text-muted/60">Bench</span> {benchmark}
           </p>
         )}
 
-        {/* Percentile rank */}
-        {percentile !== undefined && (
-          <p className="text-[9px] mt-1 font-mono" style={{
-            color: percentile >= 0.67
-              ? "var(--color-accent-green)"
-              : percentile >= 0.33
-              ? "var(--color-accent-yellow)"
-              : "var(--color-accent-red)",
-          }}>
-            {percentile >= 0.67 ? "▲" : percentile >= 0.33 ? "●" : "▼"}{" "}
-            top {Math.max(1, Math.round((1 - percentile) * 100))}%
+        {description && (
+          <p className="mt-2 max-w-[20ch] text-[11px] leading-relaxed text-text-muted">
+            {description}
           </p>
         )}
       </div>

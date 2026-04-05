@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { StrategyForm } from "@/components/backtest/StrategyForm";
-import { useBacktestStore } from "@/store/backtest-store";
-import { useBacktestProgress } from "@/hooks/useBacktestProgress";
-import { Play, Zap, Wifi, TrendingUp } from "lucide-react";
+import { Play, Radar, TrendingUp, Wifi, Zap } from "lucide-react";
+
 import type { BacktestConfig } from "@/lib/types";
+import { StrategyForm } from "@/components/backtest/StrategyForm";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { useBacktestProgress } from "@/hooks/useBacktestProgress";
+import { useBacktestStore } from "@/store/backtest-store";
 
 function ProgressBar({ pct }: { pct: number }) {
   return (
@@ -77,39 +79,62 @@ export default function NewBacktestPage() {
       <Suspense fallback={null}>
         <ConfigLoader />
       </Suspense>
-      {/* Page header */}
-      <div className="mb-7">
-        <h1 className="text-xl font-bold text-text-primary tracking-tight">
-          New Backtest
-        </h1>
-        <p className="text-xs text-text-muted mt-0.5">
-          Configure your strategy, set execution parameters, and run the
-          simulation
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Research launchpad"
+        title="New Backtest"
+        description="Configure your strategy, execution controls, and portfolio construction in one place, then stream the simulation live as equity updates bar by bar."
+        meta={
+          <>
+            <span className="status-pill">
+              <Wifi size={12} className="text-accent-blue" />
+              WebSocket progress
+            </span>
+            <span className="status-pill">
+              <Radar size={12} className="text-accent-yellow" />
+              Event-driven execution
+            </span>
+          </>
+        }
+        actions={
+          <button
+            onClick={handleRun}
+            disabled={!isValid || isRunning}
+            className={`${
+              isValid && !isRunning ? "action-primary" : "action-secondary"
+            } min-w-[180px] disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            {progress.status === "connecting" ? (
+              <>
+                <Wifi size={15} className="animate-pulse" />
+                Launching…
+              </>
+            ) : progress.status === "running" ? (
+              <>
+                <TrendingUp size={15} />
+                Live Run — {Math.round(progress.pct * 100)}%
+              </>
+            ) : (
+              <>
+                <Play size={15} />
+                Launch Simulation
+              </>
+            )}
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Config */}
         <div className="lg:col-span-2">
-          <div
-            className="rounded-md p-5"
-            style={{
-              background: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-              boxShadow:
-                "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
-            }}
-          >
+          <div className="panel-soft p-5 lg:p-6">
             <StrategyForm />
 
             <div
               className="mt-6 pt-5"
-              style={{ borderTop: "1px solid var(--color-border)" }}
+              style={{ borderTop: "1px solid rgba(111,130,166,0.12)" }}
             >
-              {/* Error state */}
               {progress.status === "error" && (
                 <div
-                  className="mb-4 rounded p-3 flex items-start justify-between gap-3"
+                  className="mb-4 flex items-start justify-between gap-3 rounded-2xl p-3"
                   style={{
                     background: "rgba(255,71,87,0.08)",
                     border: "1px solid rgba(255,71,87,0.25)",
@@ -125,14 +150,14 @@ export default function NewBacktestPage() {
                 </div>
               )}
 
-              {/* Live progress UI */}
               {(progress.status === "connecting" ||
                 progress.status === "running") && (
                 <div
-                  className="mb-4 rounded-md p-4 space-y-3"
+                  className="mb-4 space-y-3 rounded-[22px] p-4"
                   style={{
-                    background: "rgba(68,136,255,0.05)",
-                    border: "1px solid rgba(68,136,255,0.18)",
+                    background:
+                      "linear-gradient(135deg, rgba(107,149,255,0.12) 0%, rgba(40,221,176,0.08) 100%)",
+                    border: "1px solid rgba(107,149,255,0.2)",
                   }}
                 >
                   {progress.status === "connecting" && (
@@ -189,20 +214,9 @@ export default function NewBacktestPage() {
               <button
                 onClick={handleRun}
                 disabled={!isValid || isRunning}
-                className="w-full flex items-center justify-center gap-2 font-semibold rounded py-3 text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={
-                  isValid && !isRunning
-                    ? {
-                        background: "var(--color-accent-green)",
-                        color: "var(--color-bg-primary)",
-                        boxShadow: "0 0 20px rgba(0,212,170,0.2)",
-                      }
-                    : {
-                        background: "rgba(0,212,170,0.15)",
-                        color: "var(--color-accent-green)",
-                        border: "1px solid rgba(0,212,170,0.2)",
-                      }
-                }
+                className={`w-full ${
+                  isValid && !isRunning ? "action-primary" : "action-secondary"
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 {progress.status === "connecting" ? (
                   <>
@@ -225,16 +239,8 @@ export default function NewBacktestPage() {
           </div>
         </div>
 
-        {/* Right: Live preview */}
         <div className="space-y-4">
-          <div
-            className="rounded-md p-4"
-            style={{
-              background: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
-            }}
-          >
+          <div className="panel-soft p-5">
             <div className="flex items-center gap-2 mb-4">
               <Zap size={12} className="text-accent-yellow" />
               <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
@@ -313,8 +319,8 @@ export default function NewBacktestPage() {
               ].map(({ label, value }) => (
                 <div
                   key={label}
-                  className="flex justify-between items-center text-xs py-1"
-                  style={{ borderBottom: "1px solid rgba(37,37,53,0.5)" }}
+                  className="flex justify-between items-center text-xs py-1.5"
+                  style={{ borderBottom: "1px solid rgba(111,130,166,0.08)" }}
                 >
                   <dt className="text-text-muted">{label}</dt>
                   <dd className="font-mono text-text-primary text-right max-w-[60%] truncate">
@@ -325,12 +331,11 @@ export default function NewBacktestPage() {
             </dl>
           </div>
 
-          {/* WebSocket streaming note */}
           <div
-            className="rounded-md p-3"
+            className="panel-soft p-4"
             style={{
-              background: "rgba(0,212,170,0.04)",
-              border: "1px solid rgba(0,212,170,0.14)",
+              background:
+                "linear-gradient(135deg, rgba(40,221,176,0.09) 0%, rgba(255,255,255,0.02) 100%)",
             }}
           >
             <div className="flex items-center gap-1.5 mb-1">
@@ -345,21 +350,22 @@ export default function NewBacktestPage() {
             </p>
           </div>
 
-          {/* Engine note */}
-          <div
-            className="rounded-md p-3"
-            style={{
-              background: "rgba(68,136,255,0.04)",
-              border: "1px solid rgba(68,136,255,0.14)",
-            }}
-          >
-            <p className="text-[10px] text-text-muted leading-relaxed">
-              <span className="text-accent-blue font-medium">
-                Event-driven engine
-              </span>{" "}
-              — Each bar is processed sequentially. The strategy only sees data
-              available at that point in time. No lookahead bias.
-            </p>
+          <div className="panel-soft p-4">
+            <p className="section-label mb-2">Research brief</p>
+            <div className="space-y-3 text-[11px] leading-relaxed text-text-muted">
+              <p>
+                <span className="font-medium text-accent-blue">
+                  Event-driven engine
+                </span>{" "}
+                processes each bar sequentially, so every signal only sees the
+                information available at that moment.
+              </p>
+              <p>
+                Construction, shorting, and impact controls are applied before
+                orders hit the execution model, giving you a more realistic
+                picture of implementation drag.
+              </p>
+            </div>
           </div>
         </div>
       </div>

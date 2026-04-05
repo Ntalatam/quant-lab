@@ -3,23 +3,27 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useBacktestList } from "@/hooks/useBacktest";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
-import { ErrorMessage } from "@/components/shared/ErrorBoundary";
-import { formatPercent, formatRatio, formatDate } from "@/lib/formatters";
-import { buildApiUrl } from "@/lib/network";
 import {
-  Play,
-  BarChart3,
-  TrendingUp,
-  Database,
-  Columns3,
-  ChevronRight,
-  Zap,
   Activity,
+  ArrowUpRight,
+  BarChart3,
+  ChevronRight,
+  Columns3,
+  Database,
+  GitBranch,
   Loader2,
+  Play,
+  RadioTower,
   Sparkles,
+  TrendingUp,
+  Zap,
 } from "lucide-react";
+
+import { ErrorMessage } from "@/components/shared/ErrorBoundary";
+import { PageLoading } from "@/components/shared/LoadingSpinner";
+import { useBacktestList } from "@/hooks/useBacktest";
+import { formatDate, formatPercent, formatRatio } from "@/lib/formatters";
+import { buildApiUrl } from "@/lib/network";
 
 const STRATEGY_CATEGORY_MAP: Record<string, { label: string; cls: string }> = {
   sma_crossover: { label: "Trend", cls: "badge-trend" },
@@ -49,7 +53,46 @@ function SharpeCell({ value }: { value: number }) {
   );
 }
 
-// ── Demo seeder ───────────────────────────────────────────────────────
+function QuickActionCard({
+  href,
+  icon: Icon,
+  title,
+  description,
+  accent,
+}: {
+  href: string;
+  icon: typeof Play;
+  title: string;
+  description: string;
+  accent: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="panel-soft group block p-4 transition-all duration-200 hover:-translate-y-1"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <span
+          className="flex h-11 w-11 items-center justify-center rounded-2xl"
+          style={{
+            background: `${accent}1f`,
+            border: `1px solid ${accent}33`,
+          }}
+        >
+          <Icon size={16} style={{ color: accent }} />
+        </span>
+        <ArrowUpRight
+          size={14}
+          className="text-text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-text-primary"
+        />
+      </div>
+      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-text-muted">
+        {description}
+      </p>
+    </Link>
+  );
+}
 
 function DemoLoader({ onDone }: { onDone: () => void }) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
@@ -85,15 +128,9 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div
-      className="rounded-md p-4 flex items-center justify-between gap-4"
-      style={{
-        background: "rgba(0,212,170,0.04)",
-        border: "1px solid rgba(0,212,170,0.18)",
-      }}
-    >
-      <div>
-        <div className="flex items-center gap-1.5 mb-1">
+    <div className="panel-soft flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="max-w-xl">
+        <div className="mb-1 flex items-center gap-1.5">
           <Sparkles size={11} className="text-accent-green" />
           <p className="section-label">Demo Mode</p>
         </div>
@@ -102,7 +139,7 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
         </p>
         {msg && (
           <p
-            className={`text-[11px] mt-0.5 ${
+            className={`mt-1 text-[11px] ${
               state === "error" ? "text-accent-red" : "text-text-muted"
             }`}
           >
@@ -113,19 +150,15 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
       <button
         onClick={seed}
         disabled={state === "loading" || state === "done"}
-        className="shrink-0 flex items-center gap-2 text-xs font-medium px-4 py-2 rounded transition-all disabled:opacity-50"
+        className={`shrink-0 ${
+          state === "done" ? "action-secondary" : "action-primary"
+        } disabled:opacity-50`}
         style={
           state === "done"
             ? {
-                background: "rgba(0,212,170,0.2)",
-                border: "1px solid rgba(0,212,170,0.4)",
                 color: "var(--color-accent-green)",
               }
-            : {
-                background: "var(--color-accent-green)",
-                color: "var(--color-bg-primary)",
-                boxShadow: "0 0 12px rgba(0,212,170,0.2)",
-              }
+            : undefined
         }
       >
         {state === "loading" ? (
@@ -146,15 +179,13 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
   );
 }
 
-// ── Empty state: platform onboarding ────────────────────────────────
-
 function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
   const steps = [
     {
       num: "01",
       icon: Database,
-      title: "Load Market Data",
-      desc: "Fetch OHLCV price history for any tickers via yfinance and cache to PostgreSQL.",
+      title: "Load market data",
+      desc: "Fetch OHLCV history for any ticker and build your local research universe.",
       href: "/data",
       cta: "Open Data Explorer",
       accent: "var(--color-accent-blue)",
@@ -162,8 +193,8 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
     {
       num: "02",
       icon: Play,
-      title: "Configure & Run",
-      desc: "Select a strategy, tune parameters, set execution constraints, and run the simulation.",
+      title: "Configure & run",
+      desc: "Tune strategies, execution controls, and portfolio construction before launch.",
       href: "/backtest",
       cta: "New Backtest",
       accent: "var(--color-accent-green)",
@@ -171,8 +202,8 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
     {
       num: "03",
       icon: BarChart3,
-      title: "Analyze Results",
-      desc: "Review the full tear sheet — equity curve, drawdown, rolling metrics, trade log.",
+      title: "Review the tear sheet",
+      desc: "Inspect equity, drawdown, TCA, risk budget, and rolling diagnostics.",
       href: "/results",
       cta: "View Results",
       accent: "var(--color-accent-purple)",
@@ -180,72 +211,111 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
   ];
 
   return (
-    <div>
-      {/* Hero */}
-      <div className="mb-10 pt-4">
-        <div
-          className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-widest mb-5 font-medium"
-          style={{
-            background: "rgba(0,212,170,0.06)",
-            border: "1px solid rgba(0,212,170,0.18)",
-            color: "var(--color-accent-green)",
-          }}
-        >
-          <Activity size={9} />
-          Event-driven · No lookahead bias · 25+ analytics metrics
-        </div>
-        <h1 className="text-3xl font-bold text-text-primary mb-3 tracking-tight">
-          Quant<span className="text-accent-green">Lab</span>
-        </h1>
-        <p className="text-text-secondary text-sm max-w-xl leading-relaxed">
-          Systematic backtesting against real historical market data. Tests
-          strategies one bar at a time — no vectorized shortcuts, no peeking
-          ahead. Four strategy families, realistic execution simulation, and a
-          full research analytics suite.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <section className="panel-hero panel-grid overflow-hidden px-6 py-8 lg:px-8 lg:py-9">
+        <div className="relative z-10 grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+          <div>
+            <div className="page-kicker mb-5">
+              <Activity size={9} />
+              Research control room
+            </div>
+            <h1 className="display-title text-5xl text-text-primary lg:text-6xl">
+              Build a
+              <span className="text-accent-green"> portfolio-grade </span>
+              backtest in minutes.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-text-secondary lg:text-[15px]">
+              QuantLab is built for serious research workflows: event-driven
+              execution, realistic fills, long/short support, advanced
+              analytics, and a polished strategy-to-tearsheet loop.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <span className="status-pill">
+                <Activity size={12} className="text-accent-green" />
+                No lookahead bias
+              </span>
+              <span className="status-pill">
+                <Zap size={12} className="text-accent-blue" />
+                TCA + risk budget
+              </span>
+              <span className="status-pill">
+                <RadioTower size={12} className="text-accent-yellow" />
+                Paper trading
+              </span>
+            </div>
+          </div>
 
-      {/* 3-step workflow */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="panel-glass p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles size={12} className="text-accent-green" />
+              <p className="section-label">Why teams use it</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              {[
+                {
+                  label: "Execution realism",
+                  desc: "Commissions, slippage, impact curves, participation caps.",
+                },
+                {
+                  label: "Research depth",
+                  desc: "Walk-forward, sweeps, Bayesian search, factor and regime analysis.",
+                },
+                {
+                  label: "Portfolio workflows",
+                  desc: "Blend runs, compare correlations, and budget downside risk.",
+                },
+                {
+                  label: "Ops ready",
+                  desc: "Typed API, CI/CD, cloud deploys, and live paper sessions.",
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-border/60 bg-bg-card/60 px-4 py-3"
+                >
+                  <p className="text-xs font-semibold text-text-primary">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                    {item.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {steps.map((step) => (
           <div
             key={step.num}
-            className="relative overflow-hidden rounded-md p-5"
-            style={{
-              background: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-              boxShadow:
-                "0 1px 3px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.025)",
-            }}
+            className="panel-soft relative overflow-hidden p-5"
           >
-            {/* Top accent bar */}
             <div
-              className="absolute top-0 left-0 right-0 h-[2px] rounded-t-md"
-              style={{ background: step.accent, opacity: 0.7 }}
+              className="absolute inset-x-0 top-0 h-[3px]"
+              style={{
+                background: `linear-gradient(90deg, ${step.accent}, transparent)`,
+              }}
             />
-
-            {/* Large muted step number */}
             <p
-              className="font-mono font-bold text-4xl leading-none mb-3 select-none"
-              style={{ color: "rgba(255,255,255,0.05)" }}
+              className="font-mono text-4xl font-bold leading-none"
+              style={{ color: "rgba(255,255,255,0.06)" }}
             >
               {step.num}
             </p>
-
-            <div className="flex items-center gap-2 mb-2">
+            <div className="mt-4 flex items-center gap-2">
               <step.icon size={14} style={{ color: step.accent }} />
-              <h3 className="font-semibold text-text-primary text-sm">
+              <h3 className="text-sm font-semibold text-text-primary">
                 {step.title}
               </h3>
             </div>
-
-            <p className="text-xs text-text-secondary leading-relaxed mb-4">
+            <p className="mt-2 text-xs leading-relaxed text-text-secondary">
               {step.desc}
             </p>
-
             <Link
               href={step.href}
-              className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-80"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-80"
               style={{ color: step.accent }}
             >
               {step.cta}
@@ -255,92 +325,73 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
         ))}
       </div>
 
-      {/* Demo mode */}
       <DemoLoader onDone={onDemoLoaded} />
 
-      {/* Quick start suggestion */}
-      <div
-        className="rounded-md p-4 flex items-center justify-between gap-4 mt-4"
-        style={{
-          background: "rgba(68,136,255,0.04)",
-          border: "1px solid rgba(68,136,255,0.16)",
-        }}
-      >
-        <div>
-          <p className="section-label mb-1">Manual Quick Start</p>
-          <p className="text-sm text-text-primary">
-            Try{" "}
-            <span className="font-mono text-accent-blue">AAPL, MSFT, SPY</span>
-            {" · "}
-            <span className="text-text-secondary">
-              SMA Crossover · 2020–2024
-            </span>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <div className="panel-soft p-5">
+          <p className="section-label mb-2">Manual Quick Start</p>
+          <h2 className="text-lg font-semibold text-text-primary">
+            Try a momentum basket in under five minutes.
+          </h2>
+          <p className="mt-2 max-w-xl text-sm leading-7 text-text-secondary">
+            Load{" "}
+            <span className="font-mono text-accent-blue">AAPL, MSFT, SPY</span>,
+            launch an SMA crossover from 2020 to 2024, then compare it against a
+            market-neutral strategy to see correlation and diversification.
           </p>
-          <p className="text-[11px] text-text-muted mt-0.5">
-            Load the tickers first, then configure the backtest.
-          </p>
-        </div>
-        <Link
-          href="/backtest"
-          className="shrink-0 flex items-center gap-2 text-xs font-medium px-4 py-2 rounded transition-all"
-          style={{
-            background: "rgba(68,136,255,0.12)",
-            border: "1px solid rgba(68,136,255,0.25)",
-            color: "var(--color-accent-blue)",
-          }}
-        >
-          <Play size={12} />
-          New Backtest
-        </Link>
-      </div>
-
-      {/* Capabilities strip */}
-      <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          {
-            icon: Zap,
-            label: "Event-Driven Engine",
-            desc: "One bar at a time, no lookahead",
-          },
-          {
-            icon: Activity,
-            label: "Realistic Execution",
-            desc: "Slippage, commissions, volume limits",
-          },
-          {
-            icon: BarChart3,
-            label: "25+ Analytics",
-            desc: "Sharpe, CVaR, alpha, beta, rolling metrics",
-          },
-          {
-            icon: Columns3,
-            label: "Strategy Comparison",
-            desc: "Head-to-head with correlation analysis",
-          },
-        ].map((cap) => (
-          <div
-            key={cap.label}
-            className="rounded p-3"
-            style={{
-              background: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            <cap.icon size={13} className="text-text-muted mb-2" />
-            <p className="text-[11px] font-medium text-text-secondary mb-0.5">
-              {cap.label}
-            </p>
-            <p className="text-[10px] text-text-muted leading-relaxed">
-              {cap.desc}
-            </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link href="/backtest" className="action-primary">
+              <Play size={13} />
+              New Backtest
+            </Link>
+            <Link href="/data" className="action-secondary">
+              <Database size={13} />
+              Load Market Data
+            </Link>
           </div>
-        ))}
+        </div>
+
+        <div className="panel-soft p-5">
+          <p className="section-label mb-3">Capabilities</p>
+          <div className="space-y-3">
+            {[
+              {
+                icon: Zap,
+                label: "Event-driven engine",
+                desc: "One bar at a time with realistic portfolio transitions.",
+              },
+              {
+                icon: Activity,
+                label: "Execution controls",
+                desc: "Impact models, borrow carry, locate fees, and volume caps.",
+              },
+              {
+                icon: Columns3,
+                label: "Portfolio analysis",
+                desc: "Compare strategies, blend weights, and inspect risk attribution.",
+              },
+            ].map((cap) => (
+              <div
+                key={cap.label}
+                className="rounded-2xl border border-border/60 bg-bg-card/60 p-3"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <cap.icon size={13} className="text-accent-blue" />
+                  <p className="text-xs font-semibold text-text-primary">
+                    {cap.label}
+                  </p>
+                </div>
+                <p className="text-[11px] leading-relaxed text-text-muted">
+                  {cap.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-// ── Main dashboard ───────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
@@ -356,14 +407,16 @@ export default function DashboardPage() {
   const recent = backtests?.slice(0, 10) || [];
   const totalRuns = backtests?.length || 0;
 
-  if (totalRuns === 0)
+  if (totalRuns === 0) {
     return <EmptyDashboard onDemoLoaded={handleDemoLoaded} />;
+  }
 
   const bestSharpe = Math.max(...backtests!.map((b) => b.sharpe_ratio));
   const bestReturn = Math.max(...backtests!.map((b) => b.total_return_pct));
   const avgReturn =
-    backtests!.reduce((s, b) => s + b.total_return_pct, 0) / backtests!.length;
-  const bestRun = backtests!.find((b) => b.sharpe_ratio === bestSharpe);
+    backtests!.reduce((sum, run) => sum + run.total_return_pct, 0) /
+    backtests!.length;
+  const bestRun = backtests!.find((run) => run.sharpe_ratio === bestSharpe);
 
   const stats = [
     {
@@ -372,7 +425,7 @@ export default function DashboardPage() {
       sub: `${backtests!.length} strategy runs`,
       icon: BarChart3,
       accent: "var(--color-accent-blue)",
-      iconBg: "rgba(68,136,255,0.1)",
+      iconBg: "rgba(107,149,255,0.12)",
       positive: undefined,
     },
     {
@@ -381,7 +434,7 @@ export default function DashboardPage() {
       sub: bestRun ? bestRun.strategy_name : "",
       icon: TrendingUp,
       accent: "var(--color-accent-green)",
-      iconBg: "rgba(0,212,170,0.1)",
+      iconBg: "rgba(40,221,176,0.12)",
       positive: bestSharpe > 1,
     },
     {
@@ -393,7 +446,8 @@ export default function DashboardPage() {
         bestReturn >= 0
           ? "var(--color-accent-green)"
           : "var(--color-accent-red)",
-      iconBg: bestReturn >= 0 ? "rgba(0,212,170,0.1)" : "rgba(255,68,102,0.1)",
+      iconBg:
+        bestReturn >= 0 ? "rgba(40,221,176,0.12)" : "rgba(255,95,121,0.12)",
       positive: bestReturn >= 0,
     },
     {
@@ -405,66 +459,106 @@ export default function DashboardPage() {
         avgReturn >= 0
           ? "var(--color-accent-green)"
           : "var(--color-accent-red)",
-      iconBg: avgReturn >= 0 ? "rgba(0,212,170,0.1)" : "rgba(255,68,102,0.1)",
+      iconBg:
+        avgReturn >= 0 ? "rgba(40,221,176,0.12)" : "rgba(255,95,121,0.12)",
       positive: avgReturn >= 0,
     },
   ];
 
   return (
-    <div>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-7">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary tracking-tight">
-            Dashboard
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            {totalRuns} backtest{totalRuns !== 1 ? "s" : ""} on record
-          </p>
-        </div>
-        <Link
-          href="/backtest"
-          className="flex items-center gap-2 text-xs font-medium px-4 py-2 rounded transition-all"
-          style={{
-            background: "rgba(0,212,170,0.1)",
-            border: "1px solid rgba(0,212,170,0.22)",
-            color: "var(--color-accent-green)",
-          }}
-        >
-          <Play size={12} />
-          New Backtest
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <section className="panel-hero panel-grid overflow-hidden px-6 py-7 lg:px-8 lg:py-8">
+        <div className="relative z-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+          <div>
+            <div className="page-kicker mb-5">
+              <Activity size={9} />
+              Dashboard
+            </div>
+            <h1 className="display-title text-5xl text-text-primary lg:text-6xl">
+              The research
+              <span className="text-accent-blue"> control room </span>
+              for every run.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-text-secondary lg:text-[15px]">
+              Track performance across your backtests, jump directly into new
+              simulations, and move from ideas to portfolio decisions with a
+              cleaner research loop.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <span className="status-pill">
+                <BarChart3 size={12} className="text-accent-green" />
+                {totalRuns} saved runs
+              </span>
+              <span className="status-pill">
+                <TrendingUp size={12} className="text-accent-blue" />
+                Best Sharpe {formatRatio(bestSharpe)}
+              </span>
+              <span className="status-pill">
+                <Activity size={12} className="text-accent-yellow" />
+                Avg return {formatPercent(avgReturn)}
+              </span>
+            </div>
+          </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <QuickActionCard
+              href="/backtest"
+              icon={Play}
+              title="Launch a new backtest"
+              description="Configure a strategy, tune execution controls, and stream results live."
+              accent="var(--color-accent-green)"
+            />
+            <QuickActionCard
+              href="/paper"
+              icon={RadioTower}
+              title="Start paper trading"
+              description="Reuse a saved configuration and watch it update bar by bar."
+              accent="var(--color-accent-yellow)"
+            />
+            <QuickActionCard
+              href="/compare"
+              icon={Columns3}
+              title="Compare portfolio ideas"
+              description="Overlay runs, inspect correlation, and build blended allocations."
+              accent="var(--color-accent-blue)"
+            />
+            <QuickActionCard
+              href="/lineage"
+              icon={GitBranch}
+              title="Review research lineage"
+              description="Track notes, variants, and the evolution of strategy decisions."
+              accent="var(--color-accent-purple)"
+            />
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="relative overflow-hidden rounded-md p-4"
-            style={{
-              background: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-              boxShadow:
-                "0 1px 3px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.025)",
-            }}
+            className="panel-soft relative overflow-hidden p-4"
           >
-            {/* Accent bar */}
             <div
-              className="absolute top-0 left-0 right-0 h-[2px] rounded-t-md"
-              style={{ background: stat.accent, opacity: 0.6 }}
+              className="absolute inset-x-0 top-0 h-[3px]"
+              style={{
+                background: `linear-gradient(90deg, ${stat.accent}, transparent)`,
+              }}
             />
-            <div className="flex items-start justify-between mb-3">
+            <div className="mb-3 flex items-start justify-between">
               <p className="section-label">{stat.label}</p>
               <div
-                className="w-7 h-7 rounded flex items-center justify-center shrink-0"
-                style={{ background: stat.iconBg }}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+                style={{
+                  background: stat.iconBg,
+                  border: "1px solid rgba(255,255,255,0.06)",
+                }}
               >
                 <stat.icon size={13} style={{ color: stat.accent }} />
               </div>
             </div>
             <p
-              className="text-2xl font-mono tabular-nums font-bold"
+              className="text-2xl font-bold font-mono tabular-nums"
               style={{
                 color:
                   stat.positive === undefined
@@ -476,118 +570,176 @@ export default function DashboardPage() {
             >
               {stat.value}
             </p>
-            <p className="text-[10px] text-text-muted mt-1">{stat.sub}</p>
+            <p className="mt-1 text-[11px] text-text-muted">{stat.sub}</p>
           </div>
         ))}
       </div>
 
-      {/* Recent runs table */}
-      <div
-        className="rounded-md overflow-hidden"
-        style={{
-          background: "var(--color-bg-card)",
-          border: "1px solid var(--color-border)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
-        }}
-      >
-        <div
-          className="flex items-center justify-between px-5 py-3"
-          style={{ borderBottom: "1px solid var(--color-border)" }}
-        >
-          <h2 className="text-sm font-semibold text-text-primary">
-            Recent Backtests
-          </h2>
-          <Link
-            href="/results"
-            className="text-xs text-text-muted hover:text-text-secondary transition-colors flex items-center gap-1"
+      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="table-shell">
+          <div
+            className="flex items-center justify-between px-5 py-4"
+            style={{ borderBottom: "1px solid rgba(111,130,166,0.12)" }}
           >
-            All results <ChevronRight size={11} />
-          </Link>
+            <div>
+              <p className="section-label mb-1">Recent backtests</p>
+              <h2 className="text-base font-semibold text-text-primary">
+                Your latest research snapshots
+              </h2>
+            </div>
+            <Link href="/results" className="action-ghost">
+              All results
+              <ChevronRight size={12} />
+            </Link>
+          </div>
+
+          <div className="table-scroll">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr>
+                  {[
+                    "Strategy",
+                    "Type",
+                    "Tickers",
+                    "Period",
+                    "Return",
+                    "Sharpe",
+                    "Max DD",
+                    "Run",
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      className={`section-label px-4 py-3 font-normal ${
+                        ["Return", "Sharpe", "Max DD", "Run"].includes(heading)
+                          ? "text-right"
+                          : "text-left"
+                      }`}
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((bt) => {
+                  const cat = STRATEGY_CATEGORY_MAP[bt.strategy_name] ??
+                    STRATEGY_CATEGORY_MAP[bt.strategy_name.toLowerCase()] ?? {
+                      label: "Other",
+                      cls: "badge-trend",
+                    };
+                  return (
+                    <tr key={bt.id}>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/backtest/${bt.id}`}
+                          className="text-[13px] font-medium text-accent-blue hover:underline"
+                        >
+                          {bt.strategy_name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`${cat.cls} rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider`}
+                        >
+                          {cat.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-text-secondary">
+                        {bt.tickers.join(", ")}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-text-muted">
+                        {bt.start_date} — {bt.end_date}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-mono text-[13px] tabular-nums ${
+                          bt.total_return_pct >= 0
+                            ? "text-accent-green"
+                            : "text-accent-red"
+                        }`}
+                      >
+                        {formatPercent(bt.total_return_pct)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <SharpeCell value={bt.sharpe_ratio} />
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-[13px] tabular-nums text-accent-red">
+                        {formatPercent(bt.max_drawdown_pct)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[11px] text-text-muted">
+                        {bt.created_at ? formatDate(bt.created_at) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+        <div className="space-y-4">
+          <div className="panel-soft p-5">
+            <p className="section-label mb-2">Research pulse</p>
+            <h2 className="text-base font-semibold text-text-primary">
+              What looks strongest right now?
+            </h2>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-2xl border border-border/60 bg-bg-card/60 p-3">
+                <p className="text-[11px] text-text-muted">Top Sharpe run</p>
+                <p className="mt-1 text-sm font-semibold text-text-primary">
+                  {bestRun?.strategy_name ?? "—"}
+                </p>
+                <p className="mt-1 font-mono text-xs text-accent-green">
+                  {formatRatio(bestSharpe)} Sharpe
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-bg-card/60 p-3">
+                <p className="text-[11px] text-text-muted">Return envelope</p>
+                <p className="mt-1 text-sm font-semibold text-text-primary">
+                  {formatPercent(bestReturn)} best case
+                </p>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  Portfolio-wide average: {formatPercent(avgReturn)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel-soft p-5">
+            <p className="section-label mb-3">Next moves</p>
+            <div className="space-y-3">
               {[
-                "Strategy",
-                "Type",
-                "Tickers",
-                "Period",
-                "Return",
-                "Sharpe",
-                "Max DD",
-                "Run",
-              ].map((h) => (
-                <th
-                  key={h}
-                  className={`section-label py-2.5 px-4 font-normal ${
-                    ["Return", "Sharpe", "Max DD", "Run"].includes(h)
-                      ? "text-right"
-                      : "text-left"
-                  }`}
+                {
+                  href: "/compare",
+                  icon: Columns3,
+                  title: "Compare your best runs",
+                  desc: "Inspect correlations before blending them into one portfolio.",
+                },
+                {
+                  href: "/paper",
+                  icon: RadioTower,
+                  title: "Forward-test your thesis",
+                  desc: "Turn a strong backtest into a live paper session instantly.",
+                },
+              ].map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className="block rounded-2xl border border-border/60 bg-bg-card/60 p-3 transition-colors hover:bg-bg-hover"
                 >
-                  {h}
-                </th>
+                  <div className="mb-2 flex items-center gap-2">
+                    <item.icon size={13} className="text-accent-blue" />
+                    <p className="text-xs font-semibold text-text-primary">
+                      {item.title}
+                    </p>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-text-muted">
+                    {item.desc}
+                  </p>
+                </Link>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {recent.map((bt) => {
-              const cat = STRATEGY_CATEGORY_MAP[bt.strategy_name] ??
-                STRATEGY_CATEGORY_MAP[bt.strategy_name.toLowerCase()] ?? {
-                  label: "Other",
-                  cls: "badge-trend",
-                };
-              return (
-                <tr
-                  key={bt.id}
-                  className="transition-colors hover:bg-bg-hover"
-                  style={{ borderBottom: "1px solid rgba(37,37,53,0.6)" }}
-                >
-                  <td className="py-2.5 px-4">
-                    <Link
-                      href={`/backtest/${bt.id}`}
-                      className="text-accent-blue hover:underline font-medium text-[13px]"
-                    >
-                      {bt.strategy_name}
-                    </Link>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <span
-                      className={`${cat.cls} text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full`}
-                    >
-                      {cat.label}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4 text-text-secondary font-mono text-xs">
-                    {bt.tickers.join(", ")}
-                  </td>
-                  <td className="py-2.5 px-4 text-text-muted text-xs">
-                    {bt.start_date} — {bt.end_date}
-                  </td>
-                  <td
-                    className={`py-2.5 px-4 text-right font-mono tabular-nums text-[13px] ${
-                      bt.total_return_pct >= 0
-                        ? "text-accent-green"
-                        : "text-accent-red"
-                    }`}
-                  >
-                    {formatPercent(bt.total_return_pct)}
-                  </td>
-                  <td className="py-2.5 px-4 text-right">
-                    <SharpeCell value={bt.sharpe_ratio} />
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums text-accent-red text-[13px]">
-                    {formatPercent(bt.max_drawdown_pct)}
-                  </td>
-                  <td className="py-2.5 px-4 text-right text-text-muted text-[11px]">
-                    {bt.created_at ? formatDate(bt.created_at) : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

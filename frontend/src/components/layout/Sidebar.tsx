@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   LayoutDashboard,
   Play,
   BarChart3,
@@ -80,46 +81,55 @@ export function Sidebar() {
 
   const sidebarContent = (
     <>
-      {/* Logo */}
-      <div
-        className="h-14 flex items-center px-5 shrink-0"
-        style={{ borderBottom: "1px solid var(--color-border)" }}
-      >
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(0,212,170,0.22) 0%, rgba(68,136,255,0.14) 100%)",
-              border: "1px solid rgba(0,212,170,0.28)",
-              boxShadow: "0 0 12px rgba(0,212,170,0.08)",
-            }}
-          >
-            <TrendingUp size={14} className="text-accent-green" />
+      <div className="shrink-0 px-4 pb-3 pt-4">
+        <div className="panel-glass panel-grid p-4">
+          <div className="flex items-start gap-3">
+            <Link href="/" className="flex min-w-0 items-center gap-3 group">
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+                style={{
+                  background:
+                    "linear-gradient(135deg, rgba(40,221,176,0.28) 0%, rgba(107,149,255,0.22) 100%)",
+                  border: "1px solid rgba(160,176,206,0.16)",
+                  boxShadow: "0 18px 28px rgba(40,221,176,0.1)",
+                }}
+              >
+                <TrendingUp size={16} className="text-accent-green" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[15px] font-semibold tracking-tight text-text-primary">
+                  Quant<span className="text-accent-green">Lab</span>
+                </span>
+                <span className="mt-1 block text-[11px] text-text-muted">
+                  Quant research workstation
+                </span>
+              </div>
+            </Link>
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="ml-auto rounded-full border border-transparent p-1.5 text-text-muted hover:border-border hover:bg-bg-hover hover:text-text-primary lg:hidden"
+            >
+              <X size={16} />
+            </button>
           </div>
-          <div className="flex flex-col leading-none gap-0.5">
-            <span className="font-bold text-[13px] text-text-primary tracking-tight">
-              Quant<span className="text-accent-green">Lab</span>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="status-pill">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent-green shadow-[0_0_10px_rgba(40,221,176,0.8)]" />
+              Live paper ready
             </span>
-            <span className="section-label" style={{ letterSpacing: "0.15em" }}>
-              Research Platform
+            <span className="status-pill">
+              <Activity size={12} className="text-accent-blue" />
+              Event-driven
             </span>
           </div>
-        </Link>
-        {/* Close button — mobile only */}
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="ml-auto lg:hidden text-text-muted hover:text-text-primary transition-colors"
-        >
-          <X size={16} />
-        </button>
+        </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-5 px-2 overflow-y-auto space-y-5">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
         {NAV_SECTIONS.map((section) => (
-          <div key={section.label}>
-            <p className="section-label px-3 mb-2">{section.label}</p>
+          <div key={section.label} className="panel-soft p-2.5">
+            <p className="section-label px-2 pb-2">{section.label}</p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
                 const active = isActive(item.href);
@@ -128,26 +138,44 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     onClick={closeMobile}
-                    className={`relative flex items-center gap-3 px-3 py-2 rounded text-[13px] transition-all duration-150 ${
+                    className={`relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] transition-all duration-150 ${
                       active
                         ? "text-text-primary font-medium"
-                        : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+                        : "text-text-secondary hover:text-text-primary"
                     }`}
                     style={
                       active
                         ? {
-                            background: "rgba(68,136,255,0.08)",
-                            border: "1px solid rgba(68,136,255,0.18)",
-                            borderLeft: "2px solid var(--color-accent-blue)",
+                            background:
+                              "linear-gradient(135deg, rgba(107,149,255,0.18) 0%, rgba(40,221,176,0.12) 100%)",
+                            border: "1px solid rgba(107,149,255,0.24)",
+                            boxShadow: "0 16px 24px rgba(5,10,24,0.16)",
                           }
-                        : { border: "1px solid transparent" }
+                        : {
+                            border: "1px solid transparent",
+                          }
                     }
                   >
-                    <item.icon
-                      size={14}
-                      className={active ? "text-accent-blue" : ""}
-                    />
-                    {item.label}
+                    <span
+                      className="flex h-8 w-8 items-center justify-center rounded-xl"
+                      style={{
+                        background: active
+                          ? "rgba(255,255,255,0.12)"
+                          : "rgba(255,255,255,0.03)",
+                        border: active
+                          ? "1px solid rgba(255,255,255,0.08)"
+                          : "1px solid rgba(111,130,166,0.08)",
+                      }}
+                    >
+                      <item.icon
+                        size={14}
+                        className={active ? "text-text-primary" : ""}
+                      />
+                    </span>
+                    <span className="flex-1">{item.label}</span>
+                    {active ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-accent-green shadow-[0_0_10px_rgba(40,221,176,0.7)]" />
+                    ) : null}
                   </Link>
                 );
               })}
@@ -156,49 +184,45 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div
-        className="px-4 py-3 shrink-0 space-y-1.5"
-        style={{ borderTop: "1px solid var(--color-border)" }}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-accent-green shrink-0"
-              style={{ boxShadow: "0 0 6px rgba(0,212,170,0.6)" }}
-            />
-            <span className="text-[10px] text-text-muted">
-              Event-driven · No lookahead
-            </span>
+      <div className="shrink-0 px-4 pb-4">
+        <div className="panel-soft space-y-3 p-3.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="section-label mb-1">Workspace mode</p>
+              <p className="text-xs text-text-primary">Local research lab</p>
+            </div>
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="rounded-full border border-border/60 p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"
+              title="Keyboard shortcuts"
+            >
+              <Keyboard size={12} />
+            </button>
           </div>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="text-text-muted hover:text-text-secondary transition-colors"
-            title="Keyboard shortcuts"
-          >
-            <Keyboard size={12} />
-          </button>
+
+          <div className="grid grid-cols-2 gap-2 text-[10px] text-text-muted">
+            <div className="rounded-2xl border border-border/60 bg-bg-card/70 px-2.5 py-2">
+              <p className="mb-1 text-text-secondary">Execution</p>
+              <p className="text-text-primary">Slippage + impact</p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-bg-card/70 px-2.5 py-2">
+              <p className="mb-1 text-text-secondary">Analytics</p>
+              <p className="text-text-primary">TCA + risk budget</p>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-text-muted/80">
+            Charts by{" "}
+            <a
+              href="https://www.tradingview.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 transition-opacity hover:opacity-70"
+            >
+              TradingView
+            </a>
+          </p>
         </div>
-        <p
-          className="text-[10px]"
-          style={{ color: "var(--color-text-muted)", opacity: 0.55 }}
-        >
-          QuantLab v1.0 — Local
-        </p>
-        <p
-          className="text-[10px]"
-          style={{ color: "var(--color-text-muted)", opacity: 0.4 }}
-        >
-          Charts by{" "}
-          <a
-            href="https://www.tradingview.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:opacity-70 transition-opacity underline underline-offset-2"
-          >
-            TradingView
-          </a>
-        </p>
       </div>
     </>
   );
@@ -208,10 +232,12 @@ export function Sidebar() {
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-3 left-3 z-50 lg:hidden p-2 rounded-lg"
+        className="fixed left-3 top-3 z-50 rounded-2xl p-2.5 lg:hidden"
         style={{
-          background: "var(--color-bg-card)",
-          border: "1px solid var(--color-border)",
+          background: "rgba(12,22,39,0.82)",
+          border: "1px solid rgba(160,176,206,0.12)",
+          backdropFilter: "blur(18px)",
+          boxShadow: "0 18px 28px rgba(2,6,23,0.32)",
         }}
         aria-label="Open navigation"
       >
@@ -222,21 +248,25 @@ export function Sidebar() {
       {mobileOpen && (
         <div
           className="fixed inset-0 z-[90] lg:hidden"
-          style={{ background: "rgba(0,0,0,0.6)" }}
+          style={{
+            background: "rgba(3,8,19,0.72)",
+            backdropFilter: "blur(8px)",
+          }}
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar — always visible on lg+, slide-in drawer on mobile */}
       <aside
-        className={`fixed left-0 top-0 h-screen w-60 flex flex-col z-[95] transition-transform duration-200 ease-out lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-[95] flex h-screen w-64 flex-col transition-transform duration-200 ease-out lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{
-          background: "var(--color-bg-secondary)",
-          borderRight: "1px solid var(--color-border)",
+          background:
+            "linear-gradient(180deg, rgba(10,20,35,0.96) 0%, rgba(9,16,30,0.96) 100%)",
+          borderRight: "1px solid rgba(111,130,166,0.12)",
           boxShadow: mobileOpen
-            ? "4px 0 24px rgba(0,0,0,0.5)"
+            ? "14px 0 40px rgba(2,6,23,0.45)"
             : "1px 0 0 rgba(255,255,255,0.02)",
         }}
       >
