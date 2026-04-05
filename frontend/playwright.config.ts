@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const port = 3100;
 const webServerCommand =
   process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ??
-  `npm run build && npm run start -- --hostname 127.0.0.1 --port ${port}`;
+  `npm run build && npm run start:e2e`;
 
 export default defineConfig({
   testDir: "./e2e",

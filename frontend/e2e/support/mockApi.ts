@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 import {
   backtestSummaries,
@@ -23,6 +24,10 @@ function json(route: Route, body: unknown, status = 200) {
     headers: corsHeaders,
     body: JSON.stringify(body),
   });
+}
+
+export async function waitForAppReady(page: Page) {
+  await expect(page.locator("html[data-app-hydrated='true']")).toHaveCount(1);
 }
 
 export async function installAppMocks(

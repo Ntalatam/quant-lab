@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { installAppMocks } from "./support/mockApi";
+import { installAppMocks, waitForAppReady } from "./support/mockApi";
 
 test.describe("Results and compare flows", () => {
   test("opens a saved result from the results table", async ({ page }) => {
     await installAppMocks(page);
 
     await page.goto("/results");
+    await waitForAppReady(page);
     await expect(page.getByRole("heading", { name: "Backtest Results" })).toBeVisible();
 
     await page.getByRole("link", { name: "sma_crossover" }).click();
@@ -20,6 +21,7 @@ test.describe("Results and compare flows", () => {
     await installAppMocks(page);
 
     await page.goto("/compare");
+    await waitForAppReady(page);
     await page.getByLabel("Select sma_crossover").check();
     await page.getByLabel("Select market_neutral_momentum").check();
 
@@ -36,6 +38,7 @@ test.describe("Results and compare flows", () => {
     await installAppMocks(page);
 
     await page.goto("/compare");
+    await waitForAppReady(page);
     await page.getByLabel("Select sma_crossover").check();
     await page.getByLabel("Select market_neutral_momentum").check();
 

@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { installAppMocks } from "./support/mockApi";
+import { installAppMocks, waitForAppReady } from "./support/mockApi";
 
 test.describe("Paper trading flows", () => {
   test("shows existing live paper sessions", async ({ page }) => {
     await installAppMocks(page);
 
     await page.goto("/paper");
+    await waitForAppReady(page);
     await expect(page.getByRole("heading", { name: "Paper Trading" })).toBeVisible();
     await expect(page.getByText("SMA Crossover Live Session")).toBeVisible();
     await expect(page.getByText("2.10%")).toBeVisible();
@@ -16,6 +17,7 @@ test.describe("Paper trading flows", () => {
     await installAppMocks(page, { paperSessionId: "paper_live_1" });
 
     await page.goto("/paper");
+    await waitForAppReady(page);
     await page.getByRole("button", { name: "Create Live Session" }).click();
 
     await page.waitForURL("**/paper/paper_live_1");

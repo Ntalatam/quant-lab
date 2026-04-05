@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { installAppMocks } from "./support/mockApi";
+import { installAppMocks, waitForAppReady } from "./support/mockApi";
 
 test.describe("Backtest flow", () => {
   test("runs a backtest over the WebSocket progress channel and lands on the tear sheet", async ({
@@ -9,6 +9,7 @@ test.describe("Backtest flow", () => {
     await installAppMocks(page, { backtestId: "bt_sma_1" });
 
     await page.goto("/backtest");
+    await waitForAppReady(page);
     await expect(page.getByRole("heading", { name: "New Backtest" })).toBeVisible();
 
     await page.getByRole("button", { name: /Run Backtest/i }).click();
@@ -26,6 +27,7 @@ test.describe("Backtest flow", () => {
     await installAppMocks(page, { backtestSocket: "error" });
 
     await page.goto("/backtest");
+    await waitForAppReady(page);
     await page.getByRole("button", { name: /Run Backtest/i }).click();
 
     await expect(page.getByText("Mock simulation failed")).toBeVisible();
