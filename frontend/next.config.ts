@@ -7,9 +7,7 @@ const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  turbopack: {
-    root: frontendRoot,
-  },
+  outputFileTracingRoot: frontendRoot,
 };
 
 export default nextConfig;
