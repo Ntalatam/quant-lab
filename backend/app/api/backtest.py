@@ -21,6 +21,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from pydantic import ValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -657,8 +658,17 @@ async def backtest_websocket(websocket: WebSocket):
     await websocket.accept()
     try:
         raw = await websocket.receive_text()
-        config_data = json.loads(raw)
-        config = BacktestConfig(**config_data)
+        try:
+            config_data = json.loads(raw)
+        except json.JSONDecodeError:
+            await websocket.send_json({"type": "error", "message": "Invalid JSON payload"})
+            return
+
+        try:
+            config = BacktestConfig(**config_data)
+        except ValidationError:
+            await websocket.send_json({"type": "error", "message": "Invalid backtest config"})
+            return
 
         async def on_progress(bar_num: int, total_bars: int, date_str: str, equity: float):
             pct = round(bar_num / total_bars, 4) if total_bars else 0
@@ -683,13 +693,16 @@ async def backtest_websocket(websocket: WebSocket):
 
                 await websocket.send_json({"type": "complete", "id": result["id"]})
             except ValueError as e:
+                logger.warning("backtest.websocket_rejected", error=str(e))
                 await websocket.send_json({"type": "error", "message": str(e)})
             except Exception as e:
+                logger.exception("backtest.websocket_failed", error=str(e))
                 await websocket.send_json({"type": "error", "message": f"Backtest failed: {e}"})
 
     except WebSocketDisconnect:
-        pass
+        logger.debug("backtest.websocket_disconnected")
     except Exception as e:
+        logger.exception("backtest.websocket_protocol_failed", error=str(e))
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except Exception:
