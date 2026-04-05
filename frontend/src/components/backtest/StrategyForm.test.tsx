@@ -55,6 +55,32 @@ const mockStrategies = [
       },
     ],
   },
+  {
+    id: "custom_hybrid",
+    name: "Custom Hybrid",
+    description: "Custom strategy with mixed parameter types.",
+    signal_mode: "long_only" as const,
+    requires_short_selling: false,
+    category: "custom" as const,
+    source_type: "custom" as const,
+    params: [
+      {
+        name: "use_filter",
+        label: "Use Filter",
+        type: "bool" as const,
+        default: true,
+        description: "Turn the secondary regime filter on or off.",
+      },
+      {
+        name: "execution_mode",
+        label: "Execution Mode",
+        type: "select" as const,
+        default: "aggressive",
+        options: ["aggressive", "passive"],
+        description: "Pick how entries are staged.",
+      },
+    ],
+  },
 ];
 
 const initialState = useBacktestStore.getState();
@@ -141,6 +167,28 @@ describe("StrategyForm", () => {
       const config = useBacktestStore.getState().config;
       expect(config.allow_short_selling).toBe(true);
       expect(config.params?.short_window).toBe(35);
+    });
+  });
+
+  it("supports boolean and select strategy params", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StrategyForm />);
+
+    await user.selectOptions(
+      screen.getByLabelText("Strategy"),
+      "custom_hybrid",
+    );
+
+    expect(screen.getByText("Edit in studio")).toBeInTheDocument();
+    expect(screen.getByLabelText("Enable")).toBeChecked();
+
+    await user.click(screen.getByLabelText("Enable"));
+    await user.selectOptions(screen.getByDisplayValue("aggressive"), "passive");
+
+    await waitFor(() => {
+      const config = useBacktestStore.getState().config;
+      expect(config.params?.use_filter).toBe(false);
+      expect(config.params?.execution_mode).toBe("passive");
     });
   });
 });

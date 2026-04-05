@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 import type { BacktestConfig } from "@/lib/types";
 import { useStrategies } from "@/hooks/useAnalytics";
 import { useBacktestStore } from "@/store/backtest-store";
@@ -13,6 +12,12 @@ import {
   CATEGORY_LABELS,
 } from "@/lib/constants";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { StrategyParameterFields } from "@/components/strategies/StrategyParameterFields";
+import { StrategySummary } from "@/components/strategies/StrategySummary";
+import {
+  buildStrategyParamDefaults,
+  parseTickerList,
+} from "@/lib/strategy-utils";
 
 export function StrategyForm() {
   const { data: strategies, isLoading } = useStrategies();
@@ -34,12 +39,8 @@ export function StrategyForm() {
 
     lastAppliedStrategyId.current = selectedStrategy.id;
 
-    const defaults: Record<string, number | string | boolean> = {};
-    selectedStrategy.params.forEach((param) => {
-      defaults[param.name] = param.default;
-    });
     setConfig({
-      params: defaults,
+      params: buildStrategyParamDefaults(selectedStrategy),
       ...(selectedStrategy.requires_short_selling
         ? { allow_short_selling: true }
         : {}),
@@ -70,96 +71,24 @@ export function StrategyForm() {
             </option>
           ))}
         </select>
-        {selectedStrategy && (
-          <div className="mt-1 space-y-1">
-            <p className="text-xs text-text-muted">
-              {selectedStrategy.description}
-            </p>
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider">
-              <span
-                className="px-2 py-0.5 rounded border"
-                style={{
-                  borderColor:
-                    selectedStrategy.signal_mode === "long_short"
-                      ? "rgba(255,187,51,0.25)"
-                      : "rgba(68,136,255,0.25)",
-                  color:
-                    selectedStrategy.signal_mode === "long_short"
-                      ? "var(--color-accent-yellow)"
-                      : "var(--color-accent-blue)",
-                  background:
-                    selectedStrategy.signal_mode === "long_short"
-                      ? "rgba(255,187,51,0.08)"
-                      : "rgba(68,136,255,0.08)",
-                }}
-              >
-                {selectedStrategy.signal_mode === "long_short"
-                  ? "Long / Short"
-                  : "Long Only"}
-              </span>
-              {selectedStrategy.requires_short_selling && (
-                <span className="text-accent-yellow">
-                  Requires short selling
-                </span>
-              )}
-              {selectedStrategy.source_type === "custom" && (
-                <Link
-                  href={`/strategies/custom?strategyId=${encodeURIComponent(selectedStrategy.id)}`}
-                  className="text-accent-purple hover:opacity-80 transition-opacity"
-                >
-                  Edit in studio
-                </Link>
-              )}
-            </div>
-          </div>
-        )}
+        {selectedStrategy && <StrategySummary strategy={selectedStrategy} />}
       </div>
 
       {/* Strategy Parameters */}
-      {selectedStrategy && selectedStrategy.params.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-text-secondary mb-3">
-            Parameters
-          </h3>
-          <div className="space-y-3">
-            {selectedStrategy.params.map((param) => (
-              <div key={param.name}>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs text-text-secondary">
-                    {param.label}
-                  </label>
-                  <span className="text-xs font-mono text-text-primary tabular-nums">
-                    {config.params?.[param.name] ?? param.default}
-                  </span>
-                </div>
-                {(param.type === "int" || param.type === "float") && (
-                  <input
-                    type="range"
-                    min={param.min}
-                    max={param.max}
-                    step={param.step}
-                    value={Number(config.params?.[param.name] ?? param.default)}
-                    onChange={(e) =>
-                      setConfig({
-                        params: {
-                          ...config.params,
-                          [param.name]:
-                            param.type === "int"
-                              ? parseInt(e.target.value)
-                              : parseFloat(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full accent-accent-blue"
-                  />
-                )}
-                <p className="text-[10px] text-text-muted mt-0.5">
-                  {param.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+      {selectedStrategy && (
+        <StrategyParameterFields
+          strategy={selectedStrategy}
+          values={config.params ?? {}}
+          title="Parameters"
+          onChange={(name, value) =>
+            setConfig({
+              params: {
+                ...config.params,
+                [name]: value,
+              },
+            })
+          }
+        />
       )}
 
       {/* Tickers */}
@@ -176,10 +105,7 @@ export function StrategyForm() {
           value={config.tickers?.join(", ") || ""}
           onChange={(e) =>
             setConfig({
-              tickers: e.target.value
-                .split(",")
-                .map((t) => t.trim().toUpperCase())
-                .filter(Boolean),
+              tickers: parseTickerList(e.target.value),
             })
           }
           placeholder="AAPL, MSFT, GOOG"

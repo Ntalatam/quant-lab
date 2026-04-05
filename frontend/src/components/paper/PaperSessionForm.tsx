@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { StrategyParameterFields } from "@/components/strategies/StrategyParameterFields";
+import { StrategySummary } from "@/components/strategies/StrategySummary";
 import { useStrategies } from "@/hooks/useAnalytics";
 import { useCreatePaperSession } from "@/hooks/usePaperTrading";
 import {
@@ -13,11 +14,11 @@ import {
   PAPER_INTERVAL_OPTIONS,
   POSITION_SIZING_OPTIONS,
 } from "@/lib/constants";
-import type {
-  BacktestConfig,
-  PaperTradingSessionCreate,
-  StrategyInfo,
-} from "@/lib/types";
+import type { BacktestConfig, PaperTradingSessionCreate } from "@/lib/types";
+import {
+  buildStrategyParamDefaults,
+  parseTickerList,
+} from "@/lib/strategy-utils";
 
 function defaultDraft(): PaperTradingSessionCreate {
   return {
@@ -49,14 +50,6 @@ function defaultDraft(): PaperTradingSessionCreate {
   };
 }
 
-function buildParamDefaults(strategy: StrategyInfo | undefined) {
-  const defaults: Record<string, number | string | boolean> = {};
-  strategy?.params.forEach((param) => {
-    defaults[param.name] = param.default;
-  });
-  return defaults;
-}
-
 function isFiniteNumber(value: number) {
   return Number.isFinite(value);
 }
@@ -84,7 +77,7 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
         name: `${strategy.name} Live Session`,
         strategy_id: strategy.id,
         params: {
-          ...buildParamDefaults(strategy),
+          ...buildStrategyParamDefaults(strategy),
           ...(prefillConfig.params ?? {}),
         },
         tickers:
@@ -140,7 +133,7 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
       ...draft,
       strategy_id: strategy.id,
       name: `${strategy.name} Live Session`,
-      params: buildParamDefaults(strategy),
+      params: buildStrategyParamDefaults(strategy),
       allow_short_selling: strategy.requires_short_selling,
     };
   }, [draft, prefillConfig, strategies]);
@@ -208,7 +201,7 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
         effectiveDraft.name.endsWith("Live Session")
           ? `${strategy.name} Live Session`
           : effectiveDraft.name,
-      params: buildParamDefaults(strategy),
+      params: buildStrategyParamDefaults(strategy),
       allow_short_selling: strategy.requires_short_selling
         ? true
         : effectiveDraft.allow_short_selling,
@@ -288,140 +281,24 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
               </option>
             ))}
           </select>
-          {selectedStrategy && (
-            <div className="mt-1 space-y-1">
-              <p className="text-xs text-text-muted">
-                {selectedStrategy.description}
-              </p>
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider">
-                <span
-                  className="px-2 py-0.5 rounded border"
-                  style={{
-                    borderColor:
-                      selectedStrategy.signal_mode === "long_short"
-                        ? "rgba(255,187,51,0.25)"
-                        : "rgba(68,136,255,0.25)",
-                    color:
-                      selectedStrategy.signal_mode === "long_short"
-                        ? "var(--color-accent-yellow)"
-                        : "var(--color-accent-blue)",
-                    background:
-                      selectedStrategy.signal_mode === "long_short"
-                        ? "rgba(255,187,51,0.08)"
-                        : "rgba(68,136,255,0.08)",
-                  }}
-                >
-                  {selectedStrategy.signal_mode === "long_short"
-                    ? "Long / Short"
-                    : "Long Only"}
-                </span>
-                {selectedStrategy.requires_short_selling && (
-                  <span className="text-accent-yellow">
-                    Requires short selling
-                  </span>
-                )}
-                {selectedStrategy.source_type === "custom" && (
-                  <Link
-                    href={`/strategies/custom?strategyId=${encodeURIComponent(selectedStrategy.id)}`}
-                    className="text-accent-purple hover:opacity-80 transition-opacity"
-                  >
-                    Edit in studio
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
+          {selectedStrategy && <StrategySummary strategy={selectedStrategy} />}
         </div>
 
-        {selectedStrategy && selectedStrategy.params.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-text-secondary mb-3">
-              Strategy Parameters
-            </p>
-            <div className="space-y-3">
-              {selectedStrategy.params.map((param) => {
-                const value =
-                  effectiveDraft.params[param.name] ?? param.default;
-                return (
-                  <div key={param.name}>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs text-text-secondary">
-                        {param.label}
-                      </label>
-                      <span className="text-xs font-mono text-text-primary">
-                        {String(value)}
-                      </span>
-                    </div>
-                    {(param.type === "int" || param.type === "float") && (
-                      <input
-                        type="range"
-                        min={param.min}
-                        max={param.max}
-                        step={param.step}
-                        value={Number(value)}
-                        onChange={(event) =>
-                          setDraft({
-                            ...effectiveDraft,
-                            params: {
-                              ...effectiveDraft.params,
-                              [param.name]:
-                                param.type === "int"
-                                  ? parseInt(event.target.value, 10)
-                                  : parseFloat(event.target.value),
-                            },
-                          })
-                        }
-                        className="w-full accent-accent-blue"
-                      />
-                    )}
-                    {param.type === "bool" && (
-                      <label className="flex items-center gap-2 text-xs text-text-primary">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(value)}
-                          onChange={(event) =>
-                            setDraft({
-                              ...effectiveDraft,
-                              params: {
-                                ...effectiveDraft.params,
-                                [param.name]: event.target.checked,
-                              },
-                            })
-                          }
-                          className="accent-accent-blue"
-                        />
-                        Enable
-                      </label>
-                    )}
-                    {param.type === "select" && param.options && (
-                      <select
-                        value={String(value)}
-                        onChange={(event) =>
-                          setDraft({
-                            ...effectiveDraft,
-                            params: {
-                              ...effectiveDraft.params,
-                              [param.name]: event.target.value,
-                            },
-                          })
-                        }
-                        className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
-                      >
-                        {param.options.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <p className="text-[10px] text-text-muted mt-0.5">
-                      {param.description}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        {selectedStrategy && (
+          <StrategyParameterFields
+            strategy={selectedStrategy}
+            values={effectiveDraft.params}
+            title="Strategy Parameters"
+            onChange={(name, value) =>
+              setDraft({
+                ...effectiveDraft,
+                params: {
+                  ...effectiveDraft.params,
+                  [name]: value,
+                },
+              })
+            }
+          />
         )}
 
         <div>
@@ -433,10 +310,7 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
             onChange={(event) =>
               setDraft({
                 ...effectiveDraft,
-                tickers: event.target.value
-                  .split(",")
-                  .map((ticker) => ticker.trim().toUpperCase())
-                  .filter(Boolean),
+                tickers: parseTickerList(event.target.value),
               })
             }
             placeholder="AAPL, MSFT, NVDA"
