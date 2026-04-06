@@ -5,6 +5,8 @@ from app.models.job import ResearchJob
 from app.models.paper import (
     PaperTradingEquityPoint,
     PaperTradingEvent,
+    PaperTradingExecution,
+    PaperTradingOrder,
     PaperTradingPosition,
     PaperTradingSession,
 )
@@ -25,4 +27,6 @@ __all__ = [
     "PaperTradingPosition",
     "PaperTradingEvent",
     "PaperTradingEquityPoint",
+    "PaperTradingOrder",
+    "PaperTradingExecution",
 ]

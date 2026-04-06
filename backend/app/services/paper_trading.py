@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models.paper import (
     PaperTradingEquityPoint,
     PaperTradingEvent,
+    PaperTradingExecution,
+    PaperTradingOrder,
     PaperTradingPosition,
     PaperTradingSession,
 )
@@ -26,19 +28,21 @@ from app.schemas.paper import (
     PaperSessionStatus,
     PaperTradingEquityPointView,
     PaperTradingEventView,
+    PaperTradingExecutionView,
+    PaperTradingOrderView,
     PaperTradingPositionView,
     PaperTradingSessionCreate,
     PaperTradingSessionDetail,
     PaperTradingSessionSummary,
 )
-from app.services.execution import simulate_fill
-from app.services.portfolio import Portfolio, Position
+from app.services.brokers.factory import build_broker_adapter, build_broker_adapter_for_session
+from app.services.brokers.types import BrokerExecutionRecord, BrokerOrderRecord, BrokerSyncResult
+from app.services.portfolio import Portfolio
 from app.services.portfolio_optimizer import (
     PortfolioConstructionRequest,
     construct_target_weights,
 )
 from app.services.strategy_registry import build_strategy_instance
-from app.services.trading import execute_target_weights
 from app.strategies.base import BaseStrategy
 from app.utils.datetime import utc_now_naive
 
@@ -51,6 +55,7 @@ class PaperSessionRuntime:
     session_id: str
     strategy: BaseStrategy | None = None
     portfolio: Portfolio | None = None
+    adapter: Any | None = None
     task: asyncio.Task | None = None
     latest_frames: dict[str, pd.DataFrame] = field(default_factory=dict)
     last_processed_bar: pd.Timestamp | None = None
@@ -116,7 +121,14 @@ class PaperTradingManager:
             sessions = result.scalars().all()
 
         for session in sessions:
-            await self.start_session(session.id, emit_status=False)
+            try:
+                await self.start_session(session.id, emit_status=False)
+            except Exception as exc:
+                logger.exception(
+                    "paper_trading.resume_active_sessions.failed",
+                    session_id=session.id,
+                    error=str(exc),
+                )
         logger.info(
             "paper_trading.resume_active_sessions.completed",
             resumed_sessions=len(sessions),
@@ -154,6 +166,10 @@ class PaperTradingManager:
                 payload.params,
                 workspace_id=workspace_id,
             )
+            adapter = build_broker_adapter(
+                execution_mode=payload.execution_mode,
+                broker_adapter=payload.broker_adapter,
+            )
             if strategy.requires_short_selling and not payload.allow_short_selling:
                 raise ValueError(f"{strategy.name} requires short selling to be enabled.")
             session = PaperTradingSession(
@@ -162,6 +178,10 @@ class PaperTradingManager:
                 created_by_user_id=created_by_user_id,
                 name=payload.name,
                 status="draft",
+                execution_mode=payload.execution_mode,
+                broker_adapter=payload.broker_adapter,
+                broker_account_label=adapter.default_account_label(),
+                open_order_count=0,
                 strategy_id=payload.strategy_id,
                 strategy_params=payload.params,
                 tickers=payload.tickers,
@@ -251,6 +271,7 @@ class PaperTradingManager:
             session = await self._get_session(db, session_id, workspace_id=workspace_id)
             if not session:
                 raise ValueError("Paper trading session not found")
+            build_broker_adapter_for_session(session)
             strategy = await build_strategy_instance(
                 db,
                 session.strategy_id,
@@ -291,8 +312,28 @@ class PaperTradingManager:
             session = await self._get_session(db, session_id, workspace_id=workspace_id)
             if not session:
                 raise ValueError("Paper trading session not found")
+            runtime = await self._load_runtime(session_id)
+            if runtime.adapter is not None:
+                cancelled_orders = await runtime.adapter.cancel_open_orders(
+                    session,
+                    runtime,
+                    reason="Session paused; open broker orders were cancelled.",
+                    db=db,
+                )
+                if cancelled_orders:
+                    await self._persist_broker_activity(
+                        db,
+                        session_id,
+                        BrokerSyncResult(
+                            orders=cancelled_orders,
+                            account_label=session.broker_account_label,
+                            open_order_count=0,
+                        ),
+                        snapshot_time=utc_now_naive(),
+                    )
             status_changed = session.status != "paused"
             session.status = "paused"
+            session.open_order_count = 0
             if status_changed:
                 db.add(
                     PaperTradingEvent(
@@ -317,8 +358,28 @@ class PaperTradingManager:
             session = await self._get_session(db, session_id, workspace_id=workspace_id)
             if not session:
                 raise ValueError("Paper trading session not found")
+            runtime = await self._load_runtime(session_id)
+            if runtime.adapter is not None:
+                cancelled_orders = await runtime.adapter.cancel_open_orders(
+                    session,
+                    runtime,
+                    reason="Session stopped; open broker orders were cancelled.",
+                    db=db,
+                )
+                if cancelled_orders:
+                    await self._persist_broker_activity(
+                        db,
+                        session_id,
+                        BrokerSyncResult(
+                            orders=cancelled_orders,
+                            account_label=session.broker_account_label,
+                            open_order_count=0,
+                        ),
+                        snapshot_time=utc_now_naive(),
+                    )
             status_changed = session.status != "stopped"
             session.status = "stopped"
+            session.open_order_count = 0
             if status_changed:
                 session.stopped_at = utc_now_naive()
                 db.add(
@@ -390,7 +451,11 @@ class PaperTradingManager:
             runtime = PaperSessionRuntime(session_id=session_id)
             self._runtimes[session_id] = runtime
 
-        if runtime.strategy is not None and runtime.portfolio is not None:
+        if (
+            runtime.strategy is not None
+            and runtime.portfolio is not None
+            and runtime.adapter is not None
+        ):
             return runtime
 
         async with self._session_factory() as db:
@@ -404,25 +469,8 @@ class PaperTradingManager:
                 session.strategy_params,
                 workspace_id=session.workspace_id,
             )
-            runtime.portfolio = Portfolio(
-                initial_capital=session.initial_capital,
-                cash=session.cash,
-            )
-
-            positions_result = await db.execute(
-                select(PaperTradingPosition).where(PaperTradingPosition.session_id == session_id)
-            )
-            positions = positions_result.scalars().all()
-            for row in positions:
-                runtime.portfolio.positions[row.ticker] = Position(
-                    ticker=row.ticker,
-                    shares=row.shares,
-                    avg_cost=row.avg_cost,
-                    entry_date=row.entry_date.date(),
-                    current_price=row.current_price,
-                    accrued_borrow_cost=row.accrued_borrow_cost,
-                    accrued_locate_fee=row.accrued_locate_fee,
-                )
+            runtime.adapter = build_broker_adapter_for_session(session)
+            await runtime.adapter.load_portfolio(session, runtime, db)
             if session.last_price_at is not None:
                 runtime.last_processed_bar = pd.Timestamp(session.last_price_at)
 
@@ -497,20 +545,22 @@ class PaperTradingManager:
 
                     if runtime.portfolio is None or runtime.strategy is None:
                         raise RuntimeError("Paper trading runtime was not initialized.")
+                    if runtime.adapter is None:
+                        raise RuntimeError("Paper trading broker adapter was not initialized.")
 
-                    forced_cover_tickers = (
-                        runtime.portfolio.get_short_squeeze_candidates(
-                            current_prices, session.short_squeeze_threshold_pct
-                        )
-                        if session.allow_short_selling
-                        else []
+                    latest_sync = await runtime.adapter.sync_account_state(
+                        session,
+                        runtime,
+                        current_prices=current_prices,
+                        snapshot_time=current_dt,
+                        db=db,
                     )
-                    runtime.portfolio.update_prices(
-                        current_prices,
-                        current_dt.date(),
-                        short_borrow_rate_bps=session.short_borrow_rate_bps,
+                    await self._persist_broker_activity(
+                        db,
+                        session_id,
+                        latest_sync,
+                        snapshot_time=current_dt,
                     )
-                    runtime.portfolio.equity_history = runtime.portfolio.equity_history[-500:]
                     if session.last_error == NO_MARKET_DATA_ERROR:
                         session.last_error = None
                         db.add(
@@ -525,65 +575,37 @@ class PaperTradingManager:
                             )
                         )
 
-                    if forced_cover_tickers:
-                        for ticker in forced_cover_tickers:
-                            if ticker not in runtime.portfolio.positions:
-                                continue
-                            position = runtime.portfolio.positions[ticker]
-                            if position.shares >= 0 or ticker not in execution_bars:
-                                continue
+                    market_open = await runtime.adapter.is_market_open(
+                        session,
+                        snapshot_time=current_dt,
+                    )
+                    forced_cover_tickers = (
+                        runtime.portfolio.get_short_squeeze_candidates(
+                            current_prices, session.short_squeeze_threshold_pct
+                        )
+                        if session.allow_short_selling
+                        else []
+                    )
 
-                            fill = simulate_fill(
-                                side="BUY",
-                                shares=abs(position.shares),
-                                bar_open=float(execution_bars[ticker]["open"]),
-                                bar_high=float(execution_bars[ticker]["high"]),
-                                bar_low=float(execution_bars[ticker]["low"]),
-                                bar_close=float(execution_bars[ticker]["close"]),
-                                bar_volume=int(execution_bars[ticker]["volume"]),
-                                slippage_bps=session.slippage_bps,
-                                commission_per_share=session.commission_per_share,
-                                market_impact_model=session.market_impact_model,
-                                max_volume_participation=session.max_volume_participation_pct / 100,
-                            )
-                            if not fill.filled or fill.shares_filled <= 0:
-                                continue
+                    if market_open and forced_cover_tickers:
+                        latest_sync = await runtime.adapter.force_cover_positions(
+                            session,
+                            runtime,
+                            tickers=forced_cover_tickers,
+                            current_bars=execution_bars,
+                            current_prices=current_prices,
+                            snapshot_time=current_dt,
+                            db=db,
+                            reason="Forced buy-to-cover after the short squeeze threshold was breached.",
+                        )
+                        await self._persist_broker_activity(
+                            db,
+                            session_id,
+                            latest_sync,
+                            snapshot_time=current_dt,
+                        )
 
-                            transaction = runtime.portfolio.apply_transaction(
-                                ticker=ticker,
-                                side="BUY",
-                                shares=fill.shares_filled,
-                                fill_price=fill.fill_price,
-                                commission=fill.commission,
-                                slippage_cost=fill.slippage_cost,
-                                trade_date=current_dt.date(),
-                                requested_shares=fill.requested_shares,
-                                spread_cost=fill.spread_cost,
-                                market_impact_cost=fill.market_impact_cost,
-                                timing_cost=fill.timing_cost,
-                                opportunity_cost=fill.opportunity_cost,
-                                participation_rate_pct=fill.participation_rate_pct,
-                                risk_event="short_squeeze_cover",
-                            )
-                            if transaction.executed_shares <= 0:
-                                continue
-
-                            db.add(
-                                PaperTradingEvent(
-                                    id=str(uuid.uuid4()),
-                                    session_id=session_id,
-                                    timestamp=current_dt,
-                                    event_type="fill",
-                                    ticker=ticker,
-                                    action="buy",
-                                    shares=transaction.executed_shares,
-                                    fill_price=fill.fill_price,
-                                    status="risk",
-                                    message="Forced buy-to-cover after the short squeeze threshold was breached.",
-                                )
-                            )
-
-                    if (
+                    if market_open and (
                         runtime.last_processed_bar is None
                         or current_ts > runtime.last_processed_bar
                     ):
@@ -615,45 +637,23 @@ class PaperTradingManager:
                                 allow_short_selling=session.allow_short_selling,
                             )
                         )
-                        executions = execute_target_weights(
-                            portfolio=runtime.portfolio,
+                        latest_sync = await runtime.adapter.execute_target_weights(
+                            session,
+                            runtime,
                             target_weights=construction.target_weights,
                             current_bars=execution_bars,
                             current_prices=current_prices,
-                            slippage_bps=session.slippage_bps,
-                            commission_per_share=session.commission_per_share,
-                            trade_date=current_dt.date(),
-                            allow_short_selling=session.allow_short_selling,
-                            short_margin_requirement_pct=session.short_margin_requirement_pct,
-                            short_locate_fee_bps=session.short_locate_fee_bps,
-                            market_impact_model=session.market_impact_model,
-                            max_volume_participation=session.max_volume_participation_pct / 100,
+                            snapshot_time=current_dt,
+                            db=db,
+                        )
+                        await self._persist_broker_activity(
+                            db,
+                            session_id,
+                            latest_sync,
+                            snapshot_time=current_dt,
                         )
                         runtime.last_processed_bar = current_ts
                         session.last_signal_at = utc_now_naive()
-
-                        for execution in executions:
-                            if execution.status == "skipped" and execution.reason in {
-                                "Signal did not increase exposure beyond the current position",
-                                "No existing position to reduce",
-                                "Requested reduction rounded to zero shares",
-                            }:
-                                continue
-                            db.add(
-                                PaperTradingEvent(
-                                    id=str(uuid.uuid4()),
-                                    session_id=session_id,
-                                    timestamp=current_dt,
-                                    event_type="fill" if execution.status == "filled" else "signal",
-                                    ticker=execution.ticker,
-                                    action=execution.action.lower(),
-                                    signal=execution.signal,
-                                    shares=execution.filled_shares or execution.requested_shares,
-                                    fill_price=execution.fill_price,
-                                    status=execution.status,
-                                    message=execution.reason,
-                                )
-                            )
 
                     await self._sync_session_state(
                         db,
@@ -661,6 +661,8 @@ class PaperTradingManager:
                         portfolio=runtime.portfolio,
                         snapshot_time=current_dt,
                         latest_bar_ts=current_dt,
+                        account_label=latest_sync.account_label,
+                        open_order_count=latest_sync.open_order_count,
                     )
                     await db.commit()
 
@@ -729,10 +731,178 @@ class PaperTradingManager:
         return _normalize_history(df)
 
     def health_summary(self) -> dict[str, int]:
+        adapter_counts: dict[str, int] = {}
+        for runtime in self._runtimes.values():
+            adapter_key = getattr(runtime.adapter, "adapter_key", "paper")
+            adapter_counts[f"{adapter_key}_sessions"] = (
+                adapter_counts.get(f"{adapter_key}_sessions", 0) + 1
+            )
         return {
             "runtime_sessions": len(self._runtimes),
             "subscriber_channels": len(self._subscribers),
+            **adapter_counts,
         }
+
+    async def _persist_broker_activity(
+        self,
+        db: AsyncSession,
+        session_id: str,
+        broker_result: BrokerSyncResult,
+        *,
+        snapshot_time: datetime,
+    ):
+        changed_orders: list[BrokerOrderRecord] = []
+        inserted_executions: list[BrokerExecutionRecord] = []
+
+        for order in broker_result.orders:
+            order_row = await db.get(PaperTradingOrder, order.id)
+            if order_row is None and order.broker_order_id:
+                existing_result = await db.execute(
+                    select(PaperTradingOrder).where(
+                        PaperTradingOrder.session_id == session_id,
+                        PaperTradingOrder.broker_order_id == order.broker_order_id,
+                    )
+                )
+                order_row = existing_result.scalar_one_or_none()
+
+            previous_status = order_row.status if order_row is not None else None
+            previous_filled = order_row.filled_shares if order_row is not None else None
+
+            if order_row is None:
+                order_row = PaperTradingOrder(
+                    id=order.id,
+                    session_id=session_id,
+                    broker_order_id=order.broker_order_id,
+                    client_order_id=order.client_order_id,
+                    ticker=order.ticker,
+                    side=order.side,
+                    order_type=order.order_type,
+                    time_in_force=order.time_in_force,
+                    requested_shares=order.requested_shares,
+                    filled_shares=order.filled_shares,
+                    status=order.status,
+                    avg_fill_price=order.avg_fill_price,
+                    submitted_at=order.submitted_at,
+                    updated_at=order.updated_at,
+                    message=order.message,
+                    metadata_json=order.metadata,
+                )
+                db.add(order_row)
+                changed_orders.append(order)
+                continue
+
+            order_row.client_order_id = order.client_order_id
+            order_row.ticker = order.ticker
+            order_row.side = order.side
+            order_row.order_type = order.order_type
+            order_row.time_in_force = order.time_in_force
+            order_row.requested_shares = order.requested_shares
+            order_row.filled_shares = order.filled_shares
+            order_row.status = order.status
+            order_row.avg_fill_price = order.avg_fill_price
+            order_row.submitted_at = order.submitted_at
+            order_row.updated_at = order.updated_at
+            order_row.message = order.message
+            order_row.metadata_json = order.metadata
+
+            if previous_status != order.status or previous_filled != order.filled_shares:
+                changed_orders.append(order)
+
+        for execution in broker_result.executions:
+            execution_row = await db.get(PaperTradingExecution, execution.id)
+            if execution_row is None and execution.broker_execution_id:
+                execution_result = await db.execute(
+                    select(PaperTradingExecution).where(
+                        PaperTradingExecution.session_id == session_id,
+                        PaperTradingExecution.broker_execution_id == execution.broker_execution_id,
+                    )
+                )
+                execution_row = execution_result.scalar_one_or_none()
+
+            if execution_row is not None:
+                continue
+
+            db.add(
+                PaperTradingExecution(
+                    id=execution.id,
+                    session_id=session_id,
+                    order_id=execution.order_id,
+                    broker_execution_id=execution.broker_execution_id,
+                    ticker=execution.ticker,
+                    side=execution.side,
+                    shares=execution.shares,
+                    fill_price=execution.fill_price,
+                    commission=execution.commission,
+                    slippage_cost=execution.slippage_cost,
+                    borrow_cost=execution.borrow_cost,
+                    locate_fee=execution.locate_fee,
+                    spread_cost=execution.spread_cost,
+                    market_impact_cost=execution.market_impact_cost,
+                    timing_cost=execution.timing_cost,
+                    opportunity_cost=execution.opportunity_cost,
+                    participation_rate_pct=execution.participation_rate_pct,
+                    status=execution.status,
+                    risk_event=execution.risk_event,
+                    executed_at=execution.executed_at,
+                    message=execution.message,
+                    metadata_json=execution.metadata,
+                )
+            )
+            inserted_executions.append(execution)
+
+        self._emit_broker_events(
+            db,
+            session_id=session_id,
+            orders=changed_orders,
+            executions=inserted_executions,
+            snapshot_time=snapshot_time,
+        )
+
+    def _emit_broker_events(
+        self,
+        db: AsyncSession,
+        *,
+        session_id: str,
+        orders: list[BrokerOrderRecord],
+        executions: list[BrokerExecutionRecord],
+        snapshot_time: datetime,
+    ):
+        execution_order_ids = {execution.order_id for execution in executions if execution.order_id}
+        for order in orders:
+            if order.order_type and order.id in execution_order_ids:
+                continue
+            event_type = "error" if order.status in {"rejected"} else "signal"
+            event_status = "warning" if order.status in {"canceled", "cancelled"} else order.status
+            db.add(
+                PaperTradingEvent(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    timestamp=snapshot_time,
+                    event_type=event_type,
+                    ticker=order.ticker,
+                    action=order.side,
+                    shares=order.filled_shares or order.requested_shares,
+                    fill_price=order.avg_fill_price,
+                    status=event_status,
+                    message=order.message or f"{order.side.upper()} order {order.status}.",
+                )
+            )
+
+        for execution in executions:
+            db.add(
+                PaperTradingEvent(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    timestamp=execution.executed_at,
+                    event_type="fill",
+                    ticker=execution.ticker,
+                    action=execution.side,
+                    shares=execution.shares,
+                    fill_price=execution.fill_price,
+                    status=execution.status,
+                    message=execution.message or "Execution recorded.",
+                )
+            )
 
     async def _sync_session_state(
         self,
@@ -741,6 +911,8 @@ class PaperTradingManager:
         portfolio: Portfolio,
         snapshot_time: datetime,
         latest_bar_ts: datetime,
+        account_label: str | None = None,
+        open_order_count: int = 0,
     ):
         previous_price_at = session.last_price_at
         session.cash = round(portfolio.cash, 2)
@@ -751,6 +923,8 @@ class PaperTradingManager:
         )
         session.last_price_at = latest_bar_ts
         session.last_heartbeat_at = utc_now_naive()
+        session.broker_account_label = account_label or session.broker_account_label
+        session.open_order_count = open_order_count
 
         if previous_price_at is None or pd.Timestamp(latest_bar_ts) > pd.Timestamp(
             previous_price_at
@@ -832,10 +1006,24 @@ class PaperTradingManager:
             .where(PaperTradingEquityPoint.session_id == session_id)
             .order_by(PaperTradingEquityPoint.timestamp.asc())
         )
+        order_result = await db.execute(
+            select(PaperTradingOrder)
+            .where(PaperTradingOrder.session_id == session_id)
+            .order_by(PaperTradingOrder.submitted_at.desc())
+            .limit(50)
+        )
+        execution_result = await db.execute(
+            select(PaperTradingExecution)
+            .where(PaperTradingExecution.session_id == session_id)
+            .order_by(PaperTradingExecution.executed_at.desc())
+            .limit(50)
+        )
 
         positions = positions_result.scalars().all()
         events = list(reversed(events_result.scalars().all()))
         equity_points = equity_result.scalars().all()
+        orders = list(reversed(order_result.scalars().all()))
+        executions = list(reversed(execution_result.scalars().all()))
 
         return PaperTradingSessionDetail(
             **self._session_to_summary(session).model_dump(),
@@ -888,6 +1076,50 @@ class PaperTradingManager:
                 )
                 for row in events
             ],
+            recent_orders=[
+                PaperTradingOrderView(
+                    id=row.id,
+                    broker_order_id=row.broker_order_id,
+                    client_order_id=row.client_order_id,
+                    submitted_at=row.submitted_at,
+                    updated_at=row.updated_at,
+                    ticker=row.ticker,
+                    side=row.side,
+                    order_type=row.order_type,
+                    time_in_force=row.time_in_force,
+                    requested_shares=row.requested_shares,
+                    filled_shares=row.filled_shares,
+                    status=row.status,
+                    avg_fill_price=row.avg_fill_price,
+                    message=row.message,
+                )
+                for row in orders
+            ],
+            recent_executions=[
+                PaperTradingExecutionView(
+                    id=row.id,
+                    order_id=row.order_id,
+                    broker_execution_id=row.broker_execution_id,
+                    executed_at=row.executed_at,
+                    ticker=row.ticker,
+                    side=row.side,
+                    shares=row.shares,
+                    fill_price=row.fill_price,
+                    commission=row.commission,
+                    slippage_cost=row.slippage_cost,
+                    borrow_cost=row.borrow_cost,
+                    locate_fee=row.locate_fee,
+                    spread_cost=row.spread_cost,
+                    market_impact_cost=row.market_impact_cost,
+                    timing_cost=row.timing_cost,
+                    opportunity_cost=row.opportunity_cost,
+                    participation_rate_pct=row.participation_rate_pct,
+                    status=row.status,
+                    risk_event=row.risk_event,
+                    message=row.message,
+                )
+                for row in executions
+            ],
             equity_curve=[
                 PaperTradingEquityPointView(
                     timestamp=row.timestamp,
@@ -921,6 +1153,9 @@ class PaperTradingManager:
             id=session.id,
             name=session.name,
             status=cast(PaperSessionStatus, session.status),
+            execution_mode=cast(Any, session.execution_mode),
+            broker_adapter=cast(Any, session.broker_adapter),
+            broker_account_label=session.broker_account_label,
             strategy_id=session.strategy_id,
             tickers=session.tickers,
             bar_interval=cast(BarInterval, session.bar_interval),
@@ -936,4 +1171,5 @@ class PaperTradingManager:
             last_price_at=session.last_price_at,
             last_heartbeat_at=session.last_heartbeat_at,
             last_error=session.last_error,
+            open_order_count=session.open_order_count,
         )

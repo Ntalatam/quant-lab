@@ -41,6 +41,10 @@ class PaperTradingSession(Base):
     )
     name: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="draft")
+    execution_mode: Mapped[str] = mapped_column(String(24), default="simulated_paper")
+    broker_adapter: Mapped[str] = mapped_column(String(24), default="paper")
+    broker_account_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    open_order_count: Mapped[int] = mapped_column(Integer, default=0)
 
     strategy_id: Mapped[str] = mapped_column(String(50))
     strategy_params: Mapped[dict] = mapped_column(JSON)
@@ -92,6 +96,12 @@ class PaperTradingSession(Base):
         back_populates="session", cascade="all, delete-orphan"
     )
     equity_points: Mapped[list["PaperTradingEquityPoint"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+    orders: Mapped[list["PaperTradingOrder"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+    executions: Mapped[list["PaperTradingExecution"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
     workspace: Mapped["Workspace | None"] = relationship(back_populates="paper_sessions")
@@ -150,3 +160,77 @@ class PaperTradingEquityPoint(Base):
     market_value: Mapped[float] = mapped_column(Float)
 
     session: Mapped["PaperTradingSession"] = relationship(back_populates="equity_points")
+
+
+class PaperTradingOrder(Base):
+    __tablename__ = "paper_trading_orders"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("paper_trading_sessions.id"),
+        index=True,
+    )
+    broker_order_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    client_order_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    ticker: Mapped[str] = mapped_column(String(10))
+    side: Mapped[str] = mapped_column(String(12))
+    order_type: Mapped[str] = mapped_column(String(24), default="market")
+    time_in_force: Mapped[str] = mapped_column(String(16), default="day")
+    requested_shares: Mapped[int] = mapped_column(Integer)
+    filled_shares: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(24), default="new")
+    avg_fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    limit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    session: Mapped["PaperTradingSession"] = relationship(back_populates="orders")
+    executions: Mapped[list["PaperTradingExecution"]] = relationship(
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+
+class PaperTradingExecution(Base):
+    __tablename__ = "paper_trading_executions"
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("paper_trading_sessions.id"),
+        index=True,
+    )
+    order_id: Mapped[str | None] = mapped_column(
+        String(80),
+        ForeignKey("paper_trading_orders.id"),
+        nullable=True,
+        index=True,
+    )
+    broker_execution_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ticker: Mapped[str] = mapped_column(String(10))
+    side: Mapped[str] = mapped_column(String(12))
+    shares: Mapped[int] = mapped_column(Integer)
+    fill_price: Mapped[float] = mapped_column(Float)
+    commission: Mapped[float] = mapped_column(Float, default=0.0)
+    slippage_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    borrow_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    locate_fee: Mapped[float] = mapped_column(Float, default=0.0)
+    spread_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    market_impact_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    timing_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    opportunity_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    participation_rate_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(24), default="filled")
+    risk_event: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    executed_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    session: Mapped["PaperTradingSession"] = relationship(back_populates="executions")
+    order: Mapped["PaperTradingOrder | None"] = relationship(back_populates="executions")

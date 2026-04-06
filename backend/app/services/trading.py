@@ -28,6 +28,15 @@ class SignalExecution:
         return self.commission + self.slippage_cost + self.locate_fee + self.borrow_cost
 
 
+@dataclass
+class PlannedTargetOrder:
+    priority: int
+    ticker: str
+    signal: float
+    action: str
+    requested_shares: int
+
+
 def execute_signals(
     portfolio: Portfolio,
     signals: dict[str, float],
@@ -277,75 +286,19 @@ def execute_target_weights(
     The caller is responsible for applying any portfolio construction logic.
     This executor focuses on turning target weights into realistic fills.
     """
-    planned: list[tuple[int, str, float, str, int]] = []
-    executions: list[SignalExecution] = []
-    tickers = set(target_weights) | set(portfolio.positions)
+    planned, executions = plan_target_weight_orders(
+        portfolio=portfolio,
+        target_weights=target_weights,
+        current_bars=current_bars,
+        current_prices=current_prices,
+        allow_short_selling=allow_short_selling,
+    )
 
-    for ticker in tickers:
-        if ticker not in current_bars or ticker not in current_prices:
-            executions.append(
-                SignalExecution(
-                    ticker=ticker,
-                    signal=target_weights.get(ticker, 0.0),
-                    action="BUY" if target_weights.get(ticker, 0.0) >= 0 else "SELL",
-                    requested_shares=0,
-                    status="skipped",
-                    reason="No market data available for execution",
-                )
-            )
-            continue
-
-        current_price = current_prices[ticker]
-        if current_price <= 0:
-            executions.append(
-                SignalExecution(
-                    ticker=ticker,
-                    signal=target_weights.get(ticker, 0.0),
-                    action="BUY" if target_weights.get(ticker, 0.0) >= 0 else "SELL",
-                    requested_shares=0,
-                    status="skipped",
-                    reason="Invalid execution price",
-                )
-            )
-            continue
-
-        target_weight = target_weights.get(ticker, 0.0)
-        if target_weight < 0 and not allow_short_selling:
-            target_weight = 0.0
-
-        current_shares = portfolio.positions[ticker].shares if ticker in portfolio.positions else 0
-        target_value = portfolio.total_equity * target_weight
-        target_shares = int(target_value / current_price)
-        if target_shares == current_shares:
-            executions.append(
-                SignalExecution(
-                    ticker=ticker,
-                    signal=target_weight,
-                    action="BUY" if target_weight >= 0 else "SELL",
-                    requested_shares=0,
-                    status="skipped",
-                    reason="Target already matched the current position",
-                )
-            )
-            continue
-
-        if current_shares > 0 and target_shares < 0:
-            planned.append((0, ticker, 0.0, "SELL", current_shares))
-            planned.append((1, ticker, target_weight, "SELL", abs(target_shares)))
-            continue
-
-        if current_shares < 0 and target_shares > 0:
-            planned.append((0, ticker, 0.0, "BUY", abs(current_shares)))
-            planned.append((1, ticker, target_weight, "BUY", target_shares))
-            continue
-
-        share_delta = target_shares - current_shares
-        action = "BUY" if share_delta > 0 else "SELL"
-        planned.append((2, ticker, target_weight, action, abs(share_delta)))
-
-    planned.sort(key=lambda item: (item[0], 0 if item[3] == "SELL" else 1, -item[4]))
-
-    for _, ticker, target_weight, action, requested_shares in planned:
+    for plan in planned:
+        ticker = plan.ticker
+        target_weight = plan.signal
+        action = plan.action
+        requested_shares = plan.requested_shares
         bar = current_bars[ticker]
         fill = simulate_fill(
             side=action,
@@ -425,3 +378,121 @@ def execute_target_weights(
         )
 
     return executions
+
+
+def plan_target_weight_orders(
+    portfolio: Portfolio,
+    target_weights: dict[str, float],
+    current_bars: dict[str, pd.Series],
+    current_prices: dict[str, float],
+    allow_short_selling: bool = False,
+) -> tuple[list[PlannedTargetOrder], list[SignalExecution]]:
+    planned: list[PlannedTargetOrder] = []
+    executions: list[SignalExecution] = []
+    tickers = set(target_weights) | set(portfolio.positions)
+
+    for ticker in tickers:
+        if ticker not in current_bars or ticker not in current_prices:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weights.get(ticker, 0.0),
+                    action="BUY" if target_weights.get(ticker, 0.0) >= 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="No market data available for execution",
+                )
+            )
+            continue
+
+        current_price = current_prices[ticker]
+        if current_price <= 0:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weights.get(ticker, 0.0),
+                    action="BUY" if target_weights.get(ticker, 0.0) >= 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="Invalid execution price",
+                )
+            )
+            continue
+
+        target_weight = target_weights.get(ticker, 0.0)
+        if target_weight < 0 and not allow_short_selling:
+            target_weight = 0.0
+
+        current_shares = portfolio.positions[ticker].shares if ticker in portfolio.positions else 0
+        target_value = portfolio.total_equity * target_weight
+        target_shares = int(target_value / current_price)
+        if target_shares == current_shares:
+            executions.append(
+                SignalExecution(
+                    ticker=ticker,
+                    signal=target_weight,
+                    action="BUY" if target_weight >= 0 else "SELL",
+                    requested_shares=0,
+                    status="skipped",
+                    reason="Target already matched the current position",
+                )
+            )
+            continue
+
+        if current_shares > 0 and target_shares < 0:
+            planned.append(
+                PlannedTargetOrder(
+                    priority=0,
+                    ticker=ticker,
+                    signal=0.0,
+                    action="SELL",
+                    requested_shares=current_shares,
+                )
+            )
+            planned.append(
+                PlannedTargetOrder(
+                    priority=1,
+                    ticker=ticker,
+                    signal=target_weight,
+                    action="SELL",
+                    requested_shares=abs(target_shares),
+                )
+            )
+            continue
+
+        if current_shares < 0 and target_shares > 0:
+            planned.append(
+                PlannedTargetOrder(
+                    priority=0,
+                    ticker=ticker,
+                    signal=0.0,
+                    action="BUY",
+                    requested_shares=abs(current_shares),
+                )
+            )
+            planned.append(
+                PlannedTargetOrder(
+                    priority=1,
+                    ticker=ticker,
+                    signal=target_weight,
+                    action="BUY",
+                    requested_shares=target_shares,
+                )
+            )
+            continue
+
+        share_delta = target_shares - current_shares
+        planned.append(
+            PlannedTargetOrder(
+                priority=2,
+                ticker=ticker,
+                signal=target_weight,
+                action="BUY" if share_delta > 0 else "SELL",
+                requested_shares=abs(share_delta),
+            )
+        )
+
+    planned.sort(
+        key=lambda item: (item.priority, 0 if item.action == "SELL" else 1, -item.requested_shares)
+    )
+    return planned, executions

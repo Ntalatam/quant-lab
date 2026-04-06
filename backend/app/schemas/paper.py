@@ -1,17 +1,21 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PaperSessionStatus = Literal["draft", "active", "paused", "stopped", "error"]
 PaperEventType = Literal["status", "signal", "fill", "error"]
 BarInterval = Literal["1m", "5m", "15m", "1h", "1d"]
+PaperExecutionMode = Literal["simulated_paper", "broker_paper", "broker_live"]
+PaperBrokerAdapter = Literal["paper", "alpaca"]
 
 
 class PaperTradingSessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=3, max_length=100)
+    execution_mode: Literal["simulated_paper", "broker_paper"] = "simulated_paper"
+    broker_adapter: PaperBrokerAdapter = "paper"
     strategy_id: str
     params: dict = Field(default_factory=dict)
     tickers: list[str] = Field(min_length=1, max_length=10)
@@ -71,11 +75,29 @@ class PaperTradingSessionCreate(BaseModel):
             raise ValueError("At least one ticker is required")
         return normalized
 
+    @field_validator("broker_adapter")
+    @classmethod
+    def normalize_broker_adapter(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @model_validator(mode="after")
+    def validate_execution_mode(self):
+        if self.execution_mode == "simulated_paper":
+            self.broker_adapter = "paper"
+            return self
+
+        if self.execution_mode == "broker_paper" and self.broker_adapter == "paper":
+            raise ValueError("Broker paper mode requires an external broker adapter.")
+        return self
+
 
 class PaperTradingSessionSummary(BaseModel):
     id: str
     name: str
     status: PaperSessionStatus
+    execution_mode: PaperExecutionMode
+    broker_adapter: PaperBrokerAdapter
+    broker_account_label: str | None = None
     strategy_id: str
     tickers: list[str]
     bar_interval: BarInterval
@@ -91,6 +113,7 @@ class PaperTradingSessionSummary(BaseModel):
     last_price_at: datetime | None = None
     last_heartbeat_at: datetime | None = None
     last_error: str | None = None
+    open_order_count: int = 0
 
 
 class PaperTradingPositionView(BaseModel):
@@ -127,6 +150,46 @@ class PaperTradingEquityPointView(BaseModel):
     market_value: float
 
 
+class PaperTradingOrderView(BaseModel):
+    id: str
+    broker_order_id: str | None = None
+    client_order_id: str | None = None
+    submitted_at: datetime
+    updated_at: datetime
+    ticker: str
+    side: str
+    order_type: str
+    time_in_force: str
+    requested_shares: int
+    filled_shares: int
+    status: str
+    avg_fill_price: float | None = None
+    message: str | None = None
+
+
+class PaperTradingExecutionView(BaseModel):
+    id: str
+    order_id: str | None = None
+    broker_execution_id: str | None = None
+    executed_at: datetime
+    ticker: str
+    side: str
+    shares: int
+    fill_price: float
+    commission: float
+    slippage_cost: float
+    borrow_cost: float
+    locate_fee: float
+    spread_cost: float
+    market_impact_cost: float
+    timing_cost: float
+    opportunity_cost: float
+    participation_rate_pct: float
+    status: str
+    risk_event: str | None = None
+    message: str | None = None
+
+
 class PaperTradingSessionDetail(PaperTradingSessionSummary):
     benchmark: str
     strategy_params: dict
@@ -148,4 +211,6 @@ class PaperTradingSessionDetail(PaperTradingSessionSummary):
     short_squeeze_threshold_pct: float
     positions: list[PaperTradingPositionView]
     recent_events: list[PaperTradingEventView]
+    recent_orders: list[PaperTradingOrderView] = Field(default_factory=list)
+    recent_executions: list[PaperTradingExecutionView] = Field(default_factory=list)
     equity_curve: list[PaperTradingEquityPointView]

@@ -21,6 +21,29 @@ export const PAPER_INTERVAL_OPTIONS = [
   { value: "1d", label: "1 Day" },
 ] as const;
 
+export const PAPER_EXECUTION_MODE_OPTIONS = [
+  {
+    value: "simulated_paper",
+    broker_adapter: "paper",
+    label: "Simulated Paper",
+    description:
+      "QuantLab simulates fills locally with slippage, commission, and risk controls.",
+  },
+  {
+    value: "broker_paper",
+    broker_adapter: "alpaca",
+    label: "Broker Paper",
+    description:
+      "QuantLab submits paper orders to Alpaca and syncs positions, fills, and open orders back in.",
+  },
+] as const;
+
+export const PAPER_EXECUTION_MODE_LABELS = {
+  simulated_paper: "Simulated Paper",
+  broker_paper: "Broker Paper",
+  broker_live: "Broker Live",
+} as const;
+
 export const MARKET_IMPACT_MODEL_OPTIONS = [
   { value: "almgren_chriss", label: "Almgren-Chriss" },
   { value: "constant", label: "Constant Slippage" },

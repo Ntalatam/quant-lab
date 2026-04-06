@@ -418,9 +418,16 @@ export type PaperSessionStatus =
   | "error";
 
 export type PaperBarInterval = "1m" | "5m" | "15m" | "1h" | "1d";
+export type PaperExecutionMode =
+  | "simulated_paper"
+  | "broker_paper"
+  | "broker_live";
+export type PaperBrokerAdapter = "paper" | "alpaca";
 
 export interface PaperTradingSessionCreate {
   name: string;
+  execution_mode: "simulated_paper" | "broker_paper";
+  broker_adapter: PaperBrokerAdapter;
   strategy_id: string;
   params: Record<string, number | string | boolean>;
   tickers: string[];
@@ -456,6 +463,9 @@ export interface PaperTradingSessionSummary {
   id: string;
   name: string;
   status: PaperSessionStatus;
+  execution_mode: PaperExecutionMode;
+  broker_adapter: PaperBrokerAdapter;
+  broker_account_label: string | null;
   strategy_id: string;
   tickers: string[];
   bar_interval: PaperBarInterval;
@@ -471,6 +481,7 @@ export interface PaperTradingSessionSummary {
   last_price_at: string | null;
   last_heartbeat_at: string | null;
   last_error: string | null;
+  open_order_count: number;
 }
 
 export interface PaperTradingPosition {
@@ -507,6 +518,46 @@ export interface PaperTradingEquityPoint {
   market_value: number;
 }
 
+export interface PaperTradingOrder {
+  id: string;
+  broker_order_id: string | null;
+  client_order_id: string | null;
+  submitted_at: string;
+  updated_at: string;
+  ticker: string;
+  side: string;
+  order_type: string;
+  time_in_force: string;
+  requested_shares: number;
+  filled_shares: number;
+  status: string;
+  avg_fill_price: number | null;
+  message: string | null;
+}
+
+export interface PaperTradingExecution {
+  id: string;
+  order_id: string | null;
+  broker_execution_id: string | null;
+  executed_at: string;
+  ticker: string;
+  side: string;
+  shares: number;
+  fill_price: number;
+  commission: number;
+  slippage_cost: number;
+  borrow_cost: number;
+  locate_fee: number;
+  spread_cost: number;
+  market_impact_cost: number;
+  timing_cost: number;
+  opportunity_cost: number;
+  participation_rate_pct: number;
+  status: string;
+  risk_event: string | null;
+  message: string | null;
+}
+
 export interface PaperTradingSessionDetail extends PaperTradingSessionSummary {
   benchmark: string;
   strategy_params: Record<string, number | string | boolean>;
@@ -533,6 +584,8 @@ export interface PaperTradingSessionDetail extends PaperTradingSessionSummary {
   short_squeeze_threshold_pct: number;
   positions: PaperTradingPosition[];
   recent_events: PaperTradingEvent[];
+  recent_orders: PaperTradingOrder[];
+  recent_executions: PaperTradingExecution[];
   equity_curve: PaperTradingEquityPoint[];
 }
 

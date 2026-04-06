@@ -11,6 +11,7 @@ import { useCreatePaperSession } from "@/hooks/usePaperTrading";
 import {
   BENCHMARKS,
   MARKET_IMPACT_MODEL_OPTIONS,
+  PAPER_EXECUTION_MODE_OPTIONS,
   PAPER_INTERVAL_OPTIONS,
   POSITION_SIZING_OPTIONS,
 } from "@/lib/constants";
@@ -23,6 +24,8 @@ import {
 function defaultDraft(): PaperTradingSessionCreate {
   return {
     name: "Live Paper Session",
+    execution_mode: "simulated_paper",
+    broker_adapter: "paper",
     strategy_id: "",
     params: {},
     tickers: ["AAPL"],
@@ -146,6 +149,14 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
     [effectiveDraft.strategy_id, strategies],
   );
 
+  const selectedExecutionMode = useMemo(
+    () =>
+      PAPER_EXECUTION_MODE_OPTIONS.find(
+        (option) => option.value === effectiveDraft.execution_mode,
+      ) ?? PAPER_EXECUTION_MODE_OPTIONS[0],
+    [effectiveDraft.execution_mode],
+  );
+
   const canSubmit =
     !!effectiveDraft.name.trim() &&
     !!effectiveDraft.strategy_id &&
@@ -264,6 +275,58 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
             }
             className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm text-text-secondary mb-2">
+            Execution Venue
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {PAPER_EXECUTION_MODE_OPTIONS.map((option) => {
+              const isSelected = effectiveDraft.execution_mode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    setDraft({
+                      ...effectiveDraft,
+                      execution_mode: option.value,
+                      broker_adapter: option.broker_adapter,
+                    })
+                  }
+                  className="rounded-md p-4 text-left transition-colors"
+                  style={{
+                    background: isSelected
+                      ? "rgba(68,136,255,0.10)"
+                      : "var(--color-bg-primary)",
+                    border: isSelected
+                      ? "1px solid rgba(68,136,255,0.35)"
+                      : "1px solid var(--color-border)",
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="text-sm font-medium text-text-primary">
+                      {option.label}
+                    </span>
+                    {isSelected && (
+                      <span className="text-[10px] uppercase tracking-wider text-accent-blue">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed text-text-muted">
+                    {option.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-text-muted mt-2 leading-relaxed">
+            {selectedExecutionMode.value === "broker_paper"
+              ? "Broker paper mode requires Alpaca paper credentials on the backend. QuantLab still handles strategy generation and portfolio targeting, but fills and open orders come from the broker account."
+              : "Simulated paper mode stays fully local, which makes it the safest default for development and regression testing."}
+          </p>
         </div>
 
         <div>
@@ -830,7 +893,9 @@ export function PaperSessionForm({ prefillConfig }: PaperSessionFormProps) {
           {createMutation.isPending ? <LoadingSpinner size={14} /> : null}
           {createMutation.isPending
             ? "Creating Session…"
-            : "Create Live Session"}
+            : selectedExecutionMode.value === "broker_paper"
+              ? "Create Broker Paper Session"
+              : "Create Simulated Session"}
         </button>
       </div>
     </div>

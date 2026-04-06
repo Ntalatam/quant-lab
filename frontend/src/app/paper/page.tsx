@@ -8,7 +8,12 @@ import { Activity, ArrowRight, PlayCircle, RadioTower } from "lucide-react";
 import { PaperSessionForm } from "@/components/paper/PaperSessionForm";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { usePaperSessions } from "@/hooks/usePaperTrading";
-import { formatCompactDate, formatCurrency, formatPercent } from "@/lib/formatters";
+import { PAPER_EXECUTION_MODE_LABELS } from "@/lib/constants";
+import {
+  formatCompactDate,
+  formatCurrency,
+  formatPercent,
+} from "@/lib/formatters";
 import type { BacktestConfig } from "@/lib/types";
 
 function PrefilledForm() {
@@ -19,7 +24,7 @@ function PrefilledForm() {
     if (!encoded) return null;
     try {
       return JSON.parse(
-        atob(decodeURIComponent(encoded))
+        atob(decodeURIComponent(encoded)),
       ) as Partial<BacktestConfig>;
     } catch {
       return null;
@@ -140,6 +145,16 @@ export default function PaperTradingPage() {
                         {session.strategy_id} · {session.tickers.join(", ")} ·{" "}
                         {session.bar_interval}
                       </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-text-secondary">
+                          {PAPER_EXECUTION_MODE_LABELS[session.execution_mode]}
+                        </span>
+                        {session.broker_account_label && (
+                          <span className="text-[10px] text-text-muted">
+                            {session.broker_account_label}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <ArrowRight size={14} className="text-text-muted" />
                   </div>
@@ -176,6 +191,13 @@ export default function PaperTradingPage() {
                       {session.polling_interval_seconds}s polling
                     </span>
                   </div>
+
+                  {session.open_order_count > 0 && (
+                    <p className="text-[10px] text-text-muted mt-2">
+                      {session.open_order_count} open order
+                      {session.open_order_count === 1 ? "" : "s"}
+                    </p>
+                  )}
 
                   {session.last_error && (
                     <p className="text-[10px] text-accent-red mt-2">

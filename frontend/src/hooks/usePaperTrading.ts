@@ -18,6 +18,9 @@ function toPaperSessionSummary(
     id: session.id,
     name: session.name,
     status: session.status,
+    execution_mode: session.execution_mode,
+    broker_adapter: session.broker_adapter,
+    broker_account_label: session.broker_account_label,
     strategy_id: session.strategy_id,
     tickers: session.tickers,
     bar_interval: session.bar_interval,
@@ -33,6 +36,7 @@ function toPaperSessionSummary(
     last_price_at: session.last_price_at,
     last_heartbeat_at: session.last_heartbeat_at,
     last_error: session.last_error,
+    open_order_count: session.open_order_count,
   };
 }
 

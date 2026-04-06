@@ -97,12 +97,14 @@ describe("PaperSessionForm", () => {
       target: { value: "tsla, spy" },
     });
     await user.click(
-      screen.getByRole("button", { name: "Create Live Session" }),
+      screen.getByRole("button", { name: "Create Simulated Session" }),
     );
 
     await waitFor(() => {
       expect(mutateAsyncMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          execution_mode: "simulated_paper",
+          broker_adapter: "paper",
           strategy_id: "market_neutral_momentum",
           tickers: ["TSLA", "SPY"],
           benchmark: "QQQ",
@@ -111,6 +113,32 @@ describe("PaperSessionForm", () => {
         }),
       );
       expect(pushMock).toHaveBeenCalledWith("/paper/paper-session-1");
+    });
+  });
+
+  it("switches into broker paper mode with Alpaca", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<PaperSessionForm />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Create Simulated Session" }),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /Broker Paper/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Create Broker Paper Session" }),
+    );
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          execution_mode: "broker_paper",
+          broker_adapter: "alpaca",
+        }),
+      );
     });
   });
 });

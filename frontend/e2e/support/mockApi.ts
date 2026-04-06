@@ -6,7 +6,6 @@ import {
   buildBacktestResult,
   buildPaperSessionDetail,
   comparisonResult,
-  paperSessionSummaries,
   portfolioBlendResult,
   strategies,
 } from "../fixtures/mockData";
@@ -69,13 +68,13 @@ export async function installAppMocks(
   const backtestSocket = options?.backtestSocket ?? "success";
   const backtestId = options?.backtestId ?? "bt_sma_1";
   const backtestJobId = "job_backtest_1";
-  const paperSession = buildPaperSessionDetail({
+  let paperSession = buildPaperSessionDetail({
     id: options?.paperSessionId ?? "paper_live_1",
   });
   let backtestJobPollCount = 0;
 
   await page.addInitScript(
-    ({ snapshot, accessToken }) => {
+    ({ accessToken }) => {
       window.localStorage.setItem("quantlab.access_token", accessToken);
       const RealWebSocket = window.WebSocket;
 
@@ -127,17 +126,6 @@ export async function installAppMocks(
           setTimeout(() => {
             this.readyState = MockWebSocket.OPEN;
             this.emit("open", new Event("open"));
-            if (isPaperSocket) {
-              this.emit(
-                "message",
-                new MessageEvent("message", {
-                  data: JSON.stringify({
-                    type: "snapshot",
-                    session: snapshot,
-                  }),
-                })
-              );
-            }
           }, 0);
         }
 
@@ -187,7 +175,6 @@ export async function installAppMocks(
       });
     },
     {
-      snapshot: paperSession,
       accessToken: MOCK_ACCESS_TOKEN,
     }
   );
@@ -381,21 +368,50 @@ export async function installAppMocks(
     }
 
     if (method === "GET" && path === "/api/paper/sessions") {
-      await json(route, paperSessionSummaries);
+      await json(route, [
+        {
+          id: paperSession.id,
+          name: paperSession.name,
+          status: paperSession.status,
+          execution_mode: paperSession.execution_mode,
+          broker_adapter: paperSession.broker_adapter,
+          broker_account_label: paperSession.broker_account_label,
+          strategy_id: paperSession.strategy_id,
+          tickers: paperSession.tickers,
+          bar_interval: paperSession.bar_interval,
+          polling_interval_seconds: paperSession.polling_interval_seconds,
+          initial_capital: paperSession.initial_capital,
+          cash: paperSession.cash,
+          market_value: paperSession.market_value,
+          total_equity: paperSession.total_equity,
+          total_return_pct: paperSession.total_return_pct,
+          created_at: paperSession.created_at,
+          started_at: paperSession.started_at,
+          stopped_at: paperSession.stopped_at,
+          last_price_at: paperSession.last_price_at,
+          last_heartbeat_at: paperSession.last_heartbeat_at,
+          last_error: paperSession.last_error,
+          open_order_count: paperSession.open_order_count,
+        },
+      ]);
       return;
     }
 
     if (method === "POST" && path === "/api/paper/sessions") {
       const payload = JSON.parse(request.postData() ?? "{}");
-      await json(
-        route,
-        buildPaperSessionDetail({
-          id: paperSession.id,
-          name: payload.name ?? paperSession.name,
-          strategy_id: payload.strategy_id ?? paperSession.strategy_id,
-          tickers: payload.tickers ?? paperSession.tickers,
-        })
-      );
+      paperSession = buildPaperSessionDetail({
+        id: paperSession.id,
+        name: payload.name ?? paperSession.name,
+        execution_mode: payload.execution_mode ?? paperSession.execution_mode,
+        broker_adapter: payload.broker_adapter ?? paperSession.broker_adapter,
+        broker_account_label:
+          payload.execution_mode === "broker_paper"
+            ? "Alpaca paper • 5678"
+            : "Local simulator",
+        strategy_id: payload.strategy_id ?? paperSession.strategy_id,
+        tickers: payload.tickers ?? paperSession.tickers,
+      });
+      await json(route, paperSession);
       return;
     }
 

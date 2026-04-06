@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     EARNINGS_DATA_PROVIDER: str = "yfinance"
     NEWS_SENTIMENT_PROVIDER: str = "yfinance"
     ASSET_METADATA_PROVIDER: str = "yfinance"
+    ALPACA_API_KEY: str = ""
+    ALPACA_SECRET_KEY: str = ""
+    ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
 
     model_config = {"env_file": ".env"}
 
