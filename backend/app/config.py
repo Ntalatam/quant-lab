@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     AUTH_COOKIE_SAMESITE: str = "lax"
     JOB_WORKER_POLL_INTERVAL_SECONDS: float = 1.0
     JOB_MAX_ATTEMPTS: int = 1
+    MARKET_DATA_PROVIDER: str = "yfinance"
+    ECONOMIC_DATA_PROVIDER: str = "fred"
+    EARNINGS_DATA_PROVIDER: str = "yfinance"
+    NEWS_SENTIMENT_PROVIDER: str = "yfinance"
+    ASSET_METADATA_PROVIDER: str = "yfinance"
 
     model_config = {"env_file": ".env"}
 

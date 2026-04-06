@@ -171,3 +171,17 @@ class NewsSentimentResponse(BaseModel):
     bearish_articles: int
     rolling_series: list[SentimentPoint]
     articles: list[SentimentArticle]
+
+
+class ProviderStatusEntry(BaseModel):
+    domain: str
+    provider: str
+    status: Literal["ok", "degraded"]
+    last_success_at: str | None = None
+    last_error_at: str | None = None
+    last_error: str | None = None
+    cache_prefix: str
+
+
+class ProviderStatusResponse(BaseModel):
+    providers: list[ProviderStatusEntry]

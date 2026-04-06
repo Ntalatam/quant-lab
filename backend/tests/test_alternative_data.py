@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import date
+
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main as app_main
 from app.services import alternative_data
+from app.services.providers.registry import ProviderRegistry, set_provider_registry
 from tests.auth_helpers import install_auth_overrides
 
 
@@ -53,34 +58,58 @@ def _build_client(monkeypatch):
     return TestClient(app)
 
 
-def test_parse_fred_csv_payload_skips_missing_values():
-    payload = """DATE,FEDFUNDS
-2026-01-01,4.50
-2026-02-01,.
-2026-03-01,4.25
-"""
-    points = alternative_data._parse_fred_csv_payload(payload)
+class _BaseFakeProvider:
+    def __init__(self, *, domain: str, provider: str):
+        self._domain = domain
+        self._provider = provider
 
-    assert points == [
-        {"date": "2026-01-01", "value": 4.5},
-        {"date": "2026-03-01", "value": 4.25},
-    ]
-
-
-def test_finance_sentiment_biases_headlines():
-    positive = alternative_data._score_finance_sentiment(
-        "Apple beats estimates and raises guidance on record services revenue"
-    )
-    negative = alternative_data._score_finance_sentiment(
-        "Tesla misses expectations and cuts guidance after weak demand slump"
-    )
-
-    assert positive > 0.25
-    assert negative < -0.25
+    def status_snapshot(self) -> dict[str, str | None]:
+        return {
+            "domain": self._domain,
+            "provider": self._provider,
+            "status": "ok",
+            "last_success_at": "2026-04-05T12:00:00Z",
+            "last_error_at": None,
+            "last_error": None,
+            "cache_prefix": f"provider:{self._domain}:{self._provider}",
+        }
 
 
-def test_alternative_data_endpoints_are_typed(monkeypatch):
-    async def fake_get_economic_indicators(series_ids, start_date, end_date):
+class _FakeMarketDataProvider(_BaseFakeProvider):
+    def __init__(self):
+        super().__init__(domain="market_data", provider="fake-market")
+
+    async def fetch_price_history(
+        self, ticker: str, start_date: date, end_date: date
+    ) -> pd.DataFrame:
+        return pd.DataFrame()
+
+
+class _FakeEconomicDataProvider(_BaseFakeProvider):
+    def __init__(self):
+        super().__init__(domain="economic_data", provider="fake-fred")
+
+    def list_catalog(self) -> list[dict[str, str]]:
+        return [
+            {
+                "id": "FEDFUNDS",
+                "name": "Fed Funds Rate",
+                "category": "Rates",
+                "unit": "%",
+                "frequency": "monthly",
+                "description": "Effective federal funds rate.",
+            },
+            {
+                "id": "UNRATE",
+                "name": "Unemployment Rate",
+                "category": "Labor",
+                "unit": "%",
+                "frequency": "monthly",
+                "description": "Civilian unemployment rate.",
+            },
+        ]
+
+    async def get_indicators(self, series_ids, start_date, end_date):
         assert series_ids == ["FEDFUNDS", "UNRATE"]
         assert start_date.isoformat() == "2024-01-01"
         assert end_date.isoformat() == "2024-12-31"
@@ -100,7 +129,12 @@ def test_alternative_data_endpoints_are_typed(monkeypatch):
             }
         ]
 
-    async def fake_get_earnings_overview(ticker):
+
+class _FakeEarningsDataProvider(_BaseFakeProvider):
+    def __init__(self):
+        super().__init__(domain="earnings", provider="fake-yahoo")
+
+    async def get_earnings_overview(self, ticker: str):
         assert ticker == "AAPL"
         return {
             "ticker": "AAPL",
@@ -119,7 +153,12 @@ def test_alternative_data_endpoints_are_typed(monkeypatch):
             ],
         }
 
-    async def fake_get_news_sentiment(ticker, lookback_days, limit):
+
+class _FakeNewsSentimentProvider(_BaseFakeProvider):
+    def __init__(self):
+        super().__init__(domain="news_sentiment", provider="fake-yahoo")
+
+    async def get_news_sentiment(self, ticker: str, *, lookback_days: int = 30, limit: int = 10):
         assert ticker == "AAPL"
         assert lookback_days == 30
         assert limit == 5
@@ -148,19 +187,70 @@ def test_alternative_data_endpoints_are_typed(monkeypatch):
             ],
         }
 
-    monkeypatch.setattr(
-        "app.api.data.get_economic_indicators",
-        fake_get_economic_indicators,
+
+class _FakeAssetMetadataProvider(_BaseFakeProvider):
+    def __init__(self):
+        super().__init__(domain="asset_metadata", provider="fake-yahoo")
+
+    async def get_asset_metadata(self, ticker: str):
+        return {"ticker": ticker, "currency": "USD"}
+
+
+@pytest.fixture
+def fake_provider_registry():
+    registry = ProviderRegistry(
+        market_data=_FakeMarketDataProvider(),
+        economic_data=_FakeEconomicDataProvider(),
+        earnings_data=_FakeEarningsDataProvider(),
+        news_sentiment=_FakeNewsSentimentProvider(),
+        asset_metadata=_FakeAssetMetadataProvider(),
     )
-    monkeypatch.setattr(
-        "app.api.data.get_earnings_overview",
-        fake_get_earnings_overview,
+    set_provider_registry(registry)
+    yield registry
+    set_provider_registry(None)
+
+
+def test_parse_fred_csv_payload_skips_missing_values():
+    payload = """DATE,FEDFUNDS
+2026-01-01,4.50
+2026-02-01,.
+2026-03-01,4.25
+"""
+    points = alternative_data._parse_fred_csv_payload(payload)
+
+    assert points == [
+        {"date": "2026-01-01", "value": 4.5},
+        {"date": "2026-03-01", "value": 4.25},
+    ]
+
+
+def test_finance_sentiment_biases_headlines():
+    positive = alternative_data._score_finance_sentiment(
+        "Apple beats estimates and raises guidance on record services revenue"
     )
-    monkeypatch.setattr(
-        "app.api.data.get_news_sentiment",
-        fake_get_news_sentiment,
+    negative = alternative_data._score_finance_sentiment(
+        "Tesla misses expectations and cuts guidance after weak demand slump"
     )
 
+    assert positive > 0.25
+    assert negative < -0.25
+
+
+def test_provider_status_aggregates_registry_snapshots(fake_provider_registry):
+    payload = alternative_data.get_provider_status()
+
+    assert [entry["domain"] for entry in payload] == [
+        "market_data",
+        "economic_data",
+        "earnings",
+        "news_sentiment",
+        "asset_metadata",
+    ]
+    assert payload[1]["provider"] == "fake-fred"
+    assert all(entry["status"] == "ok" for entry in payload)
+
+
+def test_alternative_data_endpoints_are_typed(monkeypatch, fake_provider_registry):
     with _build_client(monkeypatch) as client:
         catalog = client.get("/api/data/economic-indicators/catalog")
         indicators = client.get(
@@ -176,6 +266,7 @@ def test_alternative_data_endpoints_are_typed(monkeypatch):
             "/api/data/news-sentiment",
             params={"ticker": "AAPL", "lookback_days": 30, "limit": 5},
         )
+        provider_status = client.get("/api/data/providers/status")
 
     assert catalog.status_code == 200
     assert any(entry["id"] == "FEDFUNDS" for entry in catalog.json())
@@ -188,3 +279,7 @@ def test_alternative_data_endpoints_are_typed(monkeypatch):
 
     assert sentiment.status_code == 200
     assert sentiment.json()["signal"] == "bullish"
+
+    assert provider_status.status_code == 200
+    assert provider_status.json()["providers"][0]["domain"] == "market_data"
+    assert provider_status.json()["providers"][1]["provider"] == "fake-fred"

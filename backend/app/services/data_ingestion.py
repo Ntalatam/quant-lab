@@ -1,21 +1,17 @@
-"""
-Data ingestion service.
-
-Fetches OHLCV data from yfinance, validates it, and stores it in the database.
-Implements gap-fill logic to avoid redundant API calls for already-loaded data.
-"""
+"""Data ingestion service backed by configurable market-data providers."""
 
 import time
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import pandas as pd
-import yfinance as yf
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.price_data import PriceData
 from app.observability import elapsed_ms, get_logger
+from app.services.providers.helpers import normalize_price_history
+from app.services.providers.registry import get_provider_registry
 
 logger = get_logger(__name__)
 
@@ -74,7 +70,7 @@ async def ensure_data_loaded(
 ) -> bool:
     """
     Ensure OHLCV data exists in DB for the full date range.
-    Fetches from yfinance only for missing ranges.
+    Fetches from the configured market-data provider only for missing ranges.
     Returns True if data is available, False if fetch failed.
     """
     start_time = time.perf_counter()
@@ -111,28 +107,15 @@ async def ensure_data_loaded(
 
     try:
         fetch_start = time.perf_counter()
-        df = yf.download(
+        df = await get_provider_registry().market_data.fetch_price_history(
             ticker,
-            start=start_date.isoformat(),
-            end=(end_date + timedelta(days=1)).isoformat(),
-            auto_adjust=False,
-            progress=False,
+            start_date,
+            end_date,
         )
+        df = normalize_price_history(df)
         if df.empty:
             log.warning(
                 "market_data.fetch_empty",
-                duration_ms=elapsed_ms(fetch_start),
-            )
-            return False
-
-        # Flatten MultiIndex columns (happens with single ticker in newer yfinance)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        df = df.dropna(subset=["Close"])
-        if len(df) == 0:
-            log.warning(
-                "market_data.fetch_empty_after_cleaning",
                 duration_ms=elapsed_ms(fetch_start),
             )
             return False
@@ -144,12 +127,12 @@ async def ensure_data_loaded(
                 {
                     "ticker": ticker,
                     "date": dt,
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "adj_close": float(row.get("Adj Close", row["Close"])),
-                    "volume": int(row["Volume"]),
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
+                    "adj_close": float(row["adj_close"]),
+                    "volume": int(row["volume"]),
                 }
             )
 
@@ -166,7 +149,7 @@ async def ensure_data_loaded(
             "market_data.fetch_completed",
             duration_ms=elapsed_ms(fetch_start),
             rows=len(records),
-            source="yfinance",
+            source="provider",
         )
         return True
 

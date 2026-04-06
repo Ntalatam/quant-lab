@@ -19,6 +19,7 @@ from app.schemas.alternative_data import (
     EconomicIndicatorCatalogEntry,
     EconomicIndicatorsResponse,
     NewsSentimentResponse,
+    ProviderStatusResponse,
 )
 from app.schemas.common import ErrorResponse
 from app.schemas.price_data import LoadDataRequest, LoadDataResponse, OHLCVResponse
@@ -26,6 +27,7 @@ from app.services.alternative_data import (
     get_earnings_overview,
     get_economic_indicators,
     get_news_sentiment,
+    get_provider_status,
     list_economic_indicator_catalog,
 )
 from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
@@ -188,3 +190,16 @@ async def read_news_sentiment(
         lookback_days=lookback_days,
         limit=limit,
     )
+
+
+@router.get(
+    "/providers/status",
+    response_model=ProviderStatusResponse,
+    summary="Inspect provider health and configuration",
+    description=(
+        "Returns the configured market and alternative-data providers plus the "
+        "latest in-process health snapshot for each adapter."
+    ),
+)
+async def read_provider_status():
+    return {"providers": get_provider_status()}

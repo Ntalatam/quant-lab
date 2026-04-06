@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.models.price_data import PriceData
 from app.services import data_ingestion
+from app.services.providers.registry import ProviderRegistry, set_provider_registry
 
 
 def _build_download_frame(
@@ -31,8 +32,75 @@ def _build_download_frame(
     return frame
 
 
+class _FakeMarketDataProvider:
+    def __init__(self, downloads: list[pd.DataFrame]):
+        self._downloads = iter(downloads)
+
+    async def fetch_price_history(
+        self, ticker: str, start_date: date, end_date: date
+    ) -> pd.DataFrame:
+        assert ticker == "AAPL"
+        return next(self._downloads)
+
+    def status_snapshot(self) -> dict[str, str | None]:
+        return {
+            "domain": "market_data",
+            "provider": "fake-market",
+            "status": "ok",
+            "last_success_at": "2026-04-05T00:00:00Z",
+            "last_error_at": None,
+            "last_error": None,
+            "cache_prefix": "provider:market:fake",
+        }
+
+
+class _UnusedProvider:
+    async def get_indicators(self, *args, **kwargs):  # pragma: no cover - defensive stub
+        raise AssertionError("unexpected provider call")
+
+    async def get_earnings_overview(self, *args, **kwargs):  # pragma: no cover - defensive stub
+        raise AssertionError("unexpected provider call")
+
+    async def get_news_sentiment(self, *args, **kwargs):  # pragma: no cover - defensive stub
+        raise AssertionError("unexpected provider call")
+
+    async def get_asset_metadata(self, *args, **kwargs):  # pragma: no cover - defensive stub
+        raise AssertionError("unexpected provider call")
+
+    def list_catalog(self):  # pragma: no cover - defensive stub
+        raise AssertionError("unexpected provider call")
+
+    def status_snapshot(self) -> dict[str, str | None]:
+        return {
+            "domain": "unused",
+            "provider": "unused",
+            "status": "ok",
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "cache_prefix": "provider:unused",
+        }
+
+
+@pytest.fixture
+def provider_registry():
+    def _install(downloads: list[pd.DataFrame]) -> None:
+        set_provider_registry(
+            ProviderRegistry(
+                market_data=_FakeMarketDataProvider(downloads),
+                economic_data=_UnusedProvider(),
+                earnings_data=_UnusedProvider(),
+                news_sentiment=_UnusedProvider(),
+                asset_metadata=_UnusedProvider(),
+            )
+        )
+
+    yield _install
+    set_provider_registry(None)
+
+
 @pytest.mark.asyncio
-async def test_ensure_data_loaded_uses_sqlite_upserts_without_duplicate_rows(db, monkeypatch):
+async def test_ensure_data_loaded_uses_sqlite_upserts_without_duplicate_rows(db, provider_registry):
     first_download = _build_download_frame(
         [("2024-01-02", 100.0, 101.0, 99.5, 100.5, 100.4, 1_000_000)]
     )
@@ -42,13 +110,7 @@ async def test_ensure_data_loaded_uses_sqlite_upserts_without_duplicate_rows(db,
             ("2024-01-03", 102.0, 103.0, 101.5, 102.5, 102.4, 1_500_000),
         ]
     )
-    downloads = iter([first_download, second_download])
-
-    monkeypatch.setattr(
-        data_ingestion.yf,
-        "download",
-        lambda *args, **kwargs: next(downloads),
-    )
+    provider_registry([first_download, second_download])
 
     loaded_initial = await data_ingestion.ensure_data_loaded(
         db,
@@ -83,7 +145,7 @@ async def test_ensure_data_loaded_uses_sqlite_upserts_without_duplicate_rows(db,
 
 
 @pytest.mark.asyncio
-async def test_ensure_data_loaded_flattens_yfinance_multiindex_columns(db, monkeypatch):
+async def test_ensure_data_loaded_flattens_provider_multiindex_columns(db, provider_registry):
     download_frame = _build_download_frame(
         [
             ("2024-02-01", 190.0, 195.0, 188.0, 193.5, 193.1, 1_800_000),
@@ -91,11 +153,7 @@ async def test_ensure_data_loaded_flattens_yfinance_multiindex_columns(db, monke
         ],
         multi_index=True,
     )
-    monkeypatch.setattr(
-        data_ingestion.yf,
-        "download",
-        lambda *args, **kwargs: download_frame,
-    )
+    provider_registry([download_frame])
 
     loaded = await data_ingestion.ensure_data_loaded(
         db,

@@ -14,7 +14,7 @@ Most student backtest projects are thin pandas scripts that compute a moving ave
 - **Multi-strategy comparison** — run 5 strategy families (including XGBoost ML) and compare them head-to-head with portfolio blending and factor attribution.
 - **Persistent research jobs** — long-running backtests, sweeps, and optimization workflows run through a database-backed worker with queueable progress tracking.
 - **Bayesian optimization** — Optuna-powered parameter search that converges faster than grid sweep, with convergence chart and one-click param application.
-- **Production engineering** — clean REST API, async database layer, persistent results, comprehensive test suite, CI/CD, Docker.
+- **Production engineering** — clean REST API, async database layer, provider abstraction, persistent results, comprehensive test suite, CI/CD, Docker.
 
 ---
 
@@ -151,7 +151,8 @@ Landing page includes a **Load Demo Data** button that seeds SPY, AAPL, MSFT, an
 └─────────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────┐
-│           External Data (yfinance)           │
+│ External Data (provider adapters: yfinance / │
+│                    FRED)                     │
 └─────────────────────────────────────────────┘
 ```
 
