@@ -12,6 +12,7 @@ from app.services.custom_strategy import (
     create_custom_strategy,
     validate_custom_strategy_source,
 )
+from tests.auth_helpers import TEST_USER, TEST_WORKSPACE, install_auth_overrides
 
 VALID_STRATEGY = """
 STRATEGY = {
@@ -131,6 +132,7 @@ def _build_client(monkeypatch, db):
     monkeypatch.setattr(app_main, "engine", _HealthyEngine())
     app = app_main.create_app()
     app.dependency_overrides[strategies_api.get_db] = _get_db_override
+    install_auth_overrides(app)
     return TestClient(app)
 
 
@@ -151,11 +153,20 @@ def test_validate_custom_strategy_source_rejects_unsafe_imports():
 
 @pytest.mark.asyncio
 async def test_custom_strategy_definition_executes_against_market_data(db):
-    record = await create_custom_strategy(db, VALID_STRATEGY)
+    record = await create_custom_strategy(
+        db,
+        VALID_STRATEGY,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
+    )
     await db.commit()
     await db.refresh(record)
 
-    definition = await build_custom_strategy_definition(db, record.id)
+    definition = await build_custom_strategy_definition(
+        db,
+        record.id,
+        workspace_id=TEST_WORKSPACE.id,
+    )
     strategy = definition.instantiate({"entry_level": 45.0})
     data = {
         "AAPL": _build_price_frame([100.0 - i * 0.6 for i in range(40)]),

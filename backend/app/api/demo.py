@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_current_user, get_current_workspace
 from app.database import async_session, get_db
+from app.models.auth import User, Workspace
 from app.models.backtest import BacktestRun
 from app.models.price_data import PriceData
 from app.schemas.backtest import BacktestConfig
@@ -134,14 +136,21 @@ DEMO_BACKTESTS = [
         "backtests to power the sample UX."
     ),
 )
-async def demo_status(db: AsyncSession = Depends(get_db)):
+async def demo_status(
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     """Check if demo data is already loaded."""
     ticker_count = await db.scalar(
         select(func.count()).select_from(
             select(PriceData.ticker).where(PriceData.ticker.in_(DEMO_TICKERS)).distinct().subquery()
         )
     )
-    run_count = await db.scalar(select(func.count()).select_from(BacktestRun))
+    run_count = await db.scalar(
+        select(func.count())
+        .select_from(BacktestRun)
+        .where(BacktestRun.workspace_id == current_workspace.id)
+    )
     return {
         "tickers_loaded": int(ticker_count or 0),
         "total_tickers": len(DEMO_TICKERS),
@@ -159,13 +168,21 @@ async def demo_status(db: AsyncSession = Depends(get_db)):
         "The operation is idempotent and safe to call multiple times."
     ),
 )
-async def seed_demo(db: AsyncSession = Depends(get_db)):
+async def seed_demo(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     """
     Load demo tickers and run 3 sample backtests.
     Idempotent — skips backtest creation if demo runs already exist.
     """
     # Guard: skip if backtests already exist (prevents duplicates on re-click)
-    existing_count = await db.scalar(select(func.count()).select_from(BacktestRun))
+    existing_count = await db.scalar(
+        select(func.count())
+        .select_from(BacktestRun)
+        .where(BacktestRun.workspace_id == current_workspace.id)
+    )
     if existing_count and existing_count > 0:
         return {
             "status": "already_seeded",
@@ -205,8 +222,18 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
         run_config = config.model_copy(update={"tickers": actual_tickers})
         try:
             async with async_session() as db2:
-                result = await run_backtest(db2, run_config)
-                await persist_backtest_result(db2, run_config, result)
+                result = await run_backtest(
+                    db2,
+                    run_config,
+                    workspace_id=current_workspace.id,
+                )
+                await persist_backtest_result(
+                    db2,
+                    run_config,
+                    result,
+                    workspace_id=current_workspace.id,
+                    created_by_user_id=current_user.id,
+                )
                 backtest_ids.append(result["id"])
         except Exception as e:
             errors.append(f"{config.strategy_id}: {str(e)}")

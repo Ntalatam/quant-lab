@@ -85,8 +85,13 @@ async def persist_backtest_result(
     db: AsyncSession,
     config: BacktestConfig,
     result: dict[str, Any],
+    *,
+    workspace_id: str,
+    created_by_user_id: str,
 ) -> tuple[BacktestRun, list[TradeRecord]]:
     run = _build_backtest_run(config, result)
+    run.workspace_id = workspace_id
+    run.created_by_user_id = created_by_user_id
     trades = [_build_trade_record(result["id"], trade) for trade in result["trades"]]
 
     db.add(run)
@@ -103,8 +108,13 @@ async def persist_backtest_result(
 async def load_backtest_detail(
     db: AsyncSession,
     backtest_id: str,
+    *,
+    workspace_id: str | None = None,
 ) -> tuple[BacktestRun, list[TradeRecord]] | None:
-    run_result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    query = select(BacktestRun).where(BacktestRun.id == backtest_id)
+    if workspace_id is not None:
+        query = query.where(BacktestRun.workspace_id == workspace_id)
+    run_result = await db.execute(query)
     run = run_result.scalar_one_or_none()
     if run is None:
         return None

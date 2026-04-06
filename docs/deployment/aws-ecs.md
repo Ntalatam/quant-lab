@@ -7,7 +7,7 @@ QuantLab now includes a production-oriented AWS deployment stack under `infra/aw
 - The ALB routes `/api/*`, `/health`, `/docs`, `/redoc`, and `/openapi.json` to the FastAPI backend.
 - ECS Fargate runs the frontend and backend as separate services.
 - RDS PostgreSQL lives in private database subnets.
-- Secrets Manager injects the backend `DATABASE_URL`.
+- Secrets Manager injects the backend `DATABASE_URL` and should also supply a strong `AUTH_SECRET_KEY`.
 
 ## Architecture
 
@@ -99,6 +99,7 @@ terraform apply
 - Backend health path: `/health`
 - Frontend health path: `/healthz`
 - Backend docs: `/docs`
+- Set `AUTH_COOKIE_SECURE=true` anywhere the app is served behind HTTPS.
 - Frontend and backend share one public origin, so same-origin API calls work without a dedicated frontend proxy layer.
 - The frontend image is built with `NEXT_PUBLIC_API_URL=/api`; changing the public API base requires rebuilding the frontend image.
 - ECS services default to public subnets with public IPs to avoid NAT Gateway cost for a portfolio demo. Security groups still only allow ingress from the ALB.

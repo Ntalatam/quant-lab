@@ -2,6 +2,7 @@
 Strategy registry — central lookup for all strategy classes.
 """
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.custom_strategy import CustomStrategy
@@ -60,11 +61,15 @@ def list_builtin_strategies() -> list[dict]:
     return result
 
 
-async def list_strategies(db: AsyncSession | None = None) -> list[dict]:
+async def list_strategies(
+    db: AsyncSession | None = None,
+    *,
+    workspace_id: str | None = None,
+) -> list[dict]:
     result = list_builtin_strategies()
-    if db is None:
+    if db is None or workspace_id is None:
         return result
-    custom = await list_custom_strategy_records(db)
+    custom = await list_custom_strategy_records(db, workspace_id=workspace_id)
     result.extend(strategy_record_to_info(item) for item in custom)
     return result
 
@@ -72,6 +77,8 @@ async def list_strategies(db: AsyncSession | None = None) -> list[dict]:
 async def get_strategy_info(
     db: AsyncSession,
     strategy_id: str,
+    *,
+    workspace_id: str,
 ) -> dict:
     if strategy_id in STRATEGIES:
         strategy_cls = STRATEGIES[strategy_id]
@@ -87,7 +94,12 @@ async def get_strategy_info(
             "defaults": strategy_cls.default_params,
         }
 
-    custom = await db.get(CustomStrategy, strategy_id)
+    custom = await db.scalar(
+        select(CustomStrategy).where(
+            CustomStrategy.id == strategy_id,
+            CustomStrategy.workspace_id == workspace_id,
+        )
+    )
     if custom is None:
         raise ValueError(f"Unknown strategy: {strategy_id}")
     return {
@@ -100,8 +112,16 @@ async def build_strategy_instance(
     db: AsyncSession,
     strategy_id: str,
     params: dict,
+    *,
+    workspace_id: str | None = None,
 ) -> BaseStrategy:
     if strategy_id in STRATEGIES:
         return STRATEGIES[strategy_id](**params)
-    definition = await build_custom_strategy_definition(db, strategy_id)
+    if workspace_id is None:
+        raise ValueError("workspace_id is required for custom strategies")
+    definition = await build_custom_strategy_definition(
+        db,
+        strategy_id,
+        workspace_id=workspace_id,
+    )
     return definition.instantiate(params)

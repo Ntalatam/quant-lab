@@ -14,6 +14,7 @@ from app.api import backtest as backtest_api
 from app.database import Base, get_db
 from app.schemas.backtest import BacktestConfig
 from app.services.backtest_runs import load_backtest_detail
+from tests.auth_helpers import TEST_USER, TEST_WORKSPACE, install_auth_overrides
 
 
 class _FakePaperManager:
@@ -154,6 +155,11 @@ def _build_client(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(app_main, "PaperTradingManager", _FakePaperManager)
     monkeypatch.setattr(app_main, "engine", engine)
 
+    async def fake_authenticate_websocket(_websocket, _db):
+        return TEST_USER, TEST_WORKSPACE
+
+    monkeypatch.setattr(backtest_api, "authenticate_websocket", fake_authenticate_websocket)
+
     import app.database as app_database
 
     monkeypatch.setattr(app_database, "async_session", session_factory)
@@ -169,6 +175,7 @@ def _build_client(monkeypatch, tmp_path: Path):
 
     app = app_main.create_app()
     app.dependency_overrides[get_db] = override_get_db
+    install_auth_overrides(app)
 
     try:
         with TestClient(app) as client:
@@ -186,7 +193,8 @@ def test_execute_backtest_route_persists_and_returns_sorted_trades(monkeypatch, 
     config = _build_config()
     result = _build_result()
 
-    async def fake_run_backtest(_db, _config, on_progress=None):
+    async def fake_run_backtest(_db, _config, on_progress=None, workspace_id=None):
+        assert workspace_id == TEST_WORKSPACE.id
         if on_progress is not None:
             await on_progress(1, 1, "2024-01-31", 100_500)
         return result
@@ -212,7 +220,8 @@ def test_backtest_websocket_persists_result_and_streams_progress(monkeypatch, tm
     config = _build_config()
     result = _build_result()
 
-    async def fake_run_backtest(_db, _config, on_progress=None):
+    async def fake_run_backtest(_db, _config, on_progress=None, workspace_id=None):
+        assert workspace_id == TEST_WORKSPACE.id
         if on_progress is not None:
             await on_progress(25, 100, "2024-02-01", 103_250)
         return result

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -16,11 +17,28 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.utils.datetime import utc_now_naive
 
+if TYPE_CHECKING:
+    from app.models.auth import User, Workspace
+
 
 class PaperTradingSession(Base):
     __tablename__ = "paper_trading_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("workspaces.id"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
     name: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="draft")
 
@@ -76,6 +94,8 @@ class PaperTradingSession(Base):
     equity_points: Mapped[list["PaperTradingEquityPoint"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
+    workspace: Mapped["Workspace | None"] = relationship(back_populates="paper_sessions")
+    created_by_user: Mapped["User | None"] = relationship(back_populates="paper_sessions")
 
 
 class PaperTradingPosition(Base):

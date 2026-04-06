@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.utils.datetime import utc_now_naive
 
 if TYPE_CHECKING:
+    from app.models.auth import User, Workspace
     from app.models.trade import TradeRecord
 
 
@@ -17,6 +18,20 @@ class BacktestRun(Base):
     __tablename__ = "backtest_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("workspaces.id"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
     strategy_id: Mapped[str] = mapped_column(String(50))
     strategy_params: Mapped[dict] = mapped_column(JSON)
     tickers: Mapped[list] = mapped_column(JSON)
@@ -68,3 +83,5 @@ class BacktestRun(Base):
     trades: Mapped[list[TradeRecord]] = relationship(
         back_populates="backtest_run", cascade="all, delete-orphan"
     )
+    workspace: Mapped[Workspace | None] = relationship(back_populates="backtests")
+    created_by_user: Mapped[User | None] = relationship(back_populates="backtests")

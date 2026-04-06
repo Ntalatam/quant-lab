@@ -61,6 +61,8 @@ async def run_walk_forward(
     config: BacktestConfig,
     n_folds: int = 5,
     train_pct: float = 0.7,
+    *,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Run walk-forward analysis and return fold statistics + combined OOS equity curve.
@@ -86,7 +88,7 @@ async def run_walk_forward(
             }
         )
         try:
-            is_result = await run_backtest(db, is_config)
+            is_result = await run_backtest(db, is_config, workspace_id=workspace_id)
             is_sharpe = is_result["metrics"].get("sharpe_ratio", 0)
             is_return = is_result["metrics"].get("total_return_pct", 0)
         except Exception:
@@ -102,7 +104,7 @@ async def run_walk_forward(
             }
         )
         try:
-            oos_result = await run_backtest(db, oos_config)
+            oos_result = await run_backtest(db, oos_config, workspace_id=workspace_id)
             oos_sharpe = oos_result["metrics"].get("sharpe_ratio", 0)
             oos_return = oos_result["metrics"].get("total_return_pct", 0)
             oos_max_dd = oos_result["metrics"].get("max_drawdown_pct", 0)

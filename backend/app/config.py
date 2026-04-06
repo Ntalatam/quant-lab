@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False
     SLOW_REQUEST_THRESHOLD_MS: float = 750.0
+    AUTH_SECRET_KEY: str = "change-me-in-production"
+    AUTH_ACCESS_TOKEN_TTL_MINUTES: int = 15
+    AUTH_REFRESH_TOKEN_TTL_DAYS: int = 30
+    AUTH_REFRESH_COOKIE_NAME: str = "quantlab_refresh_token"
+    AUTH_COOKIE_SECURE: bool = False
+    AUTH_COOKIE_SAMESITE: str = "lax"
 
     model_config = {"env_file": ".env"}
 

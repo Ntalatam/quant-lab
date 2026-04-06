@@ -419,6 +419,7 @@ pip install -e ".[test]"
 cat > .env << 'EOF'
 DATABASE_URL=postgresql+asyncpg://quantlab:quantlab@localhost:5433/quantlab
 CORS_ORIGINS=["http://localhost:3000"]
+AUTH_SECRET_KEY=replace-this-with-a-long-random-string
 EOF
 
 # Start the server

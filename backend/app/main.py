@@ -34,6 +34,10 @@ logger = get_logger(__name__)
 
 OPENAPI_TAGS = [
     {
+        "name": "auth",
+        "description": "Authentication, session refresh, and current-user context.",
+    },
+    {
         "name": "system",
         "description": "Readiness probes and operational health endpoints.",
     },

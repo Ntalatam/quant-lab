@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Building2,
   LayoutDashboard,
   Play,
   BarChart3,
@@ -18,8 +19,10 @@ import {
   GitCompareArrows,
   CircleDollarSign,
   GitBranch,
+  LogOut,
   Menu,
 } from "lucide-react";
+import { useSession } from "@/components/auth/SessionProvider";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const SHORTCUTS = [
@@ -60,6 +63,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { user, workspace, logout } = useSession();
   useKeyboardShortcuts();
 
   const closeMobile = useCallback(() => setMobileOpen(false), []);
@@ -116,11 +121,11 @@ export function Sidebar() {
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="status-pill">
               <span className="h-1.5 w-1.5 rounded-full bg-accent-green shadow-[0_0_10px_rgba(40,221,176,0.8)]" />
-              Live paper ready
+              {workspace?.is_personal ? "Personal workspace" : "Team workspace"}
             </span>
             <span className="status-pill">
               <Activity size={12} className="text-accent-blue" />
-              Event-driven
+              {user?.email ?? "Authenticated"}
             </span>
           </div>
         </div>
@@ -186,18 +191,40 @@ export function Sidebar() {
 
       <div className="shrink-0 px-4 pb-4">
         <div className="panel-soft space-y-3 p-3.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="section-label mb-1">Workspace mode</p>
-              <p className="text-xs text-text-primary">Local research lab</p>
+              <p className="section-label mb-1">Workspace</p>
+              <p className="text-xs text-text-primary">
+                {workspace?.name ?? "Loading workspace"}
+              </p>
+              <p className="mt-1 text-[11px] text-text-muted">
+                {user?.display_name || user?.email || "Signed in"}
+              </p>
             </div>
-            <button
-              onClick={() => setShowShortcuts(true)}
-              className="rounded-full border border-border/60 p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"
-              title="Keyboard shortcuts"
-            >
-              <Keyboard size={12} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowShortcuts(true)}
+                className="rounded-full border border-border/60 p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"
+                title="Keyboard shortcuts"
+              >
+                <Keyboard size={12} />
+              </button>
+              <button
+                onClick={async () => {
+                  setIsLoggingOut(true);
+                  try {
+                    await logout();
+                  } finally {
+                    setIsLoggingOut(false);
+                  }
+                }}
+                disabled={isLoggingOut}
+                className="rounded-full border border-border/60 p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary disabled:opacity-50"
+                title="Log out"
+              >
+                <LogOut size={12} />
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-[10px] text-text-muted">
@@ -206,8 +233,18 @@ export function Sidebar() {
               <p className="text-text-primary">Slippage + impact</p>
             </div>
             <div className="rounded-2xl border border-border/60 bg-bg-card/70 px-2.5 py-2">
-              <p className="mb-1 text-text-secondary">Analytics</p>
-              <p className="text-text-primary">TCA + risk budget</p>
+              <p className="mb-1 text-text-secondary">Access</p>
+              <p className="text-text-primary">{workspace?.role ?? "member"}</p>
+            </div>
+            <div className="col-span-2 rounded-2xl border border-border/60 bg-bg-card/70 px-2.5 py-2">
+              <p className="mb-1 flex items-center gap-1 text-text-secondary">
+                <Building2 size={10} />
+                Ownership
+              </p>
+              <p className="text-text-primary">
+                Saved runs, custom strategies, and paper sessions stay scoped to
+                this workspace.
+              </p>
             </div>
           </div>
 

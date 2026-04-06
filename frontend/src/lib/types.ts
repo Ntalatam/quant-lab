@@ -66,6 +66,34 @@ export interface CustomStrategyDetail extends CustomStrategySummary {
   code: string;
 }
 
+// ---- Auth / Session ----
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+}
+
+export interface AuthWorkspace {
+  id: string;
+  name: string;
+  is_personal: boolean;
+  role: string;
+}
+
+export interface AuthSession {
+  access_token: string;
+  token_type: "bearer";
+  expires_at: string;
+  user: AuthUser;
+  workspace: AuthWorkspace;
+}
+
+export interface CurrentSession {
+  user: AuthUser;
+  workspace: AuthWorkspace;
+}
+
 // ---- Backtest Configuration ----
 export interface BacktestConfig {
   strategy_id: string;

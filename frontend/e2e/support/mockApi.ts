@@ -11,17 +11,45 @@ import {
   strategies,
 } from "../fixtures/mockData";
 
-const corsHeaders = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
-  "access-control-allow-headers": "Content-Type, Accept",
+const DEFAULT_ORIGIN = "http://127.0.0.1:3100";
+const MOCK_ACCESS_TOKEN = "playwright-access-token";
+
+const mockUser = {
+  id: "user_e2e",
+  email: "playwright@quantlab.dev",
+  display_name: "Playwright User",
+  created_at: "2026-04-05T12:00:00Z",
 };
+
+const mockWorkspace = {
+  id: "ws_e2e",
+  name: "Playwright Workspace",
+  is_personal: true,
+  role: "owner",
+};
+
+function corsHeaders(route: Route) {
+  const requestHeaders = route.request().headers();
+  const requestedHeaders =
+    requestHeaders["access-control-request-headers"] ??
+    requestHeaders["Access-Control-Request-Headers"];
+  const origin = requestHeaders.origin ?? requestHeaders.Origin ?? DEFAULT_ORIGIN;
+
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-credentials": "true",
+    "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+    "access-control-allow-headers":
+      requestedHeaders || "Content-Type, Accept, Authorization",
+    vary: "Origin",
+  };
+}
 
 function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({
     status,
     contentType: "application/json",
-    headers: corsHeaders,
+    headers: corsHeaders(route),
     body: JSON.stringify(body),
   });
 }
@@ -45,7 +73,8 @@ export async function installAppMocks(
   });
 
   await page.addInitScript(
-    ({ behavior, resolvedBacktestId, snapshot }) => {
+    ({ behavior, resolvedBacktestId, snapshot, accessToken }) => {
+      window.localStorage.setItem("quantlab.access_token", accessToken);
       const RealWebSocket = window.WebSocket;
 
       class MockWebSocket extends EventTarget {
@@ -72,7 +101,8 @@ export async function installAppMocks(
 
           const isBacktestSocket = this.url.includes("/api/backtest/ws");
           const isPaperSocket =
-            this.url.includes("/api/paper/sessions/") && this.url.endsWith("/ws");
+            this.url.includes("/api/paper/sessions/") &&
+            /\/ws(?:\?|$)/.test(this.url);
 
           if (!isBacktestSocket && !isPaperSocket) {
             this.realSocket = new RealWebSocket(url, protocols);
@@ -221,6 +251,7 @@ export async function installAppMocks(
       behavior: backtestSocket,
       resolvedBacktestId: backtestId,
       snapshot: paperSession,
+      accessToken: MOCK_ACCESS_TOKEN,
     }
   );
 
@@ -238,8 +269,42 @@ export async function installAppMocks(
     if (method === "OPTIONS") {
       await route.fulfill({
         status: 204,
-        headers: corsHeaders,
+        headers: corsHeaders(route),
       });
+      return;
+    }
+
+    if (method === "GET" && path === "/api/auth/me") {
+      const authorization = request.headers().authorization ?? "";
+      if (authorization !== `Bearer ${MOCK_ACCESS_TOKEN}`) {
+        await json(route, { detail: "Not authenticated" }, 401);
+        return;
+      }
+      await json(route, {
+        user: mockUser,
+        workspace: mockWorkspace,
+      });
+      return;
+    }
+
+    if (
+      method === "POST" &&
+      (path === "/api/auth/refresh" ||
+        path === "/api/auth/login" ||
+        path === "/api/auth/register")
+    ) {
+      await json(route, {
+        access_token: MOCK_ACCESS_TOKEN,
+        token_type: "bearer",
+        expires_at: "2026-04-05T13:00:00Z",
+        user: mockUser,
+        workspace: mockWorkspace,
+      });
+      return;
+    }
+
+    if (method === "POST" && path === "/api/auth/logout") {
+      await json(route, { status: "ok" });
       return;
     }
 

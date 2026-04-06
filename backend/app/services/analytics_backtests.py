@@ -21,10 +21,16 @@ BlendOptimizeMode = Literal["custom", "equal", "max_sharpe", "min_dd"]
 async def load_backtest_run_or_404(
     db: AsyncSession,
     backtest_id: str,
+    workspace_id: str,
     *,
     detail: str = "Backtest not found",
 ) -> BacktestRun:
-    result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    result = await db.execute(
+        select(BacktestRun).where(
+            BacktestRun.id == backtest_id,
+            BacktestRun.workspace_id == workspace_id,
+        )
+    )
     run = result.scalar_one_or_none()
     if run is None:
         raise HTTPException(404, detail)
@@ -34,6 +40,7 @@ async def load_backtest_run_or_404(
 async def load_backtest_runs_or_404(
     db: AsyncSession,
     backtest_ids: Sequence[str],
+    workspace_id: str,
 ) -> list[BacktestRun]:
     runs: list[BacktestRun] = []
     for backtest_id in backtest_ids:
@@ -41,6 +48,7 @@ async def load_backtest_runs_or_404(
             await load_backtest_run_or_404(
                 db,
                 backtest_id,
+                workspace_id,
                 detail=f"Backtest {backtest_id} not found",
             )
         )
@@ -50,7 +58,10 @@ async def load_backtest_runs_or_404(
 async def load_backtest_trades(
     db: AsyncSession,
     backtest_id: str,
+    *,
+    workspace_id: str,
 ) -> list[TradeRecord]:
+    await load_backtest_run_or_404(db, backtest_id, workspace_id)
     result = await db.execute(
         select(TradeRecord)
         .where(TradeRecord.backtest_run_id == backtest_id)

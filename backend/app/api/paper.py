@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 
+from app.api.dependencies import authenticate_websocket, get_current_user, get_current_workspace
+from app.database import async_session
+from app.models.auth import User, Workspace
 from app.schemas.common import ErrorResponse
 from app.schemas.paper import (
     PaperTradingSessionCreate,
@@ -31,9 +34,12 @@ def get_paper_manager(request: Request) -> PaperTradingManager:
         }
     },
 )
-async def list_paper_sessions(request: Request):
+async def list_paper_sessions(
+    request: Request,
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     manager = get_paper_manager(request)
-    return await manager.list_sessions()
+    return await manager.list_sessions(workspace_id=current_workspace.id)
 
 
 @router.post(
@@ -55,10 +61,19 @@ async def list_paper_sessions(request: Request):
         },
     },
 )
-async def create_paper_session(payload: PaperTradingSessionCreate, request: Request):
+async def create_paper_session(
+    payload: PaperTradingSessionCreate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     manager = get_paper_manager(request)
     try:
-        return await manager.create_session(payload)
+        return await manager.create_session(
+            payload,
+            workspace_id=current_workspace.id,
+            created_by_user_id=current_user.id,
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -76,10 +91,14 @@ async def create_paper_session(payload: PaperTradingSessionCreate, request: Requ
         },
     },
 )
-async def get_paper_session(session_id: str, request: Request):
+async def get_paper_session(
+    session_id: str,
+    request: Request,
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     manager = get_paper_manager(request)
     try:
-        return await manager.get_session_detail(session_id)
+        return await manager.get_session_detail(session_id, workspace_id=current_workspace.id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
@@ -97,11 +116,15 @@ async def get_paper_session(session_id: str, request: Request):
         },
     },
 )
-async def start_paper_session(session_id: str, request: Request):
+async def start_paper_session(
+    session_id: str,
+    request: Request,
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     manager = get_paper_manager(request)
     try:
-        await manager.start_session(session_id)
-        return await manager.get_session_detail(session_id)
+        await manager.start_session(session_id, workspace_id=current_workspace.id)
+        return await manager.get_session_detail(session_id, workspace_id=current_workspace.id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
@@ -119,11 +142,15 @@ async def start_paper_session(session_id: str, request: Request):
         },
     },
 )
-async def pause_paper_session(session_id: str, request: Request):
+async def pause_paper_session(
+    session_id: str,
+    request: Request,
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     manager = get_paper_manager(request)
     try:
-        await manager.pause_session(session_id)
-        return await manager.get_session_detail(session_id)
+        await manager.pause_session(session_id, workspace_id=current_workspace.id)
+        return await manager.get_session_detail(session_id, workspace_id=current_workspace.id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
@@ -141,11 +168,15 @@ async def pause_paper_session(session_id: str, request: Request):
         },
     },
 )
-async def stop_paper_session(session_id: str, request: Request):
+async def stop_paper_session(
+    session_id: str,
+    request: Request,
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     manager = get_paper_manager(request)
     try:
-        await manager.stop_session(session_id)
-        return await manager.get_session_detail(session_id)
+        await manager.stop_session(session_id, workspace_id=current_workspace.id)
+        return await manager.get_session_detail(session_id, workspace_id=current_workspace.id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
@@ -162,7 +193,9 @@ async def paper_session_websocket(websocket: WebSocket, session_id: str):
         return
 
     try:
-        detail = await manager.get_session_detail(session_id)
+        async with async_session() as db:
+            _current_user, current_workspace = await authenticate_websocket(websocket, db)
+        detail = await manager.get_session_detail(session_id, workspace_id=current_workspace.id)
         await websocket.send_json({"type": "snapshot", "session": jsonable_encoder(detail)})
         await manager.subscribe(session_id, websocket)
         while True:

@@ -25,7 +25,9 @@ from pydantic import ValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import authenticate_websocket, get_current_user, get_current_workspace
 from app.database import get_db
+from app.models.auth import User, Workspace
 from app.models.backtest import BacktestRun
 from app.models.trade import TradeRecord
 from app.observability import elapsed_ms, get_logger
@@ -79,7 +81,12 @@ logger = get_logger(__name__)
         },
     },
 )
-async def execute_backtest(config: BacktestConfig, db: AsyncSession = Depends(get_db)):
+async def execute_backtest(
+    config: BacktestConfig,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     start_time = time.perf_counter()
     log = logger.bind(
         strategy_id=config.strategy_id,
@@ -87,8 +94,14 @@ async def execute_backtest(config: BacktestConfig, db: AsyncSession = Depends(ge
         benchmark=config.benchmark,
     )
     try:
-        result = await run_backtest(db, config)
-        run, persisted_trades = await persist_backtest_result(db, config, result)
+        result = await run_backtest(db, config, workspace_id=current_workspace.id)
+        run, persisted_trades = await persist_backtest_result(
+            db,
+            config,
+            result,
+            workspace_id=current_workspace.id,
+            created_by_user_id=current_user.id,
+        )
         log.info(
             "backtest.persisted",
             duration_ms=elapsed_ms(start_time),
@@ -123,12 +136,18 @@ async def list_backtests(
     limit: int = Query(200, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     from sqlalchemy import func
 
-    total = await db.scalar(select(func.count()).select_from(BacktestRun))
+    total = await db.scalar(
+        select(func.count())
+        .select_from(BacktestRun)
+        .where(BacktestRun.workspace_id == current_workspace.id)
+    )
     result = await db.execute(
         select(BacktestRun)
+        .where(BacktestRun.workspace_id == current_workspace.id)
         .order_by(BacktestRun.created_at.desc(), BacktestRun.id.desc())
         .limit(limit)
         .offset(offset)
@@ -162,8 +181,16 @@ async def list_backtests(
     description="Returns the persisted run configuration, analytics series, trade log, and notes for one backtest.",
     responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
 )
-async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
-    detail = await load_backtest_detail(db, backtest_id)
+async def get_backtest(
+    backtest_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
+    detail = await load_backtest_detail(
+        db,
+        backtest_id,
+        workspace_id=current_workspace.id,
+    )
     if detail is None:
         raise HTTPException(404, "Backtest not found")
     run, trades = detail
@@ -177,8 +204,17 @@ async def get_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
     description="Deletes the saved backtest record and its persisted trade ledger.",
     responses={404: {"model": ErrorResponse, "description": "Backtest was not found."}},
 )
-async def delete_backtest(backtest_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+async def delete_backtest(
+    backtest_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
+    result = await db.execute(
+        select(BacktestRun).where(
+            BacktestRun.id == backtest_id,
+            BacktestRun.workspace_id == current_workspace.id,
+        )
+    )
     run = result.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
@@ -200,8 +236,14 @@ async def update_notes(
     backtest_id: str,
     payload: NotesUpdateRequest,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    result = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    result = await db.execute(
+        select(BacktestRun).where(
+            BacktestRun.id == backtest_id,
+            BacktestRun.workspace_id == current_workspace.id,
+        )
+    )
     run = result.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
@@ -220,7 +262,11 @@ async def update_notes(
     ),
     responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
 )
-async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depends(get_db)):
+async def parameter_sweep(
+    config: BacktestSweepConfig,
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     """Run multiple backtests varying one parameter (parallelized)."""
     import asyncio
 
@@ -243,7 +289,11 @@ async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depend
 
                 async def _run():
                     async with _async_session() as sess:
-                        return await run_backtest(sess, sweep_config)
+                        return await run_backtest(
+                            sess,
+                            sweep_config,
+                            workspace_id=current_workspace.id,
+                        )
 
                 result = asyncio.run(_run())
                 return {
@@ -277,7 +327,11 @@ async def parameter_sweep(config: BacktestSweepConfig, db: AsyncSession = Depend
     ),
     responses={400: {"model": ErrorResponse, "description": "Sweep request was invalid."}},
 )
-async def parameter_sweep_2d(config: BacktestSweep2DConfig, db: AsyncSession = Depends(get_db)):
+async def parameter_sweep_2d(
+    config: BacktestSweep2DConfig,
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
     """Run backtests varying two parameters simultaneously (parallelized)."""
     import asyncio
 
@@ -304,7 +358,11 @@ async def parameter_sweep_2d(config: BacktestSweep2DConfig, db: AsyncSession = D
 
                 async def _run():
                     async with _async_session() as sess:
-                        return await run_backtest(sess, sweep_config)
+                        return await run_backtest(
+                            sess,
+                            sweep_config,
+                            workspace_id=current_workspace.id,
+                        )
 
                 result = asyncio.run(_run())
                 metric_val = result["metrics"].get(config.metric)
@@ -356,6 +414,7 @@ async def parameter_sweep_2d(config: BacktestSweep2DConfig, db: AsyncSession = D
 async def walk_forward(
     payload: WalkForwardRequest,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     """Run walk-forward analysis on an existing backtest config."""
     import asyncio
@@ -381,7 +440,13 @@ async def walk_forward(
     def _run_wfa():
         async def _inner():
             async with _async_session() as sess:
-                return await run_walk_forward(sess, config, n_folds=n_folds, train_pct=train_pct)
+                return await run_walk_forward(
+                    sess,
+                    config,
+                    n_folds=n_folds,
+                    train_pct=train_pct,
+                    workspace_id=current_workspace.id,
+                )
 
         return asyncio.run(_inner())
 
@@ -415,6 +480,7 @@ async def walk_forward(
 async def bayesian_optimize(
     config: BayesOptConfig,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     """
     Run Bayesian optimization (Optuna) to find the best parameter combination.
@@ -463,7 +529,11 @@ async def bayesian_optimize(
 
         async def _run():
             async with _async_session() as sess:
-                return await run_backtest(sess, trial_config)
+                return await run_backtest(
+                    sess,
+                    trial_config,
+                    workspace_id=current_workspace.id,
+                )
 
         try:
             result = asyncio.run(_run())
@@ -528,8 +598,14 @@ async def set_lineage(
     backtest_id: str,
     payload: LineageTagRequest,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    r = await db.execute(select(BacktestRun).where(BacktestRun.id == backtest_id))
+    r = await db.execute(
+        select(BacktestRun).where(
+            BacktestRun.id == backtest_id,
+            BacktestRun.workspace_id == current_workspace.id,
+        )
+    )
     run = r.scalar_one_or_none()
     if not run:
         raise HTTPException(404, "Backtest not found")
@@ -537,7 +613,10 @@ async def set_lineage(
     # Compute next version in this lineage
     existing = await db.execute(
         select(BacktestRun.version)
-        .where(BacktestRun.lineage_tag == payload.lineage_tag)
+        .where(
+            BacktestRun.lineage_tag == payload.lineage_tag,
+            BacktestRun.workspace_id == current_workspace.id,
+        )
         .order_by(BacktestRun.version.desc())
     )
     max_ver = existing.scalar()
@@ -569,10 +648,14 @@ async def set_lineage(
 async def get_lineage(
     tag: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     result = await db.execute(
         select(BacktestRun)
-        .where(BacktestRun.lineage_tag == tag)
+        .where(
+            BacktestRun.lineage_tag == tag,
+            BacktestRun.workspace_id == current_workspace.id,
+        )
         .order_by(BacktestRun.version.asc())
     )
     runs = result.scalars().all()
@@ -620,6 +703,7 @@ async def get_lineage(
 )
 async def list_lineages(
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     from sqlalchemy import func
 
@@ -629,7 +713,10 @@ async def list_lineages(
             func.count(BacktestRun.id).label("count"),
             func.max(BacktestRun.version).label("max_version"),
         )
-        .where(BacktestRun.lineage_tag.isnot(None))
+        .where(
+            BacktestRun.lineage_tag.isnot(None),
+            BacktestRun.workspace_id == current_workspace.id,
+        )
         .group_by(BacktestRun.lineage_tag)
         .order_by(func.max(BacktestRun.created_at).desc())
     )
@@ -657,6 +744,9 @@ async def backtest_websocket(websocket: WebSocket):
 
     await websocket.accept()
     try:
+        async with async_session() as auth_db:
+            current_user, current_workspace = await authenticate_websocket(websocket, auth_db)
+
         raw = await websocket.receive_text()
         try:
             config_data = json.loads(raw)
@@ -688,8 +778,19 @@ async def backtest_websocket(websocket: WebSocket):
 
         async with async_session() as db:
             try:
-                result = await run_backtest(db, config, on_progress=on_progress)
-                await persist_backtest_result(db, config, result)
+                result = await run_backtest(
+                    db,
+                    config,
+                    on_progress=on_progress,
+                    workspace_id=current_workspace.id,
+                )
+                await persist_backtest_result(
+                    db,
+                    config,
+                    result,
+                    workspace_id=current_workspace.id,
+                    created_by_user_id=current_user.id,
+                )
 
                 await websocket.send_json({"type": "complete", "id": result["id"]})
             except ValueError as e:

@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { useSession } from "@/components/auth/SessionProvider";
 import { ErrorMessage } from "@/components/shared/ErrorBoundary";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { useBacktestList } from "@/hooks/useBacktest";
@@ -180,6 +181,7 @@ function DemoLoader({ onDone }: { onDone: () => void }) {
 }
 
 function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
+  const { user, workspace } = useSession();
   const steps = [
     {
       num: "01",
@@ -218,6 +220,16 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
             <div className="page-kicker mb-5">
               <Activity size={9} />
               Research control room
+            </div>
+            <div className="mb-4 flex flex-wrap gap-2 text-[11px]">
+              <span className="status-pill">
+                <Activity size={12} className="text-accent-green" />
+                {workspace?.name ?? "Workspace"}
+              </span>
+              <span className="status-pill">
+                <TrendingUp size={12} className="text-accent-blue" />
+                {user?.display_name || user?.email || "Signed in"}
+              </span>
             </div>
             <h1 className="display-title text-5xl text-text-primary lg:text-6xl">
               Build a
@@ -396,6 +408,7 @@ function EmptyDashboard({ onDemoLoaded }: { onDemoLoaded: () => void }) {
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const { data: backtests, isLoading, error } = useBacktestList();
+  const { user, workspace } = useSession();
 
   const handleDemoLoaded = () => {
     queryClient.invalidateQueries({ queryKey: ["backtests"] });
@@ -473,6 +486,16 @@ export default function DashboardPage() {
             <div className="page-kicker mb-5">
               <Activity size={9} />
               Dashboard
+            </div>
+            <div className="mb-4 flex flex-wrap gap-2 text-[11px]">
+              <span className="status-pill">
+                <Activity size={12} className="text-accent-green" />
+                {workspace?.name ?? "Workspace"}
+              </span>
+              <span className="status-pill">
+                <TrendingUp size={12} className="text-accent-blue" />
+                {user?.display_name || user?.email || "Signed in"}
+              </span>
             </div>
             <h1 className="display-title text-5xl text-text-primary lg:text-6xl">
               The research

@@ -32,6 +32,7 @@ from app.services.strategy_registry import (
     list_strategies,
 )
 from app.strategies.sma_crossover import SMACrossover
+from tests.auth_helpers import TEST_USER, TEST_WORKSPACE
 
 VALID_CUSTOM_STRATEGY = """
 STRATEGY = {
@@ -127,13 +128,18 @@ def _build_market_frame(prices: list[float], volumes: list[float] | None = None)
 
 @pytest.mark.asyncio
 async def test_strategy_registry_lists_builtin_and_custom_strategies(db):
-    record = await create_custom_strategy(db, VALID_CUSTOM_STRATEGY)
+    record = await create_custom_strategy(
+        db,
+        VALID_CUSTOM_STRATEGY,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
+    )
     await db.commit()
     await db.refresh(record)
 
     builtin = list_builtin_strategies()
     merged_without_db = await list_strategies()
-    merged_with_db = await list_strategies(db)
+    merged_with_db = await list_strategies(db, workspace_id=TEST_WORKSPACE.id)
 
     assert any(item["id"] == "sma_crossover" for item in builtin)
     assert len(merged_without_db) == len(builtin)
@@ -141,8 +147,16 @@ async def test_strategy_registry_lists_builtin_and_custom_strategies(db):
         item["id"] == record.id and item["source_type"] == "custom" for item in merged_with_db
     )
 
-    builtin_info = await get_strategy_info(db, "sma_crossover")
-    custom_info = await get_strategy_info(db, record.id)
+    builtin_info = await get_strategy_info(
+        db,
+        "sma_crossover",
+        workspace_id=TEST_WORKSPACE.id,
+    )
+    custom_info = await get_strategy_info(
+        db,
+        record.id,
+        workspace_id=TEST_WORKSPACE.id,
+    )
 
     assert builtin_info["source_type"] == "builtin"
     assert builtin_info["defaults"]["short_window"] == SMACrossover.default_params["short_window"]
@@ -152,12 +166,17 @@ async def test_strategy_registry_lists_builtin_and_custom_strategies(db):
     with pytest.raises(ValueError, match="Unknown strategy"):
         get_strategy_class("does_not_exist")
     with pytest.raises(ValueError, match="Unknown strategy"):
-        await get_strategy_info(db, "does_not_exist")
+        await get_strategy_info(db, "does_not_exist", workspace_id=TEST_WORKSPACE.id)
 
 
 @pytest.mark.asyncio
 async def test_build_strategy_instance_supports_builtin_and_custom_sources(db):
-    record = await create_custom_strategy(db, VALID_CUSTOM_STRATEGY)
+    record = await create_custom_strategy(
+        db,
+        VALID_CUSTOM_STRATEGY,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
+    )
     await db.commit()
     await db.refresh(record)
 
@@ -166,7 +185,12 @@ async def test_build_strategy_instance_supports_builtin_and_custom_sources(db):
         "sma_crossover",
         {"short_window": 5, "long_window": 10, "position_weight": 0.8},
     )
-    custom = await build_strategy_instance(db, record.id, {"lookback": 15})
+    custom = await build_strategy_instance(
+        db,
+        record.id,
+        {"lookback": 15},
+        workspace_id=TEST_WORKSPACE.id,
+    )
 
     market_data = {
         "AAPL": _build_market_frame([100 + i for i in range(30)]),
@@ -185,7 +209,12 @@ async def test_build_strategy_instance_supports_builtin_and_custom_sources(db):
 
 @pytest.mark.asyncio
 async def test_custom_strategy_crud_helpers_and_serializers(db):
-    record = await create_custom_strategy(db, VALID_CUSTOM_STRATEGY)
+    record = await create_custom_strategy(
+        db,
+        VALID_CUSTOM_STRATEGY,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
+    )
     await db.commit()
     await db.refresh(record)
 
@@ -198,7 +227,7 @@ async def test_custom_strategy_crud_helpers_and_serializers(db):
     await db.commit()
     await db.refresh(updated)
 
-    records = await list_custom_strategy_records(db)
+    records = await list_custom_strategy_records(db, workspace_id=TEST_WORKSPACE.id)
     assert records[0].id == record.id
     assert records[0].signal_mode == "long_short"
     assert records[0].requires_short_selling is True
@@ -206,7 +235,7 @@ async def test_custom_strategy_crud_helpers_and_serializers(db):
     await delete_custom_strategy(db, updated)
     await db.commit()
 
-    assert await list_custom_strategy_records(db) == []
+    assert await list_custom_strategy_records(db, workspace_id=TEST_WORKSPACE.id) == []
 
 
 def test_custom_strategy_editor_helpers_cover_common_utility_flows():

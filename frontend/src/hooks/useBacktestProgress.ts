@@ -2,10 +2,9 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSession } from "@/components/auth/SessionProvider";
 import type { BacktestConfig } from "@/lib/types";
 import { buildWebSocketUrl } from "@/lib/network";
-
-const WS_URL = buildWebSocketUrl("/api/backtest/ws");
 
 export type ProgressState =
   | { status: "idle" }
@@ -26,6 +25,8 @@ export function useBacktestProgress() {
   const wsRef = useRef<WebSocket | null>(null);
   const progressRef = useRef<ProgressState>({ status: "idle" });
   const queryClient = useQueryClient();
+  const { accessToken, workspace } = useSession();
+  const workspaceId = workspace?.id;
 
   const updateProgress = useCallback((next: ProgressState) => {
     progressRef.current = next;
@@ -40,7 +41,14 @@ export function useBacktestProgress() {
         }
 
         updateProgress({ status: "connecting" });
-        const ws = new WebSocket(WS_URL);
+        const wsUrl = new URL(buildWebSocketUrl("/api/backtest/ws"));
+        if (accessToken) {
+          wsUrl.searchParams.set("access_token", accessToken);
+        }
+        if (workspaceId) {
+          wsUrl.searchParams.set("workspace_id", workspaceId);
+        }
+        const ws = new WebSocket(wsUrl.toString());
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -88,7 +96,7 @@ export function useBacktestProgress() {
           }
         };
       }),
-    [queryClient, updateProgress],
+    [accessToken, queryClient, updateProgress, workspaceId],
   );
 
   const reset = useCallback(() => {

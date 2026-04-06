@@ -131,7 +131,13 @@ class PaperTradingManager:
             await self._cancel_task(session_id)
         logger.info("paper_trading.shutdown.completed")
 
-    async def create_session(self, payload: PaperTradingSessionCreate) -> PaperTradingSessionDetail:
+    async def create_session(
+        self,
+        payload: PaperTradingSessionCreate,
+        *,
+        workspace_id: str,
+        created_by_user_id: str,
+    ) -> PaperTradingSessionDetail:
         log = logger.bind(
             session_name=payload.name,
             strategy_id=payload.strategy_id,
@@ -142,11 +148,18 @@ class PaperTradingManager:
         created_at = utc_now_naive()
 
         async with self._session_factory() as db:
-            strategy = await build_strategy_instance(db, payload.strategy_id, payload.params)
+            strategy = await build_strategy_instance(
+                db,
+                payload.strategy_id,
+                payload.params,
+                workspace_id=workspace_id,
+            )
             if strategy.requires_short_selling and not payload.allow_short_selling:
                 raise ValueError(f"{strategy.name} requires short selling to be enabled.")
             session = PaperTradingSession(
                 id=session_id,
+                workspace_id=workspace_id,
+                created_by_user_id=created_by_user_id,
                 name=payload.name,
                 status="draft",
                 strategy_id=payload.strategy_id,
@@ -202,31 +215,47 @@ class PaperTradingManager:
             await db.commit()
 
         if payload.start_immediately:
-            await self.start_session(session_id)
+            await self.start_session(session_id, workspace_id=workspace_id)
 
         log.info("paper_trading.session_create.completed", session_id=session_id)
-        return await self.get_session_detail(session_id)
+        return await self.get_session_detail(session_id, workspace_id=workspace_id)
 
-    async def list_sessions(self) -> list[PaperTradingSessionSummary]:
+    async def list_sessions(self, *, workspace_id: str) -> list[PaperTradingSessionSummary]:
         async with self._session_factory() as db:
             result = await db.execute(
-                select(PaperTradingSession).order_by(PaperTradingSession.created_at.desc())
+                select(PaperTradingSession)
+                .where(PaperTradingSession.workspace_id == workspace_id)
+                .order_by(PaperTradingSession.created_at.desc())
             )
             sessions = result.scalars().all()
             return [self._session_to_summary(session) for session in sessions]
 
-    async def get_session_detail(self, session_id: str) -> PaperTradingSessionDetail:
+    async def get_session_detail(
+        self,
+        session_id: str,
+        *,
+        workspace_id: str | None = None,
+    ) -> PaperTradingSessionDetail:
         async with self._session_factory() as db:
-            return await self._load_detail(db, session_id)
+            return await self._load_detail(db, session_id, workspace_id=workspace_id)
 
-    async def start_session(self, session_id: str, emit_status: bool = True):
+    async def start_session(
+        self,
+        session_id: str,
+        *,
+        emit_status: bool = True,
+        workspace_id: str | None = None,
+    ):
         logger.info("paper_trading.session_start.started", session_id=session_id)
         async with self._session_factory() as db:
-            session = await db.get(PaperTradingSession, session_id)
+            session = await self._get_session(db, session_id, workspace_id=workspace_id)
             if not session:
                 raise ValueError("Paper trading session not found")
             strategy = await build_strategy_instance(
-                db, session.strategy_id, session.strategy_params
+                db,
+                session.strategy_id,
+                session.strategy_params,
+                workspace_id=session.workspace_id,
             )
             if strategy.requires_short_selling and not session.allow_short_selling:
                 raise ValueError(f"{strategy.name} requires short selling to be enabled.")
@@ -256,10 +285,10 @@ class PaperTradingManager:
         await self.broadcast_snapshot(session_id)
         logger.info("paper_trading.session_start.completed", session_id=session_id)
 
-    async def pause_session(self, session_id: str):
+    async def pause_session(self, session_id: str, *, workspace_id: str | None = None):
         logger.info("paper_trading.session_pause.started", session_id=session_id)
         async with self._session_factory() as db:
-            session = await db.get(PaperTradingSession, session_id)
+            session = await self._get_session(db, session_id, workspace_id=workspace_id)
             if not session:
                 raise ValueError("Paper trading session not found")
             status_changed = session.status != "paused"
@@ -282,10 +311,10 @@ class PaperTradingManager:
         await self.broadcast_snapshot(session_id)
         logger.info("paper_trading.session_pause.completed", session_id=session_id)
 
-    async def stop_session(self, session_id: str):
+    async def stop_session(self, session_id: str, *, workspace_id: str | None = None):
         logger.info("paper_trading.session_stop.started", session_id=session_id)
         async with self._session_factory() as db:
-            session = await db.get(PaperTradingSession, session_id)
+            session = await self._get_session(db, session_id, workspace_id=workspace_id)
             if not session:
                 raise ValueError("Paper trading session not found")
             status_changed = session.status != "stopped"
@@ -373,6 +402,7 @@ class PaperTradingManager:
                 db,
                 session.strategy_id,
                 session.strategy_params,
+                workspace_id=session.workspace_id,
             )
             runtime.portfolio = Portfolio(
                 initial_capital=session.initial_capital,
@@ -775,8 +805,14 @@ class PaperTradingManager:
             position_row.accrued_locate_fee = position.accrued_locate_fee
             position_row.updated_at = utc_now_naive()
 
-    async def _load_detail(self, db: AsyncSession, session_id: str) -> PaperTradingSessionDetail:
-        session = await db.get(PaperTradingSession, session_id)
+    async def _load_detail(
+        self,
+        db: AsyncSession,
+        session_id: str,
+        *,
+        workspace_id: str | None = None,
+    ) -> PaperTradingSessionDetail:
+        session = await self._get_session(db, session_id, workspace_id=workspace_id)
         if not session:
             raise ValueError("Paper trading session not found")
 
@@ -862,6 +898,23 @@ class PaperTradingManager:
                 for row in equity_points
             ],
         )
+
+    async def _get_session(
+        self,
+        db: AsyncSession,
+        session_id: str,
+        *,
+        workspace_id: str | None = None,
+    ) -> PaperTradingSession | None:
+        if workspace_id is None:
+            return await db.get(PaperTradingSession, session_id)
+        result = await db.execute(
+            select(PaperTradingSession).where(
+                PaperTradingSession.id == session_id,
+                PaperTradingSession.workspace_id == workspace_id,
+            )
+        )
+        return result.scalar_one_or_none()
 
     def _session_to_summary(self, session: PaperTradingSession) -> PaperTradingSessionSummary:
         return PaperTradingSessionSummary(

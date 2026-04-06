@@ -41,6 +41,8 @@ async def run_backtest(
     db: AsyncSession,
     config: BacktestConfig,
     on_progress: ProgressCallback | None = None,
+    *,
+    workspace_id: str | None = None,
 ) -> dict:
     """Execute a full backtest and return results.
 
@@ -91,7 +93,12 @@ async def run_backtest(
         raise ValueError("No trading dates found in the specified range")
 
     # 4. Initialize strategy and portfolio
-    strategy = await build_strategy_instance(db, config.strategy_id, config.params)
+    strategy = await build_strategy_instance(
+        db,
+        config.strategy_id,
+        config.params,
+        workspace_id=workspace_id,
+    )
     if strategy.requires_short_selling and not config.allow_short_selling:
         raise ValueError(f"{strategy.name} requires short selling to be enabled.")
     portfolio = Portfolio(initial_capital=config.initial_capital)

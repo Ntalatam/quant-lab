@@ -1,4 +1,6 @@
 import type {
+  AuthSession,
+  CurrentSession,
   BacktestConfig,
   BacktestResult,
   BacktestSummary,
@@ -40,9 +42,65 @@ import type {
 import { buildApiUrl, getApiBaseUrl } from "./network";
 
 const API_BASE = getApiBaseUrl();
+export const AUTH_TOKEN_STORAGE_KEY = "quantlab.access_token";
 
 class ApiClient {
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
+  private accessToken: string | null = null;
+  private refreshPromise: Promise<string | null> | null = null;
+
+  setAccessToken(token: string | null) {
+    this.accessToken = token;
+  }
+
+  getAccessToken() {
+    return this.accessToken;
+  }
+
+  private isAuthPath(path: string): boolean {
+    return path.startsWith("/auth/login") || path.startsWith("/auth/register");
+  }
+
+  private async parseError(response: Response): Promise<string> {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Unknown error" }));
+    return error.detail || `API error: ${response.status}`;
+  }
+
+  private async refreshAccessToken(): Promise<string | null> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = (async () => {
+      const response = await fetch(buildApiUrl("/auth/refresh", API_BASE), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        this.accessToken = null;
+        return null;
+      }
+
+      const payload = (await response.json()) as AuthSession;
+      this.accessToken = payload.access_token;
+      return payload.access_token;
+    })().finally(() => {
+      this.refreshPromise = null;
+    });
+
+    return this.refreshPromise;
+  }
+
+  private async request<T>(
+    path: string,
+    options?: RequestInit,
+    allowRefresh: boolean = true,
+  ): Promise<T> {
     const headers = new Headers(options?.headers);
 
     if (
@@ -57,17 +115,74 @@ class ApiClient {
       headers.set("Accept", "application/json");
     }
 
+    if (this.accessToken && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${this.accessToken}`);
+    }
+
     const response = await fetch(buildApiUrl(path, API_BASE), {
+      credentials: "include",
       headers,
       ...options,
     });
+    if (response.status === 401 && allowRefresh && !this.isAuthPath(path)) {
+      const refreshedToken = await this.refreshAccessToken();
+      if (refreshedToken) {
+        return this.request(path, options, false);
+      }
+    }
     if (!response.ok) {
-      const error = await response
-        .json()
-        .catch(() => ({ detail: "Unknown error" }));
-      throw new Error(error.detail || `API error: ${response.status}`);
+      throw new Error(await this.parseError(response));
     }
     return response.json();
+  }
+
+  async register(payload: {
+    email: string;
+    password: string;
+    display_name?: string | null;
+  }): Promise<AuthSession> {
+    const response = await this.request<AuthSession>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    this.accessToken = response.access_token;
+    return response;
+  }
+
+  async login(payload: {
+    email: string;
+    password: string;
+  }): Promise<AuthSession> {
+    const response = await this.request<AuthSession>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    this.accessToken = response.access_token;
+    return response;
+  }
+
+  async refreshSession(): Promise<AuthSession> {
+    const response = await this.request<AuthSession>(
+      "/auth/refresh",
+      { method: "POST" },
+      false,
+    );
+    this.accessToken = response.access_token;
+    return response;
+  }
+
+  async logout(): Promise<{ status: string; message?: string }> {
+    const response = await this.request<{ status: string; message?: string }>(
+      "/auth/logout",
+      { method: "POST" },
+      false,
+    );
+    this.accessToken = null;
+    return response;
+  }
+
+  async getCurrentSession(): Promise<CurrentSession> {
+    return this.request("/auth/me");
   }
 
   // Data
@@ -537,7 +652,11 @@ class ApiClient {
   }
 
   getExportUrl(backtestId: string, format: "csv" = "csv"): string {
-    return `${API_BASE}/analytics/export/${backtestId}?format=${format}`;
+    const params = new URLSearchParams({ format });
+    if (this.accessToken) {
+      params.set("access_token", this.accessToken);
+    }
+    return `${API_BASE}/analytics/export/${backtestId}?${params.toString()}`;
   }
 }
 

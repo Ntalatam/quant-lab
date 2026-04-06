@@ -13,7 +13,9 @@ DELETE /api/strategies/custom/{id}         — Delete a saved custom strategy
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_current_user, get_current_workspace
 from app.database import get_db
+from app.models.auth import User, Workspace
 from app.schemas.common import ErrorResponse
 from app.schemas.strategy import (
     CustomStrategyCreateRequest,
@@ -54,12 +56,16 @@ router = APIRouter(prefix="/strategies", tags=["strategies"])
         "schemas, signal modes, and whether short-selling support is required."
     ),
 )
-async def get_strategies(db: AsyncSession = Depends(get_db)):
-    cached = cache.get("strategies:list")
+async def get_strategies(
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
+    cache_key = f"strategies:list:{current_workspace.id}"
+    cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    result = await list_strategies(db)
-    cache.put("strategies:list", result, ttl=300)
+    result = await list_strategies(db, workspace_id=current_workspace.id)
+    cache.put(cache_key, result, ttl=300)
     return result
 
 
@@ -110,8 +116,11 @@ async def validate_custom_strategy(payload: CustomStrategyValidateRequest):
     summary="List saved custom strategies",
     description="Returns saved custom strategies for the in-browser strategy studio.",
 )
-async def list_custom_strategies(db: AsyncSession = Depends(get_db)):
-    strategies = await list_custom_strategy_records(db)
+async def list_custom_strategies(
+    db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
+    strategies = await list_custom_strategy_records(db, workspace_id=current_workspace.id)
     return [strategy_record_to_summary(item) for item in strategies]
 
 
@@ -133,9 +142,16 @@ async def list_custom_strategies(db: AsyncSession = Depends(get_db)):
 async def create_custom_strategy_route(
     payload: CustomStrategyCreateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     try:
-        strategy = await create_custom_strategy(db, payload.code)
+        strategy = await create_custom_strategy(
+            db,
+            payload.code,
+            workspace_id=current_workspace.id,
+            created_by_user_id=current_user.id,
+        )
         await db.commit()
         await db.refresh(strategy)
     except CustomStrategyValidationError as exc:
@@ -154,8 +170,13 @@ async def create_custom_strategy_route(
 async def get_custom_strategy_route(
     strategy_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    strategy = await get_custom_strategy_record(db, strategy_id)
+    strategy = await get_custom_strategy_record(
+        db,
+        strategy_id,
+        workspace_id=current_workspace.id,
+    )
     if strategy is None:
         raise HTTPException(404, f"Custom strategy {strategy_id} not found")
     return strategy_record_to_detail(strategy)
@@ -177,8 +198,13 @@ async def update_custom_strategy_route(
     strategy_id: str,
     payload: CustomStrategyUpdateRequest,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    strategy = await get_custom_strategy_record(db, strategy_id)
+    strategy = await get_custom_strategy_record(
+        db,
+        strategy_id,
+        workspace_id=current_workspace.id,
+    )
     if strategy is None:
         raise HTTPException(404, f"Custom strategy {strategy_id} not found")
     try:
@@ -201,8 +227,13 @@ async def update_custom_strategy_route(
 async def delete_custom_strategy_route(
     strategy_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    strategy = await get_custom_strategy_record(db, strategy_id)
+    strategy = await get_custom_strategy_record(
+        db,
+        strategy_id,
+        workspace_id=current_workspace.id,
+    )
     if strategy is None:
         raise HTTPException(404, f"Custom strategy {strategy_id} not found")
     await delete_custom_strategy(db, strategy)
@@ -221,6 +252,7 @@ async def delete_custom_strategy_route(
 async def get_strategy_params(
     strategy_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     try:
         cls = get_strategy_class(strategy_id)
@@ -235,7 +267,11 @@ async def get_strategy_params(
         pass
 
     try:
-        strategy = await get_strategy_info(db, strategy_id)
+        strategy = await get_strategy_info(
+            db,
+            strategy_id,
+            workspace_id=current_workspace.id,
+        )
         return {
             "id": strategy["id"],
             "name": strategy["name"],

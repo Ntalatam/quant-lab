@@ -15,7 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_current_workspace
 from app.database import get_db
+from app.models.auth import Workspace
 from app.schemas.analytics import (
     CapacityResponse,
     CompareRequest,
@@ -65,9 +67,14 @@ async def risk_budget_analysis(
     backtest_id: str,
     lookback_days: int = Query(63, ge=21, le=252),
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    run = await load_backtest_run_or_404(db, backtest_id)
-    trades = await load_backtest_trades(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
+    trades = await load_backtest_trades(
+        db,
+        backtest_id,
+        workspace_id=current_workspace.id,
+    )
     return await build_risk_budget_report(
         db=db,
         run=run,
@@ -98,12 +105,13 @@ async def risk_budget_analysis(
 async def compare_backtests(
     payload: CompareRequest,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     ids = payload.backtest_ids
     if len(ids) < 2:
         raise HTTPException(400, "Need at least 2 backtests to compare")
 
-    results = await load_backtest_runs_or_404(db, ids)
+    results = await load_backtest_runs_or_404(db, ids, current_workspace.id)
 
     # Correlation matrix from equity curves
     df = pd.concat([backtest_returns_series(run, name=run.id) for run in results], axis=1)
@@ -139,8 +147,9 @@ async def monte_carlo(
     n_simulations: int = Query(1000, ge=100, le=10000),
     n_days: int = Query(252, ge=30, le=1260),
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    run = await load_backtest_run_or_404(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
     equity = backtest_equity_series(run)
     returns = equity.pct_change().dropna()
 
@@ -177,8 +186,9 @@ async def export_results(
     backtest_id: str,
     format: str = Query("csv"),
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    run = await load_backtest_run_or_404(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
 
     if format == "csv":
         return StreamingResponse(
@@ -205,6 +215,7 @@ async def export_results(
 async def capacity_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     """
     Estimate strategy capacity: at what AUM does market impact erode the edge?
@@ -216,10 +227,14 @@ async def capacity_analysis(
 
     from app.services.data_ingestion import get_price_dataframe
 
-    run = await load_backtest_run_or_404(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
 
     # Load trades
-    trades = await load_backtest_trades(db, backtest_id)
+    trades = await load_backtest_trades(
+        db,
+        backtest_id,
+        workspace_id=current_workspace.id,
+    )
 
     if not trades:
         return {
@@ -326,9 +341,14 @@ async def capacity_analysis(
 async def transaction_cost_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    run = await load_backtest_run_or_404(db, backtest_id)
-    trades = await load_backtest_trades(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
+    trades = await load_backtest_trades(
+        db,
+        backtest_id,
+        workspace_id=current_workspace.id,
+    )
     model = {
         "market_impact_model": run.market_impact_model or "almgren_chriss",
         "max_volume_participation_pct": run.max_volume_participation_pct or 5,
@@ -490,6 +510,7 @@ async def transaction_cost_analysis(
 async def regime_analysis(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     """
     Classify market regimes using rolling ADX and volatility.
@@ -506,7 +527,7 @@ async def regime_analysis(
 
     from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
-    run = await load_backtest_run_or_404(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
 
     start = date_cls.fromisoformat(run.start_date)
     end = date_cls.fromisoformat(run.end_date)
@@ -657,6 +678,7 @@ async def regime_analysis(
 async def factor_exposure(
     backtest_id: str,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     """
     Compute factor exposure via multi-factor regression.
@@ -673,7 +695,7 @@ async def factor_exposure(
 
     from app.services.data_ingestion import ensure_data_loaded, get_price_dataframe
 
-    run = await load_backtest_run_or_404(db, backtest_id)
+    run = await load_backtest_run_or_404(db, backtest_id, current_workspace.id)
 
     start = date_cls.fromisoformat(run.start_date)
     end = date_cls.fromisoformat(run.end_date)
@@ -796,6 +818,7 @@ async def factor_exposure(
 async def portfolio_blend(
     payload: PortfolioBlendRequest,
     db: AsyncSession = Depends(get_db),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
     """
     Blend multiple backtests by weights and return portfolio equity + metrics.
@@ -809,7 +832,7 @@ async def portfolio_blend(
     if len(ids) < 2:
         raise HTTPException(400, "Need at least 2 backtests to blend")
 
-    runs = await load_backtest_runs_or_404(db, ids)
+    runs = await load_backtest_runs_or_404(db, ids, current_workspace.id)
 
     # Align equity curves to common dates
     df = aligned_equity_frame(

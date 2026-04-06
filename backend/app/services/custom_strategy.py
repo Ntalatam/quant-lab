@@ -442,11 +442,15 @@ def validate_custom_strategy_source(code: str) -> dict[str, Any]:
     }
 
 
-async def list_custom_strategy_records(db: AsyncSession) -> list[CustomStrategy]:
+async def list_custom_strategy_records(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+) -> list[CustomStrategy]:
     result = await db.execute(
-        select(CustomStrategy).order_by(
-            CustomStrategy.updated_at.desc(), CustomStrategy.created_at.desc()
-        )
+        select(CustomStrategy)
+        .where(CustomStrategy.workspace_id == workspace_id)
+        .order_by(CustomStrategy.updated_at.desc(), CustomStrategy.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -454,18 +458,31 @@ async def list_custom_strategy_records(db: AsyncSession) -> list[CustomStrategy]
 async def get_custom_strategy_record(
     db: AsyncSession,
     strategy_id: str,
+    *,
+    workspace_id: str,
 ) -> CustomStrategy | None:
-    return await db.get(CustomStrategy, strategy_id)
+    result = await db.execute(
+        select(CustomStrategy).where(
+            CustomStrategy.id == strategy_id,
+            CustomStrategy.workspace_id == workspace_id,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def create_custom_strategy(
     db: AsyncSession,
     code: str,
+    *,
+    workspace_id: str,
+    created_by_user_id: str,
 ) -> CustomStrategy:
     metadata, _runner = _compile_source(code)
     now = utc_now_naive()
     strategy = CustomStrategy(
         id=f"{CUSTOM_STRATEGY_ID_PREFIX}{uuid.uuid4().hex[:12]}",
+        workspace_id=workspace_id,
+        created_by_user_id=created_by_user_id,
         name=metadata.name,
         description=metadata.description,
         category=metadata.category,
@@ -540,8 +557,10 @@ def strategy_record_to_summary(strategy: CustomStrategy) -> dict[str, Any]:
 async def build_custom_strategy_definition(
     db: AsyncSession,
     strategy_id: str,
+    *,
+    workspace_id: str,
 ) -> CustomStrategyDefinition:
-    record = await get_custom_strategy_record(db, strategy_id)
+    record = await get_custom_strategy_record(db, strategy_id, workspace_id=workspace_id)
     if record is None:
         raise ValueError(f"Custom strategy {strategy_id} was not found.")
     return _compile_strategy_record(record)

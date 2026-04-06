@@ -19,7 +19,11 @@ from app.models import (  # noqa: F401
     PaperTradingPosition,
     PaperTradingSession,
     PriceData,
+    RefreshTokenSession,
     TradeRecord,
+    User,
+    Workspace,
+    WorkspaceMembership,
 )
 
 target_metadata = Base.metadata

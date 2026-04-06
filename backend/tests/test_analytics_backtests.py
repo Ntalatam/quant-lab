@@ -12,6 +12,7 @@ from app import main as app_main
 from app.database import Base, get_db
 from app.models.backtest import BacktestRun
 from app.services.analytics_backtests import resolve_blend_weights
+from tests.auth_helpers import TEST_USER, TEST_WORKSPACE, install_auth_overrides
 
 
 class _FakePaperManager:
@@ -48,6 +49,8 @@ def _make_run(
     benchmark = _curve([100_000.0, 100_300.0, 100_700.0, 101_000.0])
     return BacktestRun(
         id=backtest_id,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
         strategy_id=strategy_id,
         strategy_params={"lookback": 20},
         tickers=tickers or ["AAPL"],
@@ -117,6 +120,7 @@ def _build_client(monkeypatch, tmp_path: Path):
 
     app = app_main.create_app()
     app.dependency_overrides[get_db] = override_get_db
+    install_auth_overrides(app)
 
     try:
         with TestClient(app) as client:

@@ -8,6 +8,7 @@ from app.services.backtest_runs import (
     persist_backtest_result,
     serialize_backtest_run,
 )
+from tests.auth_helpers import TEST_USER, TEST_WORKSPACE
 
 
 def _build_config() -> BacktestConfig:
@@ -114,8 +115,18 @@ async def test_persist_and_load_backtest_detail(db):
     config = _build_config()
     result = _build_result()
 
-    await persist_backtest_result(db, config, result)
-    detail = await load_backtest_detail(db, result["id"])
+    await persist_backtest_result(
+        db,
+        config,
+        result,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
+    )
+    detail = await load_backtest_detail(
+        db,
+        result["id"],
+        workspace_id=TEST_WORKSPACE.id,
+    )
 
     assert detail is not None
     run, trades = detail
@@ -130,7 +141,13 @@ async def test_serialize_backtest_run_preserves_config_and_trade_fields(db):
     config = _build_config()
     result = _build_result()
 
-    run, trades = await persist_backtest_result(db, config, result)
+    run, trades = await persist_backtest_result(
+        db,
+        config,
+        result,
+        workspace_id=TEST_WORKSPACE.id,
+        created_by_user_id=TEST_USER.id,
+    )
     payload = serialize_backtest_run(run, trades)
 
     assert payload["config"]["strategy_id"] == "sma_crossover"

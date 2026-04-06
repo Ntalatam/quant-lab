@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useSession } from "@/components/auth/SessionProvider";
 import { api } from "@/lib/api";
 import { buildWebSocketUrl } from "@/lib/network";
 import type {
@@ -95,6 +96,8 @@ export function usePaperSessionStream(
   sessionId: string | undefined,
   initialSession: PaperTradingSessionDetail | undefined,
 ) {
+  const { accessToken, workspace } = useSession();
+  const workspaceId = workspace?.id;
   const queryClient = useQueryClient();
   const [session, setSession] = useState<PaperTradingSessionDetail | undefined>(
     initialSession,
@@ -142,9 +145,16 @@ export function usePaperSessionStream(
     const connect = () => {
       if (disposed) return;
       setConnection("connecting");
-      ws = new WebSocket(
+      const wsUrl = new URL(
         buildWebSocketUrl(`/api/paper/sessions/${sessionId}/ws`),
       );
+      if (accessToken) {
+        wsUrl.searchParams.set("access_token", accessToken);
+      }
+      if (workspaceId) {
+        wsUrl.searchParams.set("workspace_id", workspaceId);
+      }
+      ws = new WebSocket(wsUrl.toString());
 
       ws.onopen = () => {
         reconnectAttempt = 0;
@@ -183,7 +193,7 @@ export function usePaperSessionStream(
       }
       ws?.close();
     };
-  }, [queryClient, sessionId]);
+  }, [accessToken, queryClient, sessionId, workspaceId]);
 
   const summary = useMemo<PaperTradingSessionSummary | undefined>(
     () => (session ? toPaperSessionSummary(session) : undefined),

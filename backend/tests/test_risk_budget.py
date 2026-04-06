@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app import main as app_main
 from app.api import analytics as analytics_api
 from app.services import risk_budget
+from tests.auth_helpers import install_auth_overrides
 
 
 class _FakeConnection:
@@ -64,7 +65,7 @@ class _FakeDB:
 
     async def execute(self, _statement):
         self.calls += 1
-        if self.calls == 1:
+        if self.calls <= 2:
             return _ScalarResult([self._run])
         return _ScalarResult(self._trades)
 
@@ -82,6 +83,7 @@ def _build_client(monkeypatch, fake_db):
     monkeypatch.setattr(app_main, "engine", _HealthyEngine())
     app = app_main.create_app()
     app.dependency_overrides[analytics_api.get_db] = _get_db_override
+    install_auth_overrides(app)
     return TestClient(app)
 
 

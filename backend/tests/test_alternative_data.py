@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import main as app_main
 from app.services import alternative_data
+from tests.auth_helpers import install_auth_overrides
 
 
 class _FakeConnection:
@@ -47,7 +48,9 @@ def _build_client(monkeypatch):
     monkeypatch.setattr(app_main, "init_db", _noop)
     monkeypatch.setattr(app_main, "PaperTradingManager", _FakePaperManager)
     monkeypatch.setattr(app_main, "engine", _HealthyEngine())
-    return TestClient(app_main.create_app())
+    app = app_main.create_app()
+    install_auth_overrides(app)
+    return TestClient(app)
 
 
 def test_parse_fred_csv_payload_skips_missing_values():
