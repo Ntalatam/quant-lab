@@ -14,6 +14,7 @@ from app.api import backtest as backtest_api
 from app.database import Base, get_db
 from app.schemas.backtest import BacktestConfig
 from app.services.backtest_runs import load_backtest_detail
+from app.services.jobs import get_research_job
 from tests.auth_helpers import TEST_USER, TEST_WORKSPACE, install_auth_overrides
 
 
@@ -189,31 +190,29 @@ async def _load_detail(session_factory, backtest_id: str):
         return await load_backtest_detail(session, backtest_id)
 
 
-def test_execute_backtest_route_persists_and_returns_sorted_trades(monkeypatch, tmp_path):
+async def _load_job(session_factory, job_id: str):
+    async with session_factory() as session:
+        return await get_research_job(session, job_id)
+
+
+def test_execute_backtest_route_enqueues_job(monkeypatch, tmp_path):
     config = _build_config()
-    result = _build_result()
-
-    async def fake_run_backtest(_db, _config, on_progress=None, workspace_id=None):
-        assert workspace_id == TEST_WORKSPACE.id
-        if on_progress is not None:
-            await on_progress(1, 1, "2024-01-31", 100_500)
-        return result
-
-    monkeypatch.setattr(backtest_api, "run_backtest", fake_run_backtest)
 
     with _build_client(monkeypatch, tmp_path) as (client, session_factory):
         response = client.post("/api/backtest/run", json=config.model_dump())
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         payload = response.json()
-        assert payload["id"] == result["id"]
-        assert [trade["ticker"] for trade in payload["trades"]] == ["AAPL", "MSFT"]
+        assert payload["kind"] == "backtest_run"
+        assert payload["status"] == "queued"
+        assert payload["progress_message"] == "Queued backtest run."
 
-        detail = asyncio.run(_load_detail(session_factory, result["id"]))
-        assert detail is not None
-        run, trades = detail
-        assert run.strategy_id == config.strategy_id
-        assert [trade.ticker for trade in trades] == ["AAPL", "MSFT"]
+        job = asyncio.run(_load_job(session_factory, payload["id"]))
+        assert job is not None
+        assert job.workspace_id == TEST_WORKSPACE.id
+        assert job.created_by_user_id == TEST_USER.id
+        assert job.kind == "backtest_run"
+        assert job.request_payload["strategy_id"] == config.strategy_id
 
 
 def test_backtest_websocket_persists_result_and_streams_progress(monkeypatch, tmp_path):

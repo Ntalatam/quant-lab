@@ -1,6 +1,7 @@
 from app.models.auth import RefreshTokenSession, User, Workspace, WorkspaceMembership
 from app.models.backtest import BacktestRun
 from app.models.custom_strategy import CustomStrategy
+from app.models.job import ResearchJob
 from app.models.paper import (
     PaperTradingEquityPoint,
     PaperTradingEvent,
@@ -17,6 +18,7 @@ __all__ = [
     "RefreshTokenSession",
     "PriceData",
     "BacktestRun",
+    "ResearchJob",
     "CustomStrategy",
     "TradeRecord",
     "PaperTradingSession",

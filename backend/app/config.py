@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     AUTH_REFRESH_COOKIE_NAME: str = "quantlab_refresh_token"
     AUTH_COOKIE_SECURE: bool = False
     AUTH_COOKIE_SAMESITE: str = "lax"
+    JOB_WORKER_POLL_INTERVAL_SECONDS: float = 1.0
+    JOB_MAX_ATTEMPTS: int = 1
 
     model_config = {"env_file": ".env"}
 

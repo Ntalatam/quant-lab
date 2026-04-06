@@ -5,7 +5,7 @@ QuantLab now includes a production-oriented AWS deployment stack under `infra/aw
 - CloudFront provides the single public URL.
 - An ALB routes `/_next/*` and app traffic to the Next.js frontend service.
 - The ALB routes `/api/*`, `/health`, `/docs`, `/redoc`, and `/openapi.json` to the FastAPI backend.
-- ECS Fargate runs the frontend and backend as separate services.
+- ECS Fargate runs the frontend, backend, and background worker as separate services.
 - RDS PostgreSQL lives in private database subnets.
 - Secrets Manager injects the backend `DATABASE_URL` and should also supply a strong `AUTH_SECRET_KEY`.
 
@@ -16,6 +16,7 @@ CloudFront
   -> Application Load Balancer
     -> ECS Fargate frontend service (Next.js standalone)
     -> ECS Fargate backend service (FastAPI / Uvicorn)
+    -> ECS Fargate worker service (persistent research jobs)
   -> RDS PostgreSQL (private DB subnets)
 ```
 
@@ -99,6 +100,7 @@ terraform apply
 - Backend health path: `/health`
 - Frontend health path: `/healthz`
 - Backend docs: `/docs`
+- The same backend image is reused for the worker service with the command override `python -m app.worker`.
 - Set `AUTH_COOKIE_SECURE=true` anywhere the app is served behind HTTPS.
 - Frontend and backend share one public origin, so same-origin API calls work without a dedicated frontend proxy layer.
 - The frontend image is built with `NEXT_PUBLIC_API_URL=/api`; changing the public API base requires rebuilding the frontend image.

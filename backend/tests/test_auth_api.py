@@ -9,9 +9,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import main as app_main
-from app.api import backtest as backtest_api
 from app.database import Base, get_db
 from app.schemas.backtest import BacktestConfig
+from app.services.backtest_runs import persist_backtest_result
 
 
 class _FakePaperManager:
@@ -113,7 +113,7 @@ def _build_client(monkeypatch, tmp_path: Path):
 
     try:
         with TestClient(app) as client:
-            yield client
+            yield client, session_factory
     finally:
         asyncio.run(_dispose())
 
@@ -123,7 +123,7 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 def test_auth_register_refresh_logout_and_login(monkeypatch, tmp_path):
-    with _build_client(monkeypatch, tmp_path) as client:
+    with _build_client(monkeypatch, tmp_path) as (client, _session_factory):
         register_response = client.post(
             "/api/auth/register",
             json={
@@ -165,13 +165,7 @@ def test_workspace_scoping_hides_backtests_from_other_users(monkeypatch, tmp_pat
     config = _build_config()
     result = _build_result()
 
-    async def fake_run_backtest(_db, _config, on_progress=None, workspace_id=None):
-        assert workspace_id is not None
-        return result
-
-    monkeypatch.setattr(backtest_api, "run_backtest", fake_run_backtest)
-
-    with _build_client(monkeypatch, tmp_path) as client:
+    with _build_client(monkeypatch, tmp_path) as (client, session_factory):
         alice = client.post(
             "/api/auth/register",
             json={"email": "alice@example.com", "password": "supersecret1"},
@@ -183,13 +177,20 @@ def test_workspace_scoping_hides_backtests_from_other_users(monkeypatch, tmp_pat
 
         alice_token = alice.json()["access_token"]
         bob_token = bob.json()["access_token"]
+        alice_user_id = alice.json()["user"]["id"]
+        alice_workspace_id = alice.json()["workspace"]["id"]
 
-        create_response = client.post(
-            "/api/backtest/run",
-            headers=_auth_headers(alice_token),
-            json=config.model_dump(),
-        )
-        assert create_response.status_code == 200
+        async def _persist():
+            async with session_factory() as session:
+                await persist_backtest_result(
+                    session,
+                    config,
+                    result,
+                    workspace_id=alice_workspace_id,
+                    created_by_user_id=alice_user_id,
+                )
+
+        asyncio.run(_persist())
 
         alice_list = client.get("/api/backtest/list", headers=_auth_headers(alice_token))
         bob_list = client.get("/api/backtest/list", headers=_auth_headers(bob_token))

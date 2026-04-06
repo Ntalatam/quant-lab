@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback, useEffect } from "react";
+import { startTransition, use, useState, useCallback, useEffect } from "react";
 import { useBacktestResult } from "@/hooks/useBacktest";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -21,6 +21,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { BayesOptParamSpec, BayesOptResult } from "@/lib/types";
+import { useJobRunner } from "@/hooks/useJobRunner";
 import { useBacktestStore } from "@/store/backtest-store";
 
 const OPTIMIZABLE_METRICS = [
@@ -68,10 +69,10 @@ export default function OptimizePage({
   const [paramRows, setParamRows] = useState<ParamRow[]>([]);
   const [metric, setMetric] = useState("sharpe_ratio");
   const [nTrials, setNTrials] = useState(30);
-  const [running, setRunning] = useState(false);
   const [optResult, setOptResult] = useState<BayesOptResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [appliedParams, setAppliedParams] = useState(false);
+  const { job, run, isRunning } = useJobRunner<BayesOptResult>();
 
   // Initialize rows once strategy info loads
   useEffect(() => {
@@ -96,7 +97,9 @@ export default function OptimizePage({
           enabled: true,
         };
       });
-    setParamRows(rows);
+    startTransition(() => {
+      setParamRows(rows);
+    });
   }, [strategyInfo, result?.config.params]);
 
   const updateRow = useCallback(
@@ -125,18 +128,18 @@ export default function OptimizePage({
       return;
     }
 
-    setRunning(true);
     setRunError(null);
     setOptResult(null);
     setAppliedParams(false);
 
     try {
-      const res = await api.runBayesOpt(id, specs, metric, nTrials);
+      const res = await run(
+        () => api.runBayesOpt(id, specs, metric, nTrials),
+        (nextJob) => nextJob.result,
+      );
       setOptResult(res);
     } catch (e: unknown) {
       setRunError(e instanceof Error ? e.message : "Optimization failed");
-    } finally {
-      setRunning(false);
     }
   };
 
@@ -343,18 +346,22 @@ export default function OptimizePage({
           {/* Run button */}
           <button
             onClick={runOptimization}
-            disabled={running}
+            disabled={isRunning}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-sm font-semibold transition-all disabled:opacity-50"
             style={{
-              background: running
+              background: isRunning
                 ? "rgba(136,85,255,0.15)"
                 : "rgba(136,85,255,0.2)",
               border: "1px solid rgba(136,85,255,0.4)",
               color: "var(--color-accent-purple)",
             }}
           >
-            <Play size={13} className={running ? "animate-pulse" : ""} />
-            {running ? `Running ${nTrials} trials…` : "Run Optimization"}
+            <Play size={13} className={isRunning ? "animate-pulse" : ""} />
+            {isRunning
+              ? job?.status === "queued"
+                ? "Queued for worker…"
+                : `Running ${job?.progress_current ?? 0} / ${job?.progress_total || nTrials} trials…`
+              : "Run Optimization"}
           </button>
 
           {runError && (
@@ -364,7 +371,7 @@ export default function OptimizePage({
 
         {/* Right: Results */}
         <div className="lg:col-span-2 space-y-4">
-          {!optResult && !running && (
+          {!optResult && !isRunning && (
             <div
               className="rounded-md p-10 text-center"
               style={{
@@ -387,7 +394,7 @@ export default function OptimizePage({
             </div>
           )}
 
-          {running && (
+          {isRunning && (
             <div
               className="rounded-md p-10 text-center"
               style={{
@@ -401,11 +408,14 @@ export default function OptimizePage({
                   style={{ background: "var(--color-accent-purple)" }}
                 />
                 <p className="text-text-secondary text-sm">
-                  Running {nTrials} backtests via Optuna TPE…
+                  {job?.status === "queued"
+                    ? "Queued for the worker process…"
+                    : job?.progress_message ||
+                      `Running ${nTrials} backtests via Optuna TPE…`}
                 </p>
               </div>
               <p className="text-text-muted text-xs mt-3">
-                This may take a minute.
+                {Math.round((job?.progress_pct || 0) * 100)}% complete.
               </p>
             </div>
           )}

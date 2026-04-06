@@ -97,6 +97,18 @@ variable "backend_memory" {
   default     = 2048
 }
 
+variable "worker_cpu" {
+  description = "Fargate CPU units for the worker task."
+  type        = number
+  default     = 1024
+}
+
+variable "worker_memory" {
+  description = "Fargate memory (MiB) for the worker task."
+  type        = number
+  default     = 2048
+}
+
 variable "frontend_desired_count" {
   description = "Desired number of running frontend tasks."
   type        = number
@@ -105,6 +117,12 @@ variable "frontend_desired_count" {
 
 variable "backend_desired_count" {
   description = "Desired number of running backend tasks."
+  type        = number
+  default     = 1
+}
+
+variable "worker_desired_count" {
+  description = "Desired number of running worker tasks."
   type        = number
   default     = 1
 }

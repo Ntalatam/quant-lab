@@ -10,8 +10,6 @@ POST   /api/backtest/sweep     — Parameter sensitivity sweep
 
 import json
 import time
-from datetime import date
-from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -38,25 +36,22 @@ from app.schemas.backtest import (
     BacktestSweep2DConfig,
     BacktestSweepConfig,
     BayesOptConfig,
-    BayesOptResponse,
     LineageResponse,
     LineageTagRequest,
     LineageTagResponse,
     NotesUpdateRequest,
     NotesUpdateResponse,
-    Sweep2DResponse,
-    SweepResponse,
     WalkForwardRequest,
-    WalkForwardResponse,
 )
 from app.schemas.common import DeleteResponse, ErrorResponse
+from app.schemas.jobs import ResearchJobResponse
 from app.services.backtest_engine import run_backtest
 from app.services.backtest_runs import (
     load_backtest_detail,
     persist_backtest_result,
     serialize_backtest_run,
 )
-from app.services.walk_forward import run_walk_forward
+from app.services.jobs import enqueue_research_job, serialize_job
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 logger = get_logger(__name__)
@@ -64,11 +59,12 @@ logger = get_logger(__name__)
 
 @router.post(
     "/run",
-    response_model=BacktestResultResponse,
-    summary="Run and persist a backtest",
+    response_model=ResearchJobResponse,
+    status_code=202,
+    summary="Queue a backtest run",
     description=(
-        "Executes a full historical simulation, persists the run and trade log, "
-        "and returns the full tear-sheet payload used by the frontend."
+        "Queues a full historical simulation for the background worker and returns "
+        "the persisted job record used for status polling."
     ),
     responses={
         400: {
@@ -93,37 +89,20 @@ async def execute_backtest(
         tickers=config.tickers,
         benchmark=config.benchmark,
     )
-    try:
-        result = await run_backtest(db, config, workspace_id=current_workspace.id)
-        run, persisted_trades = await persist_backtest_result(
-            db,
-            config,
-            result,
-            workspace_id=current_workspace.id,
-            created_by_user_id=current_user.id,
-        )
-        log.info(
-            "backtest.persisted",
-            duration_ms=elapsed_ms(start_time),
-            backtest_id=result["id"],
-            trade_count=len(result["trades"]),
-        )
-        return serialize_backtest_run(run, persisted_trades)
-
-    except ValueError as e:
-        log.warning(
-            "backtest.rejected",
-            duration_ms=elapsed_ms(start_time),
-            error=str(e),
-        )
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        log.exception(
-            "backtest.request_failed",
-            duration_ms=elapsed_ms(start_time),
-            error=str(e),
-        )
-        raise HTTPException(500, f"Backtest failed: {str(e)}")
+    job = await enqueue_research_job(
+        db,
+        kind="backtest_run",
+        request_payload=config.model_dump(),
+        workspace_id=current_workspace.id,
+        created_by_user_id=current_user.id,
+        progress_message="Queued backtest run.",
+    )
+    log.info(
+        "backtest.job_queued",
+        duration_ms=elapsed_ms(start_time),
+        job_id=job.id,
+    )
+    return serialize_job(job)
 
 
 @router.get(
@@ -254,8 +233,9 @@ async def update_notes(
 
 @router.post(
     "/sweep",
-    response_model=SweepResponse,
-    summary="Run a one-dimensional parameter sweep",
+    response_model=ResearchJobResponse,
+    status_code=202,
+    summary="Queue a one-dimensional parameter sweep",
     description=(
         "Runs the same base configuration multiple times while varying a single "
         "parameter and returns summary metrics for each value."
@@ -265,62 +245,25 @@ async def update_notes(
 async def parameter_sweep(
     config: BacktestSweepConfig,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    """Run multiple backtests varying one parameter (parallelized)."""
-    import asyncio
-
-    from app.database import async_session as _async_session
-    from app.services.data_ingestion import ensure_data_loaded as _ensure
-    from app.services.parallel import run_in_thread_pool, run_parallel_sweeps
-
-    # Pre-load data so individual runs skip DB checks
-    start = date.fromisoformat(config.base_config.start_date)
-    end = date.fromisoformat(config.base_config.end_date)
-    for t in set(config.base_config.tickers + [config.base_config.benchmark]):
-        await _ensure(db, t, start, end)
-
-    def _make_task(value):
-        def _task():
-            params = config.base_config.params.copy()
-            params[config.sweep_param] = value
-            sweep_config = config.base_config.model_copy(update={"params": params})
-            try:
-
-                async def _run():
-                    async with _async_session() as sess:
-                        return await run_backtest(
-                            sess,
-                            sweep_config,
-                            workspace_id=current_workspace.id,
-                        )
-
-                result = asyncio.run(_run())
-                return {
-                    "param_value": value,
-                    "sharpe_ratio": result["metrics"]["sharpe_ratio"],
-                    "total_return_pct": result["metrics"]["total_return_pct"],
-                    "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
-                    "cagr_pct": result["metrics"]["cagr_pct"],
-                }
-            except Exception as e:
-                return {"param_value": value, "error": str(e)}
-
-        return _task
-
-    tasks = [_make_task(v) for v in config.sweep_values]
-    results = await run_in_thread_pool(lambda: run_parallel_sweeps(tasks), max_workers=1)
-
-    return {
-        "sweep_param": config.sweep_param,
-        "results": results,
-    }
+    job = await enqueue_research_job(
+        db,
+        kind="backtest_sweep",
+        request_payload=config.model_dump(),
+        workspace_id=current_workspace.id,
+        created_by_user_id=current_user.id,
+        progress_message="Queued parameter sweep.",
+    )
+    return serialize_job(job)
 
 
 @router.post(
     "/sweep2d",
-    response_model=Sweep2DResponse,
-    summary="Run a two-dimensional parameter sweep",
+    response_model=ResearchJobResponse,
+    status_code=202,
+    summary="Queue a two-dimensional parameter sweep",
     description=(
         "Evaluates a backtest across a 2D grid of parameter combinations and "
         "returns a heatmap-ready response."
@@ -330,75 +273,25 @@ async def parameter_sweep(
 async def parameter_sweep_2d(
     config: BacktestSweep2DConfig,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    """Run backtests varying two parameters simultaneously (parallelized)."""
-    import asyncio
-
-    from app.database import async_session as _async_session
-    from app.services.data_ingestion import ensure_data_loaded as _ensure
-    from app.services.parallel import run_in_thread_pool, run_parallel_sweeps
-
-    # Pre-load data
-    start = date.fromisoformat(config.base_config.start_date)
-    end = date.fromisoformat(config.base_config.end_date)
-    for t in set(config.base_config.tickers + [config.base_config.benchmark]):
-        await _ensure(db, t, start, end)
-
-    # Flatten 2D grid into parallel tasks
-    grid_coords = [(vx, vy) for vx in config.values_x for vy in config.values_y]
-
-    def _make_task(vx, vy):
-        def _task():
-            params = config.base_config.params.copy()
-            params[config.param_x] = vx
-            params[config.param_y] = vy
-            sweep_config = config.base_config.model_copy(update={"params": params})
-            try:
-
-                async def _run():
-                    async with _async_session() as sess:
-                        return await run_backtest(
-                            sess,
-                            sweep_config,
-                            workspace_id=current_workspace.id,
-                        )
-
-                result = asyncio.run(_run())
-                metric_val = result["metrics"].get(config.metric)
-                return {
-                    "x": vx,
-                    "y": vy,
-                    "value": metric_val,
-                    "total_return_pct": result["metrics"].get("total_return_pct"),
-                    "max_drawdown_pct": result["metrics"].get("max_drawdown_pct"),
-                }
-            except Exception as e:
-                return {"x": vx, "y": vy, "value": None, "error": str(e)}
-
-        return _task
-
-    tasks = [_make_task(vx, vy) for vx, vy in grid_coords]
-    flat_results = await run_in_thread_pool(lambda: run_parallel_sweeps(tasks), max_workers=1)
-
-    # Reshape flat results back into 2D grid
-    n_y = len(config.values_y)
-    cells = [flat_results[i : i + n_y] for i in range(0, len(flat_results), n_y)]
-
-    return {
-        "param_x": config.param_x,
-        "param_y": config.param_y,
-        "metric": config.metric,
-        "values_x": config.values_x,
-        "values_y": config.values_y,
-        "cells": cells,
-    }
+    job = await enqueue_research_job(
+        db,
+        kind="backtest_sweep2d",
+        request_payload=config.model_dump(),
+        workspace_id=current_workspace.id,
+        created_by_user_id=current_user.id,
+        progress_message="Queued 2D parameter sweep.",
+    )
+    return serialize_job(job)
 
 
 @router.post(
     "/walk-forward",
-    response_model=WalkForwardResponse,
-    summary="Run walk-forward analysis",
+    response_model=ResearchJobResponse,
+    status_code=202,
+    summary="Queue walk-forward analysis",
     description=(
         "Splits a strategy into rolling in-sample and out-of-sample windows to "
         "measure robustness and out-of-sample degradation."
@@ -414,54 +307,25 @@ async def parameter_sweep_2d(
 async def walk_forward(
     payload: WalkForwardRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    """Run walk-forward analysis on an existing backtest config."""
-    import asyncio
-
-    from app.database import async_session as _async_session
-    from app.services.data_ingestion import ensure_data_loaded as _ensure
-    from app.services.parallel import run_in_thread_pool
-
-    config = payload.config
-    n_folds = int(payload.n_folds)
-    train_pct = float(payload.train_pct)
-    if not (2 <= n_folds <= 10):
-        raise HTTPException(400, "n_folds must be 2–10")
-    if not (0.5 <= train_pct <= 0.9):
-        raise HTTPException(400, "train_pct must be 0.5–0.9")
-
-    # Pre-load data
-    start = date.fromisoformat(config.start_date)
-    end = date.fromisoformat(config.end_date)
-    for t in set(config.tickers + [config.benchmark]):
-        await _ensure(db, t, start, end)
-
-    def _run_wfa():
-        async def _inner():
-            async with _async_session() as sess:
-                return await run_walk_forward(
-                    sess,
-                    config,
-                    n_folds=n_folds,
-                    train_pct=train_pct,
-                    workspace_id=current_workspace.id,
-                )
-
-        return asyncio.run(_inner())
-
-    try:
-        return await run_in_thread_pool(_run_wfa)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"Walk-forward failed: {e}")
+    job = await enqueue_research_job(
+        db,
+        kind="backtest_walk_forward",
+        request_payload=payload.model_dump(),
+        workspace_id=current_workspace.id,
+        created_by_user_id=current_user.id,
+        progress_message="Queued walk-forward analysis.",
+    )
+    return serialize_job(job)
 
 
 @router.post(
     "/optimize",
-    response_model=BayesOptResponse,
-    summary="Run Bayesian parameter optimization",
+    response_model=ResearchJobResponse,
+    status_code=202,
+    summary="Queue Bayesian parameter optimization",
     description=(
         "Uses Optuna to evaluate full backtests across parameter ranges and "
         "returns the best parameter set plus the complete trial log."
@@ -480,105 +344,18 @@ async def walk_forward(
 async def bayesian_optimize(
     config: BayesOptConfig,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    """
-    Run Bayesian optimization (Optuna) to find the best parameter combination.
-
-    Runs up to n_trials evaluations, each a full backtest, and returns the
-    best parameter set along with all trial results for visualization.
-    """
-    try:
-        import optuna
-
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
-    except ImportError:
-        raise HTTPException(500, "optuna is not installed. Run: pip install optuna")
-
-    from app.database import async_session as _async_session
-
-    # Pre-load price data once so individual trials skip ensure_data_loaded DB checks
-    from app.services.data_ingestion import ensure_data_loaded
-
-    start = date.fromisoformat(config.base_config.start_date)
-    end = date.fromisoformat(config.base_config.end_date)
-    all_tickers = list(set(config.base_config.tickers + [config.base_config.benchmark]))
-    for ticker in all_tickers:
-        loaded = await ensure_data_loaded(db, ticker, start, end)
-        if not loaded:
-            raise HTTPException(400, f"Could not load data for {ticker}")
-
-    trials_log: list[dict[str, Any]] = []
-
-    def objective(trial: Any) -> float:
-        import asyncio
-
-        params = dict(config.base_config.params)
-        for spec in config.param_specs:
-            if spec.type == "int":
-                step = int(spec.step) if spec.step else 1
-                params[spec.name] = trial.suggest_int(
-                    spec.name, int(spec.low), int(spec.high), step=step
-                )
-            else:
-                params[spec.name] = trial.suggest_float(
-                    spec.name, spec.low, spec.high, step=spec.step
-                )
-
-        trial_config = config.base_config.model_copy(update={"params": params})
-
-        async def _run():
-            async with _async_session() as sess:
-                return await run_backtest(
-                    sess,
-                    trial_config,
-                    workspace_id=current_workspace.id,
-                )
-
-        try:
-            result = asyncio.run(_run())
-        except Exception:
-            return float("-inf") if config.maximize else float("inf")
-
-        metric_val = result["metrics"].get(config.metric)
-        if metric_val is None:
-            return float("-inf") if config.maximize else float("inf")
-
-        trials_log.append(
-            {
-                "trial": trial.number,
-                "params": dict(params),
-                "value": float(metric_val),
-            }
-        )
-        return float(metric_val) if config.maximize else -float(metric_val)
-
-    # Optuna must run sync — use thread pool to avoid blocking event loop
-    from app.services.parallel import run_in_thread_pool
-
-    def run_study():
-        direction = "maximize" if config.maximize else "minimize"
-        study = optuna.create_study(direction=direction)
-        study.optimize(objective, n_trials=min(config.n_trials, 50), n_jobs=1)
-        return study
-
-    study = await run_in_thread_pool(run_study)
-
-    best_params = dict(config.base_config.params)
-    best_params.update(study.best_params)
-    best_value = study.best_value if config.maximize else -study.best_value
-
-    # Sort trials for visualization
-    trials_sorted = sorted(trials_log, key=lambda t: int(t["trial"]))
-
-    return {
-        "best_params": best_params,
-        "best_value": round(float(best_value), 4),
-        "metric": config.metric,
-        "n_trials": len(trials_sorted),
-        "trials": trials_sorted,
-        "param_specs": [s.model_dump() for s in config.param_specs],
-    }
+    job = await enqueue_research_job(
+        db,
+        kind="backtest_optimize",
+        request_payload=config.model_dump(),
+        workspace_id=current_workspace.id,
+        created_by_user_id=current_user.id,
+        progress_message="Queued Bayesian optimization.",
+    )
+    return serialize_job(job)
 
 
 # ── Versioning / lineage ──────────────────────────────────────────────────

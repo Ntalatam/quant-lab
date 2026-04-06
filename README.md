@@ -12,7 +12,7 @@ Most student backtest projects are thin pandas scripts that compute a moving ave
 - **Realistic market simulation** — models slippage, commissions, volume constraints, and position sizing. Markets are not frictionless.
 - **Research-grade analytics** — 25+ metrics including Sharpe, Sortino, Calmar, CVaR, alpha, beta, rolling metrics, and a monthly returns heatmap.
 - **Multi-strategy comparison** — run 5 strategy families (including XGBoost ML) and compare them head-to-head with portfolio blending and factor attribution.
-- **Live progress streaming** — WebSocket-based real-time progress updates: watch equity build bar-by-bar as the simulation runs.
+- **Persistent research jobs** — long-running backtests, sweeps, and optimization workflows run through a database-backed worker with queueable progress tracking.
 - **Bayesian optimization** — Optuna-powered parameter search that converges faster than grid sweep, with convergence chart and one-click param application.
 - **Production engineering** — clean REST API, async database layer, persistent results, comprehensive test suite, CI/CD, Docker.
 
@@ -46,11 +46,11 @@ Test whether a strategy generalizes to unseen data using rolling IS/OOS folds:
 - **Sharpe Efficiency** = avg OOS Sharpe ÷ avg IS Sharpe — values near 1.0 indicate robustness
 - Stitched OOS equity curve overlaid against the full IS curve
 
-### Real-Time WebSocket Progress
-Backtests stream progress events via WebSocket as the simulation runs:
+### Persistent Job Progress
+Backtests now run as persisted background jobs:
 - Live progress bar with current percentage
-- Current simulation date and live equity value updating in real time
-- Bar counter (N / total bars processed)
+- Current simulation date and live equity value updating as the worker advances
+- Clear queued / running / failed / completed states
 - Immediate redirect to results page on completion
 
 ### Year-by-Year Performance Table
@@ -130,7 +130,7 @@ Landing page includes a **Load Demo Data** button that seeds SPY, AAPL, MSFT, an
 │  Dashboard │ Backtest │ Results │ Compare    │
 │  Heatmap   │ Walk-Forward │ Optimize │ Diff  │
 └────────────────────┬────────────────────────┘
-                     │ REST API + WebSocket
+                     │ REST API + Job Polling
 ┌────────────────────▼────────────────────────┐
 │              BACKEND (FastAPI)               │
 │  Data Ingestion │ Backtest Engine            │
@@ -138,10 +138,16 @@ Landing page includes a **Load Demo Data** button that seeds SPY, AAPL, MSFT, an
 │  Walk-Forward   │ Sweep (1D/2D)             │
 │  Bayesian Opt   │ Factor/Regime/Capacity    │
 └────────────────────┬────────────────────────┘
+                     │ queue / worker claims
+┌────────────────────▼────────────────────────┐
+│           WORKER (python -m app.worker)     │
+│  Research jobs │ Progress updates │ Retries │
+└────────────────────┬────────────────────────┘
                      │ asyncpg
 ┌────────────────────▼────────────────────────┐
 │           PostgreSQL 15 (Docker)             │
 │  price_data │ backtest_runs │ trade_records  │
+│  research_jobs                                 │
 └─────────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────┐
@@ -153,7 +159,9 @@ Landing page includes a **Load Demo Data** button that seeds SPY, AAPL, MSFT, an
 
 ```
 User configures strategy
-  → WebSocket /api/backtest/ws
+  → POST /api/backtest/run
+    → Persist research_jobs row with queued status
+    → Worker claims queued job from the database
     → Fetch/validate OHLCV data (yfinance → PostgreSQL cache)
     → Initialize portfolio ($100k default)
     → For each trading day:
@@ -162,11 +170,11 @@ User configures strategy
         → Position sizing applies max_position_pct constraint
         → Execution simulator applies slippage + commission + volume limit
         → Portfolio updates cash, positions, equity
-        → Stream progress event via WebSocket (every ~1% of bars)
+        → Persist progress snapshot back to research_jobs
     → Compute 25+ analytics on completed equity curve
     → Build clean (frictionless) equity curve alongside actual
-    → Persist to database
-    → Send completion event with backtest ID
+    → Persist final backtest result + result linkage
+    → Frontend polls /api/jobs/{id} until completion
     → Frontend redirects to full tear sheet
 ```
 
@@ -192,7 +200,7 @@ QuantLab now includes a production-oriented AWS deployment stack built around:
 
 - CloudFront for the public app URL
 - Application Load Balancer path routing (`/api/*` to FastAPI, app traffic to Next.js)
-- ECS Fargate services for frontend and backend containers
+- ECS Fargate services for frontend, backend, and worker containers
 - RDS PostgreSQL in private DB subnets
 - Secrets Manager for runtime `DATABASE_URL`
 
@@ -552,7 +560,7 @@ Select **ML Classifier (XGBoost)** as the strategy. The default settings train o
 | `Address already in use` on port 8000 | Another server occupying port 8000 | `lsof -i :8000` then `kill <PID>` |
 | `localhost:8000` shows `{"detail":"Not Found"}` | Normal — no route at `/` | Use `/docs` or `/api/*` routes |
 | Port 5432 conflict | Local Postgres.app running | Project uses port **5433** — no action needed |
-| WebSocket connection failed | Backend not running or CORS | Ensure `uvicorn` is running on port 8000 |
+| Research job stays queued | Worker not running | Start `python -m app.worker` or `docker compose up worker` |
 
 ---
 

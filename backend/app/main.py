@@ -50,6 +50,10 @@ OPENAPI_TAGS = [
         "description": "Historical simulation, parameter sweeps, and optimization workflows.",
     },
     {
+        "name": "jobs",
+        "description": "Asynchronous research jobs, status polling, and operational progress tracking.",
+    },
+    {
         "name": "analytics",
         "description": "Post-trade analytics, comparison, attribution, and portfolio blending.",
     },

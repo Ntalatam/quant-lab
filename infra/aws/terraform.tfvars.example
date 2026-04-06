@@ -22,4 +22,5 @@ backend_image_tag  = "2026-04-04"
 # you expect more sustained traffic.
 frontend_desired_count = 1
 backend_desired_count  = 1
+worker_desired_count   = 1
 database_instance_class = "db.t4g.micro"

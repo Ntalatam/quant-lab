@@ -62,6 +62,7 @@ def test_openapi_schema_exposes_curated_metadata(monkeypatch):
         "system",
         "data",
         "backtest",
+        "jobs",
         "analytics",
         "paper-trading",
         "strategies",
@@ -77,10 +78,10 @@ def test_openapi_schema_includes_typed_route_contracts(monkeypatch):
     compare = payload["paths"]["/api/analytics/compare"]["post"]
     paper_create = payload["paths"]["/api/paper/sessions"]["post"]
 
-    assert backtest_run["summary"] == "Run and persist a backtest"
+    assert backtest_run["summary"] == "Queue a backtest run"
     assert (
-        backtest_run["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
-        == "#/components/schemas/BacktestResultResponse"
+        backtest_run["responses"]["202"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ResearchJobResponse"
     )
     assert (
         compare["requestBody"]["content"]["application/json"]["schema"]["$ref"]

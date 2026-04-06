@@ -29,6 +29,7 @@ import type {
   PortfolioBlendResult,
   RegimeAnalysisResult,
   RiskBudgetResult,
+  ResearchJob,
   SpreadResult,
   StrategyInfo,
   StrategyEditorSpec,
@@ -256,11 +257,17 @@ class ApiClient {
   }
 
   // Backtest
-  async runBacktest(config: BacktestConfig): Promise<BacktestResult> {
+  async runBacktest(config: BacktestConfig): Promise<ResearchJob> {
     return this.request("/backtest/run", {
       method: "POST",
       body: JSON.stringify(config),
     });
+  }
+
+  async getResearchJob<T = Record<string, unknown> | null>(
+    id: string,
+  ): Promise<ResearchJob<T>> {
+    return this.request(`/jobs/${id}`);
   }
 
   async getBacktestResult(id: string): Promise<BacktestResult> {
@@ -429,7 +436,7 @@ class ApiClient {
     baseConfig: BacktestConfig,
     sweepParam: string,
     sweepValues: (number | string)[],
-  ): Promise<SweepResult> {
+  ): Promise<ResearchJob<SweepResult>> {
     return this.request("/backtest/sweep", {
       method: "POST",
       body: JSON.stringify({
@@ -444,7 +451,7 @@ class ApiClient {
     config: BacktestConfig,
     nFolds: number,
     trainPct: number,
-  ): Promise<WalkForwardResult> {
+  ): Promise<ResearchJob<WalkForwardResult>> {
     return this.request("/backtest/walk-forward", {
       method: "POST",
       body: JSON.stringify({ config, n_folds: nFolds, train_pct: trainPct }),
@@ -458,7 +465,7 @@ class ApiClient {
     paramY: string,
     valuesY: number[],
     metric: string = "sharpe_ratio",
-  ): Promise<Sweep2DResult> {
+  ): Promise<ResearchJob<Sweep2DResult>> {
     return this.request("/backtest/sweep2d", {
       method: "POST",
       body: JSON.stringify({
@@ -522,7 +529,7 @@ class ApiClient {
     paramSpecs: BayesOptParamSpec[],
     metric: string,
     nTrials: number,
-  ): Promise<BayesOptResult> {
+  ): Promise<ResearchJob<BayesOptResult>> {
     // Fetch the original backtest to get base_config
     const result = await this.getBacktestResult(backtestId);
     return this.request("/backtest/optimize", {

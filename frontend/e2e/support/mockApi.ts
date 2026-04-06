@@ -68,12 +68,14 @@ export async function installAppMocks(
 ) {
   const backtestSocket = options?.backtestSocket ?? "success";
   const backtestId = options?.backtestId ?? "bt_sma_1";
+  const backtestJobId = "job_backtest_1";
   const paperSession = buildPaperSessionDetail({
     id: options?.paperSessionId ?? "paper_live_1",
   });
+  let backtestJobPollCount = 0;
 
   await page.addInitScript(
-    ({ behavior, resolvedBacktestId, snapshot, accessToken }) => {
+    ({ snapshot, accessToken }) => {
       window.localStorage.setItem("quantlab.access_token", accessToken);
       const RealWebSocket = window.WebSocket;
 
@@ -99,12 +101,11 @@ export async function installAppMocks(
           super();
           this.url = String(url);
 
-          const isBacktestSocket = this.url.includes("/api/backtest/ws");
           const isPaperSocket =
             this.url.includes("/api/paper/sessions/") &&
             /\/ws(?:\?|$)/.test(this.url);
 
-          if (!isBacktestSocket && !isPaperSocket) {
+          if (!isPaperSocket) {
             this.realSocket = new RealWebSocket(url, protocols);
             this.realSocket.addEventListener("open", (event) => {
               this.readyState = MockWebSocket.OPEN;
@@ -146,69 +147,7 @@ export async function installAppMocks(
             return;
           }
 
-          if (!this.url.includes("/api/backtest/ws")) {
-            return;
-          }
-
-          if (behavior === "error") {
-            setTimeout(() => {
-              this.emit(
-                "message",
-                new MessageEvent("message", {
-                  data: JSON.stringify({
-                    type: "error",
-                    message: "Mock simulation failed",
-                  }),
-                })
-              );
-            }, 150);
-            return;
-          }
-
-          setTimeout(() => {
-            this.emit(
-              "message",
-              new MessageEvent("message", {
-                data: JSON.stringify({
-                  type: "progress",
-                  bar: 25,
-                  total: 100,
-                  date: "2024-02-01",
-                  equity: 103250,
-                  pct: 0.25,
-                  }),
-                })
-              );
-          }, 150);
-
-          setTimeout(() => {
-            this.emit(
-              "message",
-              new MessageEvent("message", {
-                data: JSON.stringify({
-                  type: "progress",
-                  bar: 100,
-                  total: 100,
-                  date: "2024-05-01",
-                  equity: 118400,
-                  pct: 1,
-                  }),
-                })
-              );
-          }, 400);
-
-          setTimeout(() => {
-            this.emit(
-              "message",
-              new MessageEvent("message", {
-                data: JSON.stringify({
-                  type: "complete",
-                  id: resolvedBacktestId,
-                }),
-              })
-            );
-            this.close();
-          }, 750);
+          return;
         }
 
         close(code?: number, reason?: string) {
@@ -248,8 +187,6 @@ export async function installAppMocks(
       });
     },
     {
-      behavior: backtestSocket,
-      resolvedBacktestId: backtestId,
       snapshot: paperSession,
       accessToken: MOCK_ACCESS_TOKEN,
     }
@@ -317,6 +254,112 @@ export async function installAppMocks(
       await json(route, {
         items: backtestSummaries,
         total: backtestSummaries.length,
+      });
+      return;
+    }
+
+    if (method === "POST" && path === "/api/backtest/run") {
+      await json(route, {
+        id: backtestJobId,
+        kind: "backtest_run",
+        status: "queued",
+        progress_pct: 0,
+        progress_current: 0,
+        progress_total: 0,
+        progress_message: "Queued backtest run.",
+        progress_date: null,
+        progress_equity: null,
+        logs: [],
+        attempt_count: 0,
+        max_attempts: 1,
+        result_backtest_run_id: null,
+        result: null,
+        error_message: null,
+        queued_at: "2026-04-05T12:00:00Z",
+        started_at: null,
+        completed_at: null,
+        failed_at: null,
+        updated_at: "2026-04-05T12:00:00Z",
+      });
+      return;
+    }
+
+    if (method === "GET" && path === `/api/jobs/${backtestJobId}`) {
+      backtestJobPollCount += 1;
+
+      if (backtestSocket === "error" && backtestJobPollCount >= 2) {
+        await json(route, {
+          id: backtestJobId,
+          kind: "backtest_run",
+          status: "failed",
+          progress_pct: 0.25,
+          progress_current: 25,
+          progress_total: 100,
+          progress_message: "Mock simulation failed",
+          progress_date: "2024-02-01",
+          progress_equity: 103250,
+          logs: [],
+          attempt_count: 1,
+          max_attempts: 1,
+          result_backtest_run_id: null,
+          result: null,
+          error_message: "Mock simulation failed",
+          queued_at: "2026-04-05T12:00:00Z",
+          started_at: "2026-04-05T12:00:01Z",
+          completed_at: null,
+          failed_at: "2026-04-05T12:00:03Z",
+          updated_at: "2026-04-05T12:00:03Z",
+        });
+        return;
+      }
+
+      if (backtestJobPollCount >= 2) {
+        await json(route, {
+          id: backtestJobId,
+          kind: "backtest_run",
+          status: "completed",
+          progress_pct: 1,
+          progress_current: 100,
+          progress_total: 100,
+          progress_message: "Backtest ready.",
+          progress_date: "2024-05-01",
+          progress_equity: 118400,
+          logs: [],
+          attempt_count: 1,
+          max_attempts: 1,
+          result_backtest_run_id: backtestId,
+          result: { backtest_run_id: backtestId },
+          error_message: null,
+          queued_at: "2026-04-05T12:00:00Z",
+          started_at: "2026-04-05T12:00:01Z",
+          completed_at: "2026-04-05T12:00:03Z",
+          failed_at: null,
+          updated_at: "2026-04-05T12:00:03Z",
+        });
+        return;
+      }
+
+      await json(route, {
+        id: backtestJobId,
+        kind: "backtest_run",
+        status: "running",
+        progress_pct: 0.25,
+        progress_current: 25,
+        progress_total: 100,
+        progress_message: "Simulating 25 of 100 bars",
+        progress_date: "2024-02-01",
+        progress_equity: 103250,
+        logs: [],
+        attempt_count: 1,
+        max_attempts: 1,
+        result_backtest_run_id: null,
+        result: null,
+        error_message: null,
+        queued_at: "2026-04-05T12:00:00Z",
+        started_at: "2026-04-05T12:00:01Z",
+        completed_at: null,
+        failed_at: null,
+        updated_at: "2026-04-05T12:00:02Z",
       });
       return;
     }

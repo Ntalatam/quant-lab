@@ -56,7 +56,7 @@ export default function NewBacktestPage() {
   const { progress, run, reset } = useBacktestProgress();
 
   const isRunning =
-    progress.status === "running" || progress.status === "connecting";
+    progress.status === "running" || progress.status === "queued";
 
   const handleRun = async () => {
     try {
@@ -87,7 +87,7 @@ export default function NewBacktestPage() {
           <>
             <span className="status-pill">
               <Wifi size={12} className="text-accent-blue" />
-              WebSocket progress
+              Persistent job runner
             </span>
             <span className="status-pill">
               <Radar size={12} className="text-accent-yellow" />
@@ -103,10 +103,10 @@ export default function NewBacktestPage() {
               isValid && !isRunning ? "action-primary" : "action-secondary"
             } min-w-[180px] disabled:opacity-40 disabled:cursor-not-allowed`}
           >
-            {progress.status === "connecting" ? (
+            {progress.status === "queued" ? (
               <>
                 <Wifi size={15} className="animate-pulse" />
-                Launching…
+                Queued…
               </>
             ) : progress.status === "running" ? (
               <>
@@ -150,7 +150,7 @@ export default function NewBacktestPage() {
                 </div>
               )}
 
-              {(progress.status === "connecting" ||
+              {(progress.status === "queued" ||
                 progress.status === "running") && (
                 <div
                   className="mb-4 space-y-3 rounded-[22px] p-4"
@@ -160,14 +160,14 @@ export default function NewBacktestPage() {
                     border: "1px solid rgba(107,149,255,0.2)",
                   }}
                 >
-                  {progress.status === "connecting" && (
+                  {progress.status === "queued" && (
                     <div className="flex items-center gap-2">
                       <Wifi
                         size={13}
                         className="text-accent-blue animate-pulse"
                       />
                       <span className="text-xs text-accent-blue">
-                        Connecting to simulation engine…
+                        {progress.message}
                       </span>
                     </div>
                   )}
@@ -218,10 +218,10 @@ export default function NewBacktestPage() {
                   isValid && !isRunning ? "action-primary" : "action-secondary"
                 } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
-                {progress.status === "connecting" ? (
+                {progress.status === "queued" ? (
                   <>
                     <Wifi size={15} className="animate-pulse" />
-                    Connecting…
+                    Queued…
                   </>
                 ) : progress.status === "running" ? (
                   <>

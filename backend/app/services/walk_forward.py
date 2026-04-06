@@ -11,6 +11,7 @@ whether the strategy is robust or if its paper performance depends on having
 seen the whole dataset at once.
 """
 
+from collections.abc import Awaitable, Callable
 from datetime import date, timedelta
 from typing import Any
 
@@ -63,6 +64,7 @@ async def run_walk_forward(
     train_pct: float = 0.7,
     *,
     workspace_id: str | None = None,
+    on_progress: Callable[[int, int, str], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     """
     Run walk-forward analysis and return fold statistics + combined OOS equity curve.
@@ -78,6 +80,7 @@ async def run_walk_forward(
     oos_equity_segments = []  # list of (dates, values) per OOS fold
     oos_capital = config.initial_capital  # carry forward OOS equity across folds
 
+    total_folds = len(splits)
     for fold_idx, (is_start, is_end, oos_start, oos_end) in enumerate(splits):
         # --- In-sample run (for IS metrics only) ---
         is_config = config.model_copy(
@@ -136,6 +139,12 @@ async def run_walk_forward(
                 "ok": fold_ok,
             }
         )
+        if on_progress is not None:
+            await on_progress(
+                fold_idx + 1,
+                total_folds,
+                f"Completed fold {fold_idx + 1} of {total_folds}",
+            )
 
     # --- Combined OOS curve metrics ---
     oos_metrics: dict = {}

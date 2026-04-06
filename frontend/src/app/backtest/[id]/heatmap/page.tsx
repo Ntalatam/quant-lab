@@ -8,16 +8,17 @@ import { ErrorMessage } from "@/components/shared/ErrorBoundary";
 import { ParameterHeatmap } from "@/components/charts/ParameterHeatmap";
 import { api } from "@/lib/api";
 import type { Sweep2DResult } from "@/lib/types";
+import { useJobRunner } from "@/hooks/useJobRunner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 const HEATMAP_METRICS = [
-  { value: "sharpe_ratio",              label: "Sharpe Ratio" },
-  { value: "total_return_pct",          label: "Total Return %" },
-  { value: "cagr_pct",                  label: "CAGR %" },
-  { value: "max_drawdown_pct",          label: "Max Drawdown %" },
-  { value: "sortino_ratio",             label: "Sortino Ratio" },
-  { value: "calmar_ratio",              label: "Calmar Ratio" },
+  { value: "sharpe_ratio", label: "Sharpe Ratio" },
+  { value: "total_return_pct", label: "Total Return %" },
+  { value: "cagr_pct", label: "CAGR %" },
+  { value: "max_drawdown_pct", label: "Max Drawdown %" },
+  { value: "sortino_ratio", label: "Sortino Ratio" },
+  { value: "calmar_ratio", label: "Calmar Ratio" },
 ];
 
 export default function HeatmapPage({
@@ -29,22 +30,27 @@ export default function HeatmapPage({
   const { data: result, isLoading, error } = useBacktestResult(id);
   const { data: strategies } = useStrategies();
 
-  const [paramX, setParamX]   = useState("");
-  const [paramY, setParamY]   = useState("");
-  const [stepsX, setStepsX]   = useState(5);
-  const [stepsY, setStepsY]   = useState(5);
-  const [metric, setMetric]   = useState("sharpe_ratio");
-  const [running, setRunning] = useState(false);
+  const [paramX, setParamX] = useState("");
+  const [paramY, setParamY] = useState("");
+  const [stepsX, setStepsX] = useState(5);
+  const [stepsY, setStepsY] = useState(5);
+  const [metric, setMetric] = useState("sharpe_ratio");
   const [heatmap, setHeatmap] = useState<Sweep2DResult | null>(null);
   const [runError, setRunError] = useState("");
+  const { job, run, isRunning } = useJobRunner<Sweep2DResult>();
 
   if (isLoading) return <PageLoading />;
-  if (error || !result) return <ErrorMessage message={error?.message ?? "Not found"} />;
+  if (error || !result)
+    return <ErrorMessage message={error?.message ?? "Not found"} />;
 
   const strategy = strategies?.find((s) => s.id === result.config.strategy_id);
-  const numericParams = strategy?.params.filter(
-    (p) => (p.type === "int" || p.type === "float") && p.min != null && p.max != null
-  ) ?? [];
+  const numericParams =
+    strategy?.params.filter(
+      (p) =>
+        (p.type === "int" || p.type === "float") &&
+        p.min != null &&
+        p.max != null,
+    ) ?? [];
 
   const buildValues = (paramName: string, steps: number): number[] => {
     const p = numericParams.find((np) => np.name === paramName);
@@ -53,7 +59,7 @@ export default function HeatmapPage({
     return Array.from({ length: steps }, (_, i) =>
       p.type === "int"
         ? Math.round(p.min! + step * i)
-        : parseFloat((p.min! + step * i).toFixed(4))
+        : parseFloat((p.min! + step * i).toFixed(4)),
     );
   };
 
@@ -69,14 +75,14 @@ export default function HeatmapPage({
       return;
     }
     setRunError("");
-    setRunning(true);
     try {
-      const res = await api.runSweep2D(result.config, paramX, vx, paramY, vy, metric);
+      const res = await run(
+        () => api.runSweep2D(result.config, paramX, vx, paramY, vy, metric),
+        (nextJob) => nextJob.result,
+      );
       setHeatmap(res);
     } catch (e: unknown) {
       setRunError(e instanceof Error ? e.message : "Sweep failed");
-    } finally {
-      setRunning(false);
     }
   };
 
@@ -115,49 +121,77 @@ export default function HeatmapPage({
         >
           <div>
             <p className="section-label mb-2">X Axis Parameter</p>
-            <select value={paramX} onChange={(e) => setParamX(e.target.value)} className={inputCls}>
+            <select
+              value={paramX}
+              onChange={(e) => setParamX(e.target.value)}
+              className={inputCls}
+            >
               <option value="">Select…</option>
               {numericParams.map((p) => (
-                <option key={p.name} value={p.name}>{p.label}</option>
+                <option key={p.name} value={p.name}>
+                  {p.label}
+                </option>
               ))}
             </select>
           </div>
           <div>
             <div className="flex justify-between mb-1">
               <p className="section-label">X Steps</p>
-              <span className="text-xs font-mono text-text-primary">{stepsX}</span>
+              <span className="text-xs font-mono text-text-primary">
+                {stepsX}
+              </span>
             </div>
             <input
-              type="range" min={3} max={10} value={stepsX}
+              type="range"
+              min={3}
+              max={10}
+              value={stepsX}
               onChange={(e) => setStepsX(Number(e.target.value))}
               className="w-full accent-accent-blue"
             />
           </div>
           <div>
             <p className="section-label mb-2">Y Axis Parameter</p>
-            <select value={paramY} onChange={(e) => setParamY(e.target.value)} className={inputCls}>
+            <select
+              value={paramY}
+              onChange={(e) => setParamY(e.target.value)}
+              className={inputCls}
+            >
               <option value="">Select…</option>
               {numericParams.map((p) => (
-                <option key={p.name} value={p.name}>{p.label}</option>
+                <option key={p.name} value={p.name}>
+                  {p.label}
+                </option>
               ))}
             </select>
           </div>
           <div>
             <div className="flex justify-between mb-1">
               <p className="section-label">Y Steps</p>
-              <span className="text-xs font-mono text-text-primary">{stepsY}</span>
+              <span className="text-xs font-mono text-text-primary">
+                {stepsY}
+              </span>
             </div>
             <input
-              type="range" min={3} max={10} value={stepsY}
+              type="range"
+              min={3}
+              max={10}
+              value={stepsY}
               onChange={(e) => setStepsY(Number(e.target.value))}
               className="w-full accent-accent-blue"
             />
           </div>
           <div>
             <p className="section-label mb-2">Metric</p>
-            <select value={metric} onChange={(e) => setMetric(e.target.value)} className={inputCls}>
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className={inputCls}
+            >
               {HEATMAP_METRICS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
               ))}
             </select>
           </div>
@@ -166,10 +200,10 @@ export default function HeatmapPage({
 
           <button
             onClick={handleRun}
-            disabled={running || !paramX || !paramY}
+            disabled={isRunning || !paramX || !paramY}
             className="w-full flex items-center justify-center gap-2 font-semibold rounded py-2.5 text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             style={
-              !running && paramX && paramY
+              !isRunning && paramX && paramY
                 ? {
                     background: "var(--color-accent-blue)",
                     color: "var(--color-bg-primary)",
@@ -182,10 +216,12 @@ export default function HeatmapPage({
                   }
             }
           >
-            {running ? (
+            {isRunning ? (
               <>
                 <Loader2 size={14} className="animate-spin" />
-                Running {stepsX * stepsY} backtests…
+                {job?.status === "queued"
+                  ? "Queued…"
+                  : `${job?.progress_current ?? 0} / ${job?.progress_total || stepsX * stepsY} cells`}
               </>
             ) : (
               `Run ${stepsX * stepsY} Backtests`
@@ -194,27 +230,37 @@ export default function HeatmapPage({
 
           <div
             className="rounded p-2.5 text-[10px] text-text-muted leading-relaxed"
-            style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)" }}
+            style={{
+              background: "var(--color-bg-primary)",
+              border: "1px solid var(--color-border)",
+            }}
           >
-            A broad <span className="text-accent-green">green plateau</span> means the
-            strategy is robust — parameters near each other produce similar results.
-            A narrow peak surrounded by red indicates overfitting.
+            A broad <span className="text-accent-green">green plateau</span>{" "}
+            means the strategy is robust — parameters near each other produce
+            similar results. A narrow peak surrounded by red indicates
+            overfitting.
           </div>
         </div>
 
         {/* Heatmap */}
         <div className="lg:col-span-3">
-          {running ? (
+          {isRunning ? (
             <div
               className="h-80 flex flex-col items-center justify-center gap-3 rounded-md"
-              style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}
+              style={{
+                background: "var(--color-bg-card)",
+                border: "1px solid var(--color-border)",
+              }}
             >
               <Loader2 size={28} className="animate-spin text-accent-blue" />
               <p className="text-sm text-text-secondary">
-                Running {stepsX * stepsY} backtests…
+                {job?.status === "queued"
+                  ? "Queued for the worker process…"
+                  : job?.progress_message ||
+                    `Running ${stepsX * stepsY} backtests…`}
               </p>
               <p className="text-xs text-text-muted">
-                Each cell is a full simulation. This may take a moment.
+                {Math.round((job?.progress_pct || 0) * 100)}% complete.
               </p>
             </div>
           ) : heatmap ? (
@@ -231,12 +277,18 @@ export default function HeatmapPage({
           ) : (
             <div
               className="h-80 flex flex-col items-center justify-center gap-2 rounded-md"
-              style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}
+              style={{
+                background: "var(--color-bg-card)",
+                border: "1px solid var(--color-border)",
+              }}
             >
-              <p className="text-text-secondary text-sm">Configure parameters and run the sweep</p>
+              <p className="text-text-secondary text-sm">
+                Configure parameters and run the sweep
+              </p>
               <p className="text-text-muted text-xs max-w-sm text-center">
-                Each cell in the grid represents one complete backtest. Color intensity
-                shows how that parameter combination performs on the selected metric.
+                Each cell in the grid represents one complete backtest. Color
+                intensity shows how that parameter combination performs on the
+                selected metric.
               </p>
             </div>
           )}

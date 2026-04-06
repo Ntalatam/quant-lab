@@ -133,6 +133,43 @@ export interface BacktestConfig {
   rebalance_frequency: "daily" | "weekly" | "monthly";
 }
 
+export type ResearchJobKind =
+  | "backtest_run"
+  | "backtest_sweep"
+  | "backtest_sweep2d"
+  | "backtest_walk_forward"
+  | "backtest_optimize";
+
+export type ResearchJobStatus = "queued" | "running" | "completed" | "failed";
+
+export interface ResearchJobLogEntry {
+  timestamp: string;
+  message: string;
+}
+
+export interface ResearchJob<T = Record<string, unknown> | null> {
+  id: string;
+  kind: ResearchJobKind | string;
+  status: ResearchJobStatus | string;
+  progress_pct: number;
+  progress_current: number;
+  progress_total: number;
+  progress_message: string | null;
+  progress_date: string | null;
+  progress_equity: number | null;
+  logs: ResearchJobLogEntry[];
+  attempt_count: number;
+  max_attempts: number;
+  result_backtest_run_id: string | null;
+  result: T | null;
+  error_message: string | null;
+  queued_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  updated_at: string;
+}
+
 // ---- Backtest Results ----
 export interface BacktestResult {
   id: string;
