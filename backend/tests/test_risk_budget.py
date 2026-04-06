@@ -135,8 +135,9 @@ def test_reconstruct_share_panel_tracks_long_and_short_lifecycle():
 
 
 def test_risk_budget_endpoint_returns_typed_payload(monkeypatch):
-    async def fake_build_risk_budget_report(db, run, trades, lookback_days):
-        assert run.id == "bt-risk"
+    async def fake_build_risk_budget_response(db, backtest_id, workspace_id, lookback_days):
+        assert backtest_id == "bt-risk"
+        assert workspace_id == "ws_test"
         assert lookback_days == 63
         return {
             "summary": {
@@ -194,9 +195,11 @@ def test_risk_budget_endpoint_returns_typed_payload(monkeypatch):
             ],
         }
 
-    run = SimpleNamespace(id="bt-risk")
-    fake_db = _FakeDB(run=run, trades=[])
-    monkeypatch.setattr("app.api.analytics.build_risk_budget_report", fake_build_risk_budget_report)
+    fake_db = _FakeDB(run=SimpleNamespace(id="bt-risk"), trades=[])
+    monkeypatch.setattr(
+        "app.api.analytics_risk.build_risk_budget_response",
+        fake_build_risk_budget_response,
+    )
 
     with _build_client(monkeypatch, fake_db) as client:
         response = client.post("/api/analytics/risk-budget/bt-risk")

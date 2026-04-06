@@ -169,6 +169,20 @@ def test_export_results_streams_csv(monkeypatch, tmp_path):
     assert "2024,1,2.1" in response.text
 
 
+def test_monte_carlo_returns_percentile_payload(monkeypatch, tmp_path):
+    run = _make_run("monte-001", [100_000.0, 101_200.0, 102_600.0, 103_000.0])
+
+    with _build_client(monkeypatch, tmp_path) as (client, session_factory):
+        asyncio.run(_insert_runs(session_factory, run))
+        response = client.post("/api/analytics/monte-carlo/monte-001?n_simulations=250&n_days=63")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["n_simulations"] == 250
+    assert payload["n_days"] == 63
+    assert set(payload["percentiles"]) == {"p5", "p25", "p50", "p75", "p95"}
+
+
 def test_portfolio_blend_pads_short_custom_weights(monkeypatch, tmp_path):
     run_a = _make_run("blend-a", [100_000.0, 101_000.0, 102_000.0, 103_000.0], tickers=["AAPL"])
     run_b = _make_run("blend-b", [100_000.0, 100_500.0, 101_000.0, 101_500.0], tickers=["MSFT"])
